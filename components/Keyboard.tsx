@@ -20,7 +20,7 @@ function letterStatuses(guesses: Guess[]): Record<string, LetterResult> {
 function keyClasses(status: LetterResult | undefined) {
   if (status === 1) return "bg-correct text-white shadow-sm shadow-correct/30";
   if (status === -1) return "bg-present text-white shadow-sm shadow-present/30";
-  // Absent (0) and untried keys share the same #362b3f (--border) color.
+  if (status === 0) return "bg-background text-foreground/30 border border-border";
   return "bg-border text-foreground";
 }
 
