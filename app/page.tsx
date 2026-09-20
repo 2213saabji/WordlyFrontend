@@ -1,69 +1,124 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useEffect, useState } from "react";
+import Leaderboard from "@/components/Leaderboard";
+import Loader from "@/components/Loader";
+import HomeScreen from "@/components/screens/HomeScreen";
+import PlayScreen from "@/components/screens/PlayScreen";
+import HistoryScreen from "@/components/screens/HistoryScreen";
+import GroupsScreen from "@/components/screens/GroupsScreen";
+import LoginScreen from "@/components/screens/LoginScreen";
+import SignupScreen from "@/components/screens/SignupScreen";
+import ForgotPasswordScreen from "@/components/screens/ForgotPasswordScreen";
+import { useAuth } from "@/lib/auth-context";
+import { useScreen } from "@/lib/screen-context";
+import { parseReplayParam, type ReplayInvite } from "@/lib/share";
+
+function AppShell() {
+  const { screen, push, back, replace } = useScreen();
+  const [invite, setInvite] = useState<ReplayInvite | null>(() =>
+    typeof window === "undefined" ? null : parseReplayParam(window.location.search),
+  );
+
+  useEffect(() => {
+    if (!invite) return;
+    // A replay link is only valid same-day (daily mode's word is already
+    // server-date-scoped — see lib/share.ts), so this just deep-links into
+    // today's Play Daily rather than fetching anything invite-specific.
+    push({ name: "play", mode: "daily" });
+    window.history.replaceState(null, "", window.location.pathname);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <div className="flex flex-1 flex-col">
+      {invite && (
+        <div className="mx-auto flex w-full max-w-lg animate-fade-in items-center gap-3 px-4 pt-4">
+          <p className="flex-1 rounded-xl border border-accent/25 bg-accent/10 px-4 py-2.5 text-sm text-foreground/80">
+            🎉 <span className="font-semibold">{invite.username}</span> invited you to today&apos;s Wordly — good
+            luck!
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            type="button"
+            onClick={() => setInvite(null)}
+            aria-label="Dismiss"
+            className="flex h-7 w-7 flex-none items-center justify-center rounded-full text-foreground/50 transition-colors hover:bg-white/10 hover:text-foreground"
           >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="h-3.5 w-3.5">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
         </div>
-      </main>
+      )}
+      <div
+        key={
+          screen.name === "leaderboard"
+            ? `leaderboard-${screen.groupId}`
+            : screen.name === "play"
+              ? `play-${screen.mode}`
+              : screen.name
+        }
+        className="flex flex-1 flex-col animate-fade-in"
+      >
+        {screen.name === "home" && (
+          <HomeScreen
+            onPlay={() => push({ name: "play", mode: "daily" })}
+            onPlayInfinite={() => push({ name: "play", mode: "infinite" })}
+            onHistory={() => push({ name: "history" })}
+            onGroups={() => push({ name: "groups" })}
+            onOpenLeaderboard={(groupId?: string) => push({ name: "leaderboard", groupId })}
+          />
+        )}
+        {screen.name === "play" && (
+          <PlayScreen
+            mode={screen.mode}
+            onBack={back}
+            onOpenLeaderboard={(groupId?: string) => push({ name: "leaderboard", groupId })}
+          />
+        )}
+        {screen.name === "history" && <HistoryScreen onBack={back} />}
+        {screen.name === "groups" && (
+          <GroupsScreen onBack={back} onOpenLeaderboard={(groupId) => push({ name: "leaderboard", groupId })} />
+        )}
+        {screen.name === "leaderboard" && (
+          <Leaderboard
+            groupId={screen.groupId}
+            onBack={back}
+            onSwitchScope={(groupId) => replace({ name: "leaderboard", groupId })}
+          />
+        )}
+      </div>
     </div>
   );
+}
+
+export default function RootPage() {
+  const { user, loading } = useAuth();
+  const { screen, reset } = useScreen();
+
+  if (loading) {
+    return <Loader label="Loading…" />;
+  }
+
+  if (!user) {
+    // Falls through to LoginScreen for "login" and for any stale post-auth
+    // screen.name (e.g. right after a logout/failed refresh) — this branch
+    // never renders authenticated content, regardless of what screen.name
+    // currently is.
+    if (screen.name === "signup") {
+      return <SignupScreen onSuccess={() => reset({ name: "home" })} onLogin={() => reset({ name: "login" })} />;
+    }
+    if (screen.name === "forgot-password") {
+      return <ForgotPasswordScreen onBack={() => reset({ name: "login" })} />;
+    }
+    return (
+      <LoginScreen
+        onSuccess={() => reset({ name: "home" })}
+        onSignup={() => reset({ name: "signup" })}
+        onForgotPassword={() => reset({ name: "forgot-password" })}
+      />
+    );
+  }
+
+  return <AppShell />;
 }

@@ -1,26 +1,210 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #17111b;
+  --foreground: #f3ecef;
+  --surface: #221a28;
+  --border: #362b3f;
+
+  --color-correct: #7fb069;
+  --color-present: #e8c468;
+  --color-absent: #4a3f52;
+  --color-accent: #f2a05c;
+  --color-accent-2: #7fb069;
+  --color-danger: #e8636b;
+
+  --shadow-color: 280 45% 4%;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-correct: var(--color-correct);
+  --color-present: var(--color-present);
+  --color-absent: var(--color-absent);
+  --color-accent: var(--color-accent);
+  --color-accent-2: var(--color-accent-2);
+  --color-danger: var(--color-danger);
+  --font-sans: var(--font-sora);
   --font-mono: var(--font-geist-mono);
+
+  --animate-fade-in-up: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-fade-in: fade-in 0.4s ease both;
+  --animate-pop: pop 0.16s cubic-bezier(0.2, 0.8, 0.3, 1.4) both;
+  --animate-tile-flip: tile-flip 0.55s ease both;
+  --animate-tile-bounce: tile-bounce 0.7s ease both;
+  --animate-loader-bounce: tile-bounce 1s ease-in-out infinite;
+  --animate-float: float 7s ease-in-out infinite;
+  --animate-float-slow: float 11s ease-in-out infinite;
+  --animate-underline: underline-grow 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-key-pulse: key-pulse 1.6s ease-in-out infinite;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--border);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---------- keyframes ---------- */
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pop {
+  0% {
+    transform: scale(0.85);
+  }
+  60% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* shake-arc: gentle tilt-and-move wiggle — nudges down-right/tilts, back to center, down-left/tilts, back */
+@keyframes shake-arc {
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  25% {
+    transform: translate(5px, 5px) rotate(5deg);
+  }
+  50% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  75% {
+    transform: translate(-5px, 5px) rotate(-5deg);
+  }
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+}
+
+/* letter-hop: the mirror image — each letter arcs up, left-to-right, staggered into a little wave */
+@keyframes letter-hop {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  35% {
+    transform: translateY(-11px);
+  }
+  65% {
+    transform: translateY(2px);
+  }
+}
+
+/* tile-flip: color/border swap at the midpoint, while the tile is edge-on and invisible */
+@keyframes tile-flip {
+  0% {
+    transform: rotateX(0deg);
+  }
+  50% {
+    transform: rotateX(90deg);
+    background-color: var(--tile-start-bg, transparent);
+    border-color: var(--tile-start-border, var(--border));
+    color: var(--tile-start-fg, var(--foreground));
+  }
+  50.001% {
+    background-color: var(--tile-end-bg, transparent);
+    border-color: var(--tile-end-border, var(--border));
+    color: var(--tile-end-fg, var(--foreground));
+  }
+  100% {
+    transform: rotateX(0deg);
+    background-color: var(--tile-end-bg, transparent);
+    border-color: var(--tile-end-border, var(--border));
+    color: var(--tile-end-fg, var(--foreground));
+  }
+}
+
+@keyframes tile-bounce {
+  0%,
+  20% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-14px);
+  }
+  50% {
+    transform: translateY(0);
+  }
+  60% {
+    transform: translateY(-7px);
+  }
+  80% {
+    transform: translateY(0);
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(3%, -4%) scale(1.05);
+  }
+  66% {
+    transform: translate(-3%, 3%) scale(0.97);
+  }
+}
+
+@keyframes underline-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes key-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent) 35%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-accent) 0%, transparent);
+  }
+}
+
+.perspective-tile {
+  perspective: 400px;
 }
