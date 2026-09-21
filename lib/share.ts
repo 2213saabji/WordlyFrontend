@@ -14,13 +14,19 @@ export function resultRows(game: Game): number[][] {
   return game.guesses.map((g) => g.result);
 }
 
+const MAX_ATTEMPTS = 6;
+const PENDING_ROW = "⬜⬜⬜⬜⬜";
+
 function rowToEmoji(row: number[]): string {
   return row.map((r) => (r === 1 ? "🟩" : r === -1 ? "🟨" : "⬛")).join("");
 }
 
-/** Never includes the word itself — only the emoji grid, same as real Wordle's share text. */
+/** Never includes the word itself — only the emoji grid, same as real Wordle's share text.
+ * Pads with blank rows up to MAX_ATTEMPTS so a quick win still shows the same
+ * 6-row shape as the board and the share image, instead of trailing off short. */
 export function buildShareText(game: Game, wordNumber: number): string {
   const rows = resultRows(game).map(rowToEmoji);
+  while (rows.length < MAX_ATTEMPTS) rows.push(PENDING_ROW);
   return [`Wordly Daily #${wordNumber} ${game.guesses.length}/6`, "", ...rows].join("\n");
 }
 

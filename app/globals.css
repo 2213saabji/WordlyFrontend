@@ -31,6 +31,13 @@
   --font-mono: var(--font-geist-mono);
 
   --animate-fade-in-up: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  /* cubic-bezier(0.16, 1, 0.3, 1) above is an ease-out-quint curve — nearly
+     all its motion happens in the first third of the duration no matter how
+     long that duration is, so it always reads as "fast" then a long
+     imperceptible settle. This variant spreads the motion evenly across the
+     whole duration (ease-in-out) with a larger rise, for spots that should
+     read as a genuinely slow, smooth entrance rather than a snappy one. */
+  --animate-fade-in-up-slow: fade-in-up-slow 0.9s ease-in-out both;
   --animate-fade-in: fade-in 0.4s ease both;
   --animate-pop: pop 0.16s cubic-bezier(0.2, 0.8, 0.3, 1.4) both;
   --animate-tile-flip: tile-flip 0.55s ease both;
@@ -50,6 +57,23 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  /* Without this, plain text (board tiles, keys, labels, buttons with no
+     select-none of their own) shows the browser's text I-beam cursor and
+     lets clicks/drags select it like a text selection instead of behaving
+     like part of the app UI. Inputs/textareas keep normal text behavior;
+     spots that should stay copyable (invite codes, share links) opt back in
+     with select-text. */
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+
+input,
+textarea,
+[contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -69,6 +93,17 @@ body {
   from {
     opacity: 0;
     transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in-up-slow {
+  from {
+    opacity: 0;
+    transform: translateY(26px);
   }
   to {
     opacity: 1;

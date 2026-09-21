@@ -21,6 +21,8 @@ const LOGO_TILES: { char: string; bg: string; fg: string }[] = [
   { char: "Y", bg: "rgba(255,255,255,0.08)", fg: COLORS.foreground },
 ];
 
+const MAX_ATTEMPTS = 6;
+
 export type ImageFormat = "square" | "story";
 
 export const IMAGE_DIMENSIONS: Record<ImageFormat, { width: number; height: number }> = {
@@ -47,19 +49,38 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath();
 }
 
+// Always draws MAX_ATTEMPTS rows, not just the guesses actually made — rows
+// past the last guess render as empty/pending cells (outline only), matching
+// the live board instead of cropping the grid down to just the used rows.
 function drawGrid(ctx: CanvasRenderingContext2D, rows: number[][], x: number, y: number, tile: number, gap: number) {
-  rows.forEach((row, i) => {
-    row.forEach((value, j) => {
-      const bg = value === 1 ? COLORS.correct : value === -1 ? COLORS.present : "rgba(255,255,255,0.1)";
-      ctx.fillStyle = bg;
-      roundRect(ctx, x + j * (tile + gap), y + i * (tile + gap), tile, tile, tile * 0.22);
+  const radius = tile * 0.22;
+  for (let i = 0; i < MAX_ATTEMPTS; i++) {
+    const row = rows[i];
+    for (let j = 0; j < 5; j++) {
+      const cellX = x + j * (tile + gap);
+      const cellY = y + i * (tile + gap);
+      const value = row?.[j];
+
+      if (value === undefined) {
+        ctx.fillStyle = "rgba(255,255,255,0.03)";
+        roundRect(ctx, cellX, cellY, tile, tile, radius);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(255,255,255,0.14)";
+        ctx.lineWidth = 2;
+        roundRect(ctx, cellX + 1, cellY + 1, tile - 2, tile - 2, radius);
+        ctx.stroke();
+        continue;
+      }
+
+      ctx.fillStyle = value === 1 ? COLORS.correct : value === -1 ? COLORS.present : COLORS.absent;
+      roundRect(ctx, cellX, cellY, tile, tile, radius);
       ctx.fill();
-    });
-  });
+    }
+  }
 }
 
-function gridSize(rows: number[][], tile: number, gap: number) {
-  return { width: 5 * tile + 4 * gap, height: rows.length * tile + (rows.length - 1) * gap };
+function gridSize(tile: number, gap: number) {
+  return { width: 5 * tile + 4 * gap, height: MAX_ATTEMPTS * tile + (MAX_ATTEMPTS - 1) * gap };
 }
 
 export function renderShareImage(canvas: HTMLCanvasElement, data: ShareImageData, format: ImageFormat) {
@@ -74,19 +95,31 @@ export function renderShareImage(canvas: HTMLCanvasElement, data: ShareImageData
 
   const pad = format === "square" ? 80 : 96;
   const cardX = pad;
-  const cardY = pad;
   const cardW = width - pad * 2;
-  const cardH = height - pad * 2;
-  ctx.fillStyle = COLORS.card;
-  roundRect(ctx, cardX, cardY, cardW, cardH, 48);
-  ctx.fill();
-
   const innerPad = format === "square" ? 56 : 72;
-  let cursorY = cardY + innerPad;
 
   // Logo row + puzzle meta
   const logoTile = format === "square" ? 40 : 48;
   const logoGap = 6;
+  const logoToGridGap = format === "square" ? 64 : 96;
+  const tile = format === "square" ? 44 : 56;
+  const gridGap = 12;
+  const grid = gridSize(tile, gridGap);
+
+  // Card height fits the actual content (logo row + the full 6-row grid,
+  // padding included) instead of a fixed near-full-canvas height that left a
+  // lot of empty space below the grid. The story format stacks stats below
+  // the grid, so its content also includes that block's height.
+  const statsBlockH = format === "square" ? 0 : 90 + 64 + 46 + 34;
+  const contentH = logoTile + logoToGridGap + grid.height + statsBlockH;
+  const cardH = innerPad * 2 + contentH;
+  const cardY = Math.max(pad, (height - cardH) / 2);
+
+  ctx.fillStyle = COLORS.card;
+  roundRect(ctx, cardX, cardY, cardW, cardH, 48);
+  ctx.fill();
+
+  let cursorY = cardY + innerPad;
   let logoX = cardX + innerPad;
   ctx.font = `700 ${logoTile * 0.5}px Sora, sans-serif`;
   ctx.textAlign = "center";
@@ -105,16 +138,12 @@ export function renderShareImage(canvas: HTMLCanvasElement, data: ShareImageData
   ctx.textAlign = "right";
   ctx.fillText(`No. ${data.wordNumber} · ${data.dateShort}`, cardX + cardW - innerPad, cursorY + logoTile / 2 + 1);
 
-  cursorY += logoTile + (format === "square" ? 64 : 96);
+  cursorY += logoTile + logoToGridGap;
 
   // Grid + stats
-  const tile = format === "square" ? 44 : 56;
-  const gap = 12;
-  const grid = gridSize(data.rows, tile, gap);
-
   if (format === "square") {
     const statsX = cardX + innerPad + grid.width + 52;
-    drawGrid(ctx, data.rows, cardX + innerPad, cursorY, tile, gap);
+    drawGrid(ctx, data.rows, cardX + innerPad, cursorY, tile, gridGap);
 
     let statsY = cursorY + grid.height / 2 - 70;
     ctx.textAlign = "left";
@@ -131,7 +160,7 @@ export function renderShareImage(canvas: HTMLCanvasElement, data: ShareImageData
     ctx.fillText("wordly.app", statsX, statsY);
   } else {
     const gridX = cardX + (cardW - grid.width) / 2;
-    drawGrid(ctx, data.rows, gridX, cursorY, tile, gap);
+    drawGrid(ctx, data.rows, gridX, cursorY, tile, gridGap);
 
     let statsY = cursorY + grid.height + 90;
     ctx.textAlign = "center";

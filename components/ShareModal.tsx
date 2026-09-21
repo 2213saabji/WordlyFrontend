@@ -9,19 +9,31 @@ import type { Game, Group, User } from "@/types";
 type Tab = "text" | "image" | "link";
 
 const TILE_BG: Record<number, string> = { 1: "bg-correct", "-1": "bg-present", 0: "bg-absent" };
+const MAX_ATTEMPTS = 6;
 
+// Always renders MAX_ATTEMPTS rows — rows past the last guess show as empty
+// pending cells, matching the board and the share image instead of the
+// preview trailing off short on a quick win.
 function MiniGrid({ rows, tileSize = 20 }: { rows: number[][]; tileSize?: number }) {
   return (
     <div className="grid gap-1.5">
-      {rows.map((row, i) => (
+      {Array.from({ length: MAX_ATTEMPTS }, (_, i) => rows[i]).map((row, i) => (
         <div key={i} className="flex gap-1.5">
-          {row.map((value, j) => (
-            <span
-              key={j}
-              className={`rounded-[5px] ${TILE_BG[value]}`}
-              style={{ width: tileSize, height: tileSize }}
-            />
-          ))}
+          {row
+            ? row.map((value, j) => (
+                <span
+                  key={j}
+                  className={`rounded-[5px] ${TILE_BG[value]}`}
+                  style={{ width: tileSize, height: tileSize }}
+                />
+              ))
+            : Array.from({ length: 5 }, (_, j) => (
+                <span
+                  key={j}
+                  className="rounded-[5px] border border-white/15 bg-white/5"
+                  style={{ width: tileSize, height: tileSize }}
+                />
+              ))}
         </div>
       ))}
     </div>
@@ -159,7 +171,7 @@ export default function ShareModal({
   const dims = IMAGE_DIMENSIONS[imageFormat];
 
   return (
-    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center overflow-y-auto bg-background/95 p-4 backdrop-blur-sm">
+    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center overflow-y-auto scrollbar-none bg-background/95 p-4 backdrop-blur-sm [&::-webkit-scrollbar]:hidden">
       <div className="flex w-full max-w-xl animate-fade-in-up flex-col gap-6 rounded-[26px] border border-white/10 bg-surface p-7.5 shadow-sm">
         <div className="flex items-center gap-3.5">
           <span className="text-xl font-semibold tracking-tight">Share your result</span>
@@ -294,7 +306,7 @@ export default function ShareModal({
         {tab === "link" && (
           <>
             <div className="flex items-center gap-3 rounded-2xl border border-white/9 bg-white/5 py-2 pl-4.5 pr-2">
-              <span className="overflow-hidden text-ellipsis whitespace-nowrap font-mono text-sm tracking-wide text-foreground">
+              <span className="select-text overflow-hidden text-ellipsis whitespace-nowrap font-mono text-sm tracking-wide text-foreground">
                 {replayEnabled ? replayLink.replace(/^https?:\/\//, "") : "Link sharing is off"}
               </span>
               <button

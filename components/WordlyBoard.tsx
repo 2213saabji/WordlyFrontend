@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import type { Guess } from "@/types";
 
@@ -12,20 +12,26 @@ const MAX_ATTEMPTS = 6;
 type TileTheme = { bg: string; border: string; fg: string };
 
 const EMPTY_THEME: TileTheme = {
-  bg: "transparent",
-  border: "var(--border)",
+  bg: "color-mix(in srgb, var(--foreground) 3%, transparent)",
+  border: "color-mix(in srgb, var(--foreground) 8%, transparent)",
+  fg: "var(--foreground)",
+};
+
+const CURSOR_THEME: TileTheme = {
+  bg: "color-mix(in srgb, var(--foreground) 3%, transparent)",
+  border: "var(--color-accent)",
   fg: "var(--foreground)",
 };
 
 const TYPED_THEME: TileTheme = {
-  bg: "transparent",
-  border: "color-mix(in srgb, var(--foreground) 55%, transparent)",
+  bg: "color-mix(in srgb, var(--color-accent) 10%, transparent)",
+  border: "color-mix(in srgb, var(--color-accent) 55%, transparent)",
   fg: "var(--foreground)",
 };
 
 const RESULT_THEME: Record<number, TileTheme> = {
   1: { bg: "var(--color-correct)", border: "var(--color-correct)", fg: "#fff" },
-  [-1]: { bg: "var(--color-present)", border: "var(--color-present)", fg: "#fff" },
+  [-1]: { bg: "var(--color-present)", border: "var(--color-present)", fg: "var(--background)" },
   0: { bg: "var(--color-absent)", border: "var(--color-absent)", fg: "#fff" },
 };
 
@@ -42,35 +48,38 @@ export default function WordlyBoard({
   currentGuess,
   shakeSignal,
   celebrate,
+  interactive = true,
 }: {
   guesses: Guess[];
   currentGuess: string;
   shakeSignal?: number;
   celebrate?: boolean;
+  /** false once the game is over — suppresses the "next cell to type" cursor
+   * highlight on the first empty row, which otherwise implies play is still live. */
+  interactive?: boolean;
 }) {
   const activeRowIndex = guesses.length;
   const winningRowIndex = celebrate ? guesses.length - 1 : -1;
 
   // shakeSignal only ever increments, so a plain truthiness check would keep
   // shaking forever after the first rejected guess — including on later
-  // keystrokes, since the current row's tiles remount as you type. Only
-  // treat a shake as "live" for a short window right after it fires.
-  const [isShaking, setIsShaking] = useState(false);
-  const shakeTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // keystrokes, since the current row's tiles remount as you type. Instead,
+  // "shaking" is derived by comparing the live signal against the last value
+  // it settled on — true the instant a new signal arrives, with no state
+  // update needed to turn it on. The effect only ever writes state async
+  // (inside the timeout), to settle it back off after the animation window.
+  const [settledShakeSignal, setSettledShakeSignal] = useState(shakeSignal ?? 0);
+  const isShaking = (shakeSignal ?? 0) !== settledShakeSignal;
 
   useEffect(() => {
-    if (!shakeSignal) return;
-    setIsShaking(true);
-    if (shakeTimeout.current) clearTimeout(shakeTimeout.current);
-    shakeTimeout.current = setTimeout(() => setIsShaking(false), SHAKE_DURATION_MS);
-    return () => {
-      if (shakeTimeout.current) clearTimeout(shakeTimeout.current);
-    };
-  }, [shakeSignal]);
+    if (!isShaking) return;
+    const id = setTimeout(() => setSettledShakeSignal(shakeSignal ?? 0), SHAKE_DURATION_MS);
+    return () => clearTimeout(id);
+  }, [isShaking, shakeSignal]);
 
   const rows = Array.from({ length: MAX_ATTEMPTS }, (_, rowIndex) => {
     const submitted = guesses[rowIndex];
-    const isCurrentRow = rowIndex === activeRowIndex;
+    const isCurrentRow = interactive && rowIndex === activeRowIndex;
     const isRevealRow = rowIndex === guesses.length - 1 && !!submitted;
     const isWinningRow = rowIndex === winningRowIndex;
     const letters = submitted
@@ -79,8 +88,10 @@ export default function WordlyBoard({
         ? currentGuess.padEnd(WORD_LENGTH, " ").split("")
         : Array(WORD_LENGTH).fill(" ");
 
+    const cursorIndex = isCurrentRow ? currentGuess.length : -1;
+
     return (
-      <div key={rowIndex} className="grid grid-cols-5 gap-1.5">
+      <div key={rowIndex} className="flex gap-1.5">
         {letters.map((letter, colIndex) => {
           const result = submitted?.result[colIndex];
           const hasLetter = letter.trim() !== "";
@@ -89,7 +100,9 @@ export default function WordlyBoard({
               ? (RESULT_THEME[result] ?? TYPED_THEME)
               : hasLetter
                 ? TYPED_THEME
-                : EMPTY_THEME;
+                : colIndex === cursorIndex
+                  ? CURSOR_THEME
+                  : EMPTY_THEME;
 
           const flipDelay = colIndex * 90;
           const bounceDelay = 480 + colIndex * 80;
@@ -128,7 +141,7 @@ export default function WordlyBoard({
             >
               <div
                 style={style}
-                className="flex aspect-square min-w-15 items-center justify-center rounded-sm border-2 text-2xl font-bold uppercase transition-colors duration-150"
+                className="flex h-15 w-15 items-center justify-center rounded-xl border-2 text-2xl font-bold uppercase transition-colors duration-150 md:rounded-[14px]"
               >
                 <span style={hopStyle} className="inline-block">
                   {hasLetter ? letter : ""}
@@ -141,5 +154,5 @@ export default function WordlyBoard({
     );
   });
 
-  return <div className="mx-auto grid max-w-xl gap-1.5">{rows}</div>;
+  return <div className="mx-auto flex w-fit flex-col gap-1.5">{rows}</div>;
 }
