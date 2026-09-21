@@ -261,12 +261,13 @@ export default function HomeScreen({
             </div>
             <div className="flex flex-col">
               {weekly && weekly.length > 0 ? (
-                weekly.slice(0, 4).map((entry) => {
+                weekly.slice(0, 4).map((entry, i) => {
                   const isMe = entry.userId === user?.id;
                   return (
                     <div
                       key={entry.userId}
-                      className={`flex items-center gap-3.5 border-b border-border py-3 last:border-b-0 ${
+                      style={{ animationDelay: `${i * 40}ms` }}
+                      className={`flex animate-fade-in-up items-center gap-3.5 border-b border-border py-3 last:border-b-0 ${
                         isMe ? "-mx-2.5 rounded-lg bg-accent/10 px-2.5" : ""
                       }`}
                     >
@@ -279,7 +280,7 @@ export default function HomeScreen({
                   );
                 })
               ) : weekly ? (
-                <p className="py-2 text-sm text-foreground/55">Nobody has finished a game this week yet.</p>
+                <p className="animate-fade-in py-2 text-sm text-foreground/55">Nobody has finished a game this week yet.</p>
               ) : (
                 <p className="py-2 text-sm text-foreground/55">Loading…</p>
               )}
@@ -290,12 +291,13 @@ export default function HomeScreen({
             <span className="text-[15.5px] font-semibold">Your groups</span>
             <div className="flex flex-col">
               {groups && groups.length > 0 ? (
-                groups.map((group) => (
+                groups.map((group, i) => (
                   <button
                     key={group._id}
                     type="button"
-                    onClick={() => onOpenLeaderboard(group._id)}
-                    className="flex items-center gap-3 border-t border-border py-3 text-left transition-[padding] duration-150 first:border-t-0 hover:pl-1"
+                    onClick={onGroups}
+                    style={{ animationDelay: `${i * 60}ms` }}
+                    className="flex animate-fade-in-up items-center gap-3 border-t border-border py-3 text-left transition-[padding] duration-150 first:border-t-0 hover:pl-1"
                   >
                     <span className="text-foreground/50">
                       <UsersIcon />
@@ -307,7 +309,7 @@ export default function HomeScreen({
                   </button>
                 ))
               ) : (
-                <p className="py-1 text-sm text-foreground/55">You&apos;re not in any groups yet.</p>
+                <p className="animate-fade-in py-1 text-sm text-foreground/55">You&apos;re not in any groups yet.</p>
               )}
               <button
                 type="button"

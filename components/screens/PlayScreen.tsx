@@ -4,8 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import WordlyBoard from "@/components/WordlyBoard";
 import Keyboard from "@/components/Keyboard";
 import Loader from "@/components/Loader";
-import ScreenHeader from "@/components/ScreenHeader";
 import {
+  getGroupDailyLeaderboard,
   getInfiniteCurrent,
   getTodayGame,
   startNewInfiniteRound,
@@ -18,9 +18,48 @@ import { useAuth } from "@/lib/auth-context";
 import { isKnownGuess } from "@/lib/word-check";
 import { wordNumberForDate } from "@/lib/share";
 import type { PlayMode } from "@/lib/screen-context";
-import type { Game, User } from "@/types";
+import type { Game, Guess, LetterResult, User } from "@/types";
 
 const WORD_LENGTH = 5;
+const MAX_ATTEMPTS = 6;
+const NUMBER_WORDS = ["No", "One", "Two", "Three", "Four", "Five", "Six"];
+const NUMBER_WORDS_FULL = [
+  "zero",
+  "one",
+  "two",
+  "three",
+  "four",
+  "five",
+  "six",
+  "seven",
+  "eight",
+  "nine",
+  "ten",
+  "eleven",
+  "twelve",
+];
+
+function numberWord(n: number): string {
+  return n >= 0 && n < NUMBER_WORDS_FULL.length ? NUMBER_WORDS_FULL[n] : String(n);
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function ordinal(n: number): string {
+  const suffixes = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return `${n}${suffixes[(v - 20) % 10] ?? suffixes[v] ?? suffixes[0]}`;
+}
+
+type GroupDailyStats = {
+  groupId: string;
+  groupName: string;
+  rank: number | null;
+  total: number;
+  wonCount: number;
+};
 
 function formatCountdownToNextUtcMidnight(): string {
   const now = Date.now();
@@ -39,108 +78,465 @@ function useCountdownToNextUtcMidnight(): string {
   return label;
 }
 
-function DailyWinCard({
-  game,
-  user,
-  onOpenLeaderboard,
-  onClose,
-}: {
-  game: Game;
-  user: User;
-  onOpenLeaderboard: (groupId?: string) => void;
-  onClose: () => void;
-}) {
-  const [shareOpen, setShareOpen] = useState(false);
-  const countdown = useCountdownToNextUtcMidnight();
-  const wordNumber = wordNumberForDate(game.date);
-  const formattedDate = new Intl.DateTimeFormat("en-US", {
+function formatFullCountdownToNextUtcMidnight(): string {
+  const now = Date.now();
+  const d = new Date(now);
+  const nextMidnight = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1);
+  const secondsLeft = Math.max(0, Math.round((nextMidnight - now) / 1000));
+  const hours = Math.floor(secondsLeft / 3600);
+  const minutes = Math.floor((secondsLeft % 3600) / 60);
+  const seconds = secondsLeft % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function useFullCountdownToNextUtcMidnight(): string {
+  const [label, setLabel] = useState(formatFullCountdownToNextUtcMidnight);
+  useEffect(() => {
+    const id = setInterval(() => setLabel(formatFullCountdownToNextUtcMidnight()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return label;
+}
+
+function formatDateEyebrow(dateKey: string): string {
+  return new Intl.DateTimeFormat("en-US", {
     weekday: "short",
     day: "numeric",
     month: "short",
     timeZone: "UTC",
-  }).format(new Date(`${game.date}T00:00:00Z`));
+  }).format(new Date(`${dateKey}T00:00:00Z`));
+}
 
-  function handleLeaderboard() {
-    const first = user.groups[0];
-    onOpenLeaderboard(typeof first === "string" ? first : first?._id);
+type KnownLetters = {
+  correct: { letter: string; pos: number }[];
+  present: string[];
+  absent: string[];
+};
+
+function buildKnownLetters(guesses: Guess[]): KnownLetters {
+  const status: Record<string, LetterResult> = {};
+  const correctPos: Record<string, number> = {};
+  for (const { guess, result } of guesses) {
+    guess.split("").forEach((letter, i) => {
+      const value = result[i];
+      const current = status[letter];
+      if (current === 1) return;
+      if (current === -1 && value !== 1) return;
+      status[letter] = value;
+      if (value === 1) correctPos[letter] = i + 1;
+    });
   }
+  const correct: { letter: string; pos: number }[] = [];
+  const present: string[] = [];
+  const absent: string[] = [];
+  for (const [letter, value] of Object.entries(status)) {
+    if (value === 1) correct.push({ letter, pos: correctPos[letter] });
+    else if (value === -1) present.push(letter);
+    else absent.push(letter);
+  }
+  return { correct, present, absent };
+}
+
+function BackIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="17"
+      height="17"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.25"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="m12 19-7-7 7-7" />
+      <path d="M19 12H5" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="h-3.75 w-3.75">
+      <path d="M18 6 6 18M6 6l12 12" />
+    </svg>
+  );
+}
+
+function GroupIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" className="h-3.5 w-3.5">
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+    </svg>
+  );
+}
+
+function ShareIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" className="h-4.5 w-4.5">
+      <path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7M12 3v13M8 7l4-4 4 4" />
+    </svg>
+  );
+}
+
+function ProgressBar({ used, total = MAX_ATTEMPTS, active }: { used: number; total?: number; active: boolean }) {
+  return (
+    <div className="flex gap-1">
+      {Array.from({ length: total }, (_, i) => {
+        const filled = i < used;
+        const isCurrent = active && i === used;
+        return (
+          <span
+            key={i}
+            className={`h-1 flex-1 rounded-full transition-colors duration-150 ${
+              filled ? "bg-present" : isCurrent ? "bg-accent" : "bg-white/10"
+            }`}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+/** Same shape as ProgressBar, but the final filled segment reads as the
+ * winning guess (green) rather than just another used attempt (amber). */
+function ResultProgressBar({ count, won }: { count: number; won: boolean }) {
+  return (
+    <div className="flex gap-1">
+      {Array.from({ length: MAX_ATTEMPTS }, (_, i) => {
+        const isWinningSeg = won && i === count - 1;
+        const filled = i < count;
+        return (
+          <span
+            key={i}
+            className={`h-1 flex-1 rounded-full ${
+              isWinningSeg ? "bg-correct" : filled ? "bg-present" : "bg-white/10"
+            }`}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function KnownLettersPanel({ known }: { known: KnownLetters }) {
+  if (known.correct.length === 0 && known.present.length === 0 && known.absent.length === 0) return null;
 
   return (
-    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center overflow-y-auto bg-background/95 p-4 backdrop-blur-sm">
-      <div className="relative w-full max-w-xl animate-fade-in-up rounded-[26px] border border-correct/30 bg-correct/10 p-7.5 shadow-sm shadow-correct/10">
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close"
-          className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full text-foreground/50 transition-colors hover:bg-white/10 hover:text-foreground"
+    <div className="flex animate-fade-in-up-slow flex-col gap-3 border-t border-border pt-5.5">
+      <span className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground/50">Known so far</span>
+      {(known.correct.length > 0 || known.present.length > 0) && (
+        <div className="flex flex-wrap gap-1.75">
+          {known.correct.map((c) => (
+            <span
+              key={`c-${c.letter}`}
+              style={{ animationDuration: "0.35s" }}
+              className="animate-pop rounded-[10px] bg-correct px-2 py-1 text-xs font-medium uppercase text-white"
+            >
+              {c.letter} · {ordinal(c.pos)}
+            </span>
+          ))}
+          {known.present.map((letter) => (
+            <span
+              key={`p-${letter}`}
+              style={{ animationDuration: "0.35s" }}
+              className="animate-pop rounded-[10px] bg-present px-3 py-1.75 text-sm font-bold uppercase text-background"
+            >
+              {letter}
+            </span>
+          ))}
+        </div>
+      )}
+      {known.absent.length > 0 && (
+        <span
+          style={{ animationDuration: "0.6s" }}
+          className="animate-fade-in text-[13px] leading-relaxed text-foreground/50"
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="h-4.5 w-4.5">
-            <path d="M18 6 6 18M6 6l12 12" />
-          </svg>
-        </button>
-        <div className="flex items-start gap-5">
-          <div className="flex min-w-0 flex-col gap-2.5">
-            <span className="text-[12.5px] font-semibold uppercase tracking-[0.18em] text-correct">
-              Solved in {game.guesses.length} of 6
-            </span>
-            <span className="text-[44px] font-bold uppercase leading-none tracking-[0.08em]">{game.word}</span>
-            <span className="text-sm text-foreground/60">
-              Word no. {wordNumber} · {formattedDate}
-            </span>
-          </div>
-          <span className="ml-auto flex flex-none flex-col items-center gap-1 rounded-[20px] bg-accent/15 px-5 py-4">
-            <span className="text-3xl font-bold leading-none text-accent">{user.stats.currentStreak}</span>
-            <span className="text-[11.5px] font-semibold uppercase tracking-[0.12em] text-accent">Day streak</span>
-          </span>
-        </div>
+          Ruled out: {known.absent.map((l) => l.toUpperCase()).join(", ")}
+        </span>
+      )}
+    </div>
+  );
+}
 
-        <div className="mt-5.5 grid grid-cols-3 gap-4 border-t border-foreground/10 pt-5">
-          <span className="flex flex-col gap-1">
-            <span className="text-[26px] font-light tracking-[-0.02em]">
-              {user.stats.gamesWon}/{user.stats.gamesPlayed}
-            </span>
-            <span className="text-xs text-foreground/60">Wins</span>
-          </span>
-          <span className="flex flex-col gap-1">
-            <span className="text-[26px] font-light tracking-[-0.02em]">{user.stats.maxStreak}</span>
-            <span className="text-xs text-foreground/60">Best streak</span>
-          </span>
-          <span className="flex flex-col gap-1">
-            <span className="text-[26px] font-light tabular-nums tracking-[-0.02em]">{countdown}</span>
-            <span className="text-xs text-foreground/60">Until next word</span>
-          </span>
-        </div>
-
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+function HowToPlayModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-background/95 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md animate-fade-in-up rounded-[26px] border border-white/10 bg-surface p-7">
+        <div className="flex items-center gap-3">
+          <span className="text-lg font-semibold tracking-tight">How to play</span>
           <button
             type="button"
-            onClick={() => setShareOpen(true)}
-            className="flex flex-1 items-center justify-center gap-2.5 whitespace-nowrap rounded-2xl bg-accent px-6 py-3.75 text-sm font-bold text-background shadow-sm shadow-accent/30 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 active:scale-[0.98]"
+            onClick={onClose}
+            aria-label="Close"
+            className="ml-auto flex h-8 w-8 flex-none items-center justify-center rounded-[11px] bg-white/7 text-foreground/60 transition-colors hover:bg-white/12 hover:text-foreground"
           >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={1.9}
-              strokeLinecap="round"
-              className="h-4.5 w-4.5"
+            <CloseIcon />
+          </button>
+        </div>
+        <p className="mt-4 text-sm text-foreground/70">
+          Guess the {WORD_LENGTH}-letter word in {MAX_ATTEMPTS} tries. Each guess must be a real word.
+        </p>
+        <ul className="mt-5 flex flex-col gap-3 text-sm">
+          <li className="flex items-center gap-3">
+            <span className="flex h-7 w-7 flex-none items-center justify-center rounded-lg bg-correct text-xs font-bold text-white">
+              A
+            </span>
+            <span className="text-foreground/75">Green — right letter, right spot.</span>
+          </li>
+          <li className="flex items-center gap-3">
+            <span className="flex h-7 w-7 flex-none items-center justify-center rounded-lg bg-present text-xs font-bold text-background">
+              B
+            </span>
+            <span className="text-foreground/75">Amber — right letter, wrong spot.</span>
+          </li>
+          <li className="flex items-center gap-3">
+            <span className="flex h-7 w-7 flex-none items-center justify-center rounded-lg bg-absent text-xs font-bold text-white">
+              C
+            </span>
+            <span className="text-foreground/75">Gray — letter isn&apos;t in the word.</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+function DailyRevealScreen({
+  game,
+  user,
+  won,
+  wordNumber,
+  groupDaily,
+  onBack,
+  onPlayInfinite,
+  onOpenLeaderboard,
+}: {
+  game: Game;
+  user: User;
+  won: boolean;
+  wordNumber: number;
+  groupDaily: GroupDailyStats | null;
+  onBack: () => void;
+  onPlayInfinite: () => void;
+  onOpenLeaderboard: (groupId?: string) => void;
+}) {
+  const [shareOpen, setShareOpen] = useState(false);
+  const shortCountdown = useCountdownToNextUtcMidnight();
+  const fullCountdown = useFullCountdownToNextUtcMidnight();
+  const formattedDate = formatDateEyebrow(game.date);
+  const nextWordNumber = wordNumber + 1;
+
+  const eyebrow = won ? `Solved in ${game.guesses.length} of ${MAX_ATTEMPTS}` : "Out of guesses · the word was";
+
+  const stats = won
+    ? [
+        { label: "Day streak", value: String(user.stats.currentStreak), accent: true },
+        { label: "Words played", value: String(user.stats.gamesPlayed) },
+        { label: "Until next word", value: shortCountdown, mono: true },
+      ]
+    : [
+        { label: "Day streak", value: String(user.stats.currentStreak) },
+        { label: "Best streak", value: String(user.stats.maxStreak) },
+        { label: "Until next word", value: shortCountdown, mono: true },
+      ];
+
+  const groupNameButton = groupDaily && (
+    <button
+      type="button"
+      onClick={() => onOpenLeaderboard(groupDaily.groupId)}
+      className="font-semibold text-foreground/75 underline decoration-foreground/30 underline-offset-2 transition-colors hover:text-foreground"
+    >
+      {groupDaily.groupName}
+    </button>
+  );
+
+  const footerNote = won ? (
+    <p className="text-sm leading-relaxed text-foreground/55">
+      {groupDaily && groupDaily.rank ? (
+        <>
+          You&apos;re {ordinal(groupDaily.rank)} in {groupNameButton} today.{" "}
+        </>
+      ) : null}
+      Come back at midnight for word {nextWordNumber}.
+    </p>
+  ) : (
+    <p className="text-sm leading-relaxed text-foreground/55">
+      {groupDaily ? (
+        <>
+          {capitalize(numberWord(groupDaily.wonCount))} of {numberWord(groupDaily.total)} in {groupNameButton} got it
+          today.{" "}
+        </>
+      ) : null}
+      Word {nextWordNumber} arrives at midnight.
+    </p>
+  );
+
+  const primaryAction = won
+    ? { label: "Share result", onClick: () => setShareOpen(true), icon: <ShareIcon /> }
+    : { label: "Play Infinite", onClick: onPlayInfinite, icon: null };
+  const secondaryAction = won
+    ? { label: "Play Infinite", onClick: onPlayInfinite }
+    : { label: "Share result", onClick: () => setShareOpen(true) };
+
+  return (
+    <div className="relative mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-4 md:px-10 md:py-10">
+      {/* mobile top bar — dimmed, the reveal sheet below has focus */}
+      <div className="flex items-center gap-3.5 opacity-45 md:hidden">
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="Back"
+          className="flex h-8.5 w-8.5 flex-none items-center justify-center rounded-xl bg-white/7 text-foreground"
+        >
+          <BackIcon />
+        </button>
+        <span className="text-[15.5px] font-semibold">Play Daily</span>
+        <span className="ml-auto flex-none text-xs text-foreground/55">Word no. {wordNumber}</span>
+      </div>
+
+      <div className="relative mt-5 animate-fade-in md:hidden">
+        <WordlyBoard guesses={game.guesses} currentGuess="" celebrate={won} interactive={false} />
+        <div
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-24"
+          style={{ background: "linear-gradient(180deg, transparent 0%, var(--background) 92%)" }}
+        />
+      </div>
+
+      {/* mobile reveal sheet */}
+      <div
+        className="-mx-4 mt-auto flex animate-fade-in-up flex-col gap-5.5 rounded-t-[30px] border-t border-accent/25 bg-surface px-6 pb-7 pt-7 shadow-lg md:hidden"
+        style={{ animationDelay: "80ms" }}
+      >
+        <div className="flex items-start gap-3.5">
+          <div className="flex min-w-0 flex-col gap-2">
+            <span
+              className={`text-xs font-semibold uppercase tracking-[0.18em] ${won ? "text-correct" : "text-foreground/50"}`}
             >
-              <path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7M12 3v13M8 7l4-4 4 4" />
-            </svg>
-            Share result
+              {eyebrow}
+            </span>
+            <span className="text-[34px] font-bold uppercase leading-none tracking-[0.06em]">{game.word}</span>
+          </div>
+          <span className="ml-auto flex flex-none flex-col items-end gap-1.5">
+            {won ? (
+              <span className="whitespace-nowrap rounded-full bg-accent/15 px-3.25 py-1.75 text-[13px] font-bold text-accent">
+                {user.stats.currentStreak} day streak
+              </span>
+            ) : (
+              <span className="whitespace-nowrap rounded-full bg-white/8 px-3.25 py-1.75 text-[13px] font-semibold text-foreground/70">
+                Streak reset
+              </span>
+            )}
+            <span className="text-xs text-foreground/50">
+              {won ? `Wins ${user.stats.gamesWon} of ${user.stats.gamesPlayed}` : `Best was ${user.stats.maxStreak}`}
+            </span>
+          </span>
+        </div>
+
+        <ResultProgressBar count={game.guesses.length} won={won} />
+
+        <div className="flex items-center justify-between gap-4 rounded-[18px] bg-white/5 px-4.5 py-4">
+          <span className="flex flex-col gap-0.75">
+            <span className="text-[12.5px] text-foreground/50">Next word in</span>
+            <span className="text-[20px] font-semibold tabular-nums tracking-[0.02em]">{fullCountdown}</span>
+          </span>
+          {groupDaily && (
+            <span className="flex flex-col items-end gap-0.75 text-right">
+              <span className="text-[12.5px] text-foreground/50">{groupDaily.groupName}</span>
+              <span className={`text-sm font-semibold ${won ? "text-accent" : "text-foreground/75"}`}>
+                {won
+                  ? groupDaily.rank
+                    ? `${ordinal(groupDaily.rank)} of ${groupDaily.total} today`
+                    : `${groupDaily.total} played today`
+                  : `${groupDaily.wonCount} of ${groupDaily.total} solved it`}
+              </span>
+            </span>
+          )}
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={primaryAction.onClick}
+            className="flex-1 rounded-2xl bg-accent py-4 text-center text-[15.5px] font-bold text-background shadow-sm shadow-accent/30 transition-transform active:scale-[0.98]"
+          >
+            {primaryAction.label}
           </button>
           <button
             type="button"
-            onClick={handleLeaderboard}
-            className="whitespace-nowrap rounded-2xl border border-border bg-surface px-6 py-3.75 text-sm font-semibold transition-colors hover:bg-border"
+            onClick={secondaryAction.onClick}
+            className="whitespace-nowrap rounded-2xl border border-border bg-white/7 px-5 py-4 text-[15.5px] font-semibold transition-colors hover:bg-white/12"
           >
-            Group leaderboard
+            {secondaryAction.label}
           </button>
         </div>
       </div>
 
+      {/* desktop reveal */}
+      <div className="hidden flex-1 items-start justify-center gap-18 md:grid md:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
+        <div className="w-full animate-fade-in-up">
+          <WordlyBoard guesses={game.guesses} currentGuess="" celebrate={won} interactive={false} />
+        </div>
+
+        <div className="flex max-w-xl animate-fade-in-up flex-col gap-6.5" style={{ animationDelay: "100ms" }}>
+          <div className="flex flex-col gap-3.5">
+            <span
+              className={`text-[12.5px] font-semibold uppercase tracking-[0.18em] ${won ? "text-correct" : "text-foreground/50"}`}
+            >
+              {eyebrow}
+            </span>
+            <span className="text-[64px] font-bold uppercase leading-none tracking-[0.06em]">{game.word}</span>
+            <span className="text-[15px] text-foreground/65">
+              Word no. {wordNumber} · {formattedDate}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4.5 border-y border-white/10 py-6">
+            {stats.map((s) => (
+              <span key={s.label} className="flex flex-col gap-1.25">
+                <span
+                  className={`text-[30px] font-light tracking-[-0.02em] ${s.accent ? "text-accent" : ""} ${
+                    s.mono ? "tabular-nums" : ""
+                  }`}
+                >
+                  {s.value}
+                </span>
+                <span className="text-[13px] text-foreground/65">{s.label}</span>
+              </span>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={primaryAction.onClick}
+              className="flex items-center gap-2.5 whitespace-nowrap rounded-2xl bg-accent px-6.5 py-4 text-[15.5px] font-bold text-background shadow-sm shadow-accent/30 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 active:scale-[0.98]"
+            >
+              {primaryAction.icon}
+              {primaryAction.label}
+            </button>
+            <button
+              type="button"
+              onClick={secondaryAction.onClick}
+              className="whitespace-nowrap rounded-2xl border border-border bg-white/7 px-6.5 py-4 text-[15.5px] font-semibold transition-colors hover:bg-white/12"
+            >
+              {secondaryAction.label}
+            </button>
+          </div>
+
+          {footerNote}
+        </div>
+      </div>
+
       {shareOpen && (
-        <ShareModal game={game} user={user} wordNumber={wordNumber} onClose={() => setShareOpen(false)} />
+        <ShareModal
+          game={game}
+          user={user}
+          wordNumber={wordNumber}
+          onClose={() => setShareOpen(false)}
+        />
       )}
     </div>
   );
@@ -150,10 +546,12 @@ export default function PlayScreen({
   mode,
   onBack,
   onOpenLeaderboard,
+  onPlayInfinite,
 }: {
   mode: PlayMode;
   onBack: () => void;
   onOpenLeaderboard: (groupId?: string) => void;
+  onPlayInfinite: () => void;
 }) {
   const { user, refreshUser } = useAuth();
   const [game, setGame] = useState<Game | null>(null);
@@ -162,7 +560,9 @@ export default function PlayScreen({
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [shakeSignal, setShakeSignal] = useState(0);
-  const [winCardDismissed, setWinCardDismissed] = useState(false);
+  const [howToPlayOpen, setHowToPlayOpen] = useState(false);
+  const [groupDaily, setGroupDaily] = useState<GroupDailyStats | null>(null);
+  const fullCountdown = useFullCountdownToNextUtcMidnight();
 
   useEffect(() => {
     const fetchCurrent = mode === "daily" ? getTodayGame : getInfiniteCurrent;
@@ -170,6 +570,33 @@ export default function PlayScreen({
       .then(({ game }) => setGame(game))
       .finally(() => setLoading(false));
   }, [mode]);
+
+  const hasGroup = mode === "daily" && !!user && user.groups.length > 0;
+
+  useEffect(() => {
+    if (!hasGroup || !user) return;
+    const first = user.groups[0];
+    const groupId = typeof first === "string" ? first : first._id;
+    let cancelled = false;
+    getGroupDailyLeaderboard(groupId)
+      .then(({ group, leaderboard }) => {
+        if (cancelled) return;
+        const idx = leaderboard.findIndex((e) => e.userId === user.id);
+        setGroupDaily({
+          groupId,
+          groupName: group.name,
+          rank: idx === -1 ? null : idx + 1,
+          total: leaderboard.length,
+          wonCount: leaderboard.filter((e) => e.status === "won").length,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setGroupDaily(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hasGroup, mode, user, game?.status]);
 
   const handleNextWord = useCallback(async () => {
     // Also doubles as "skip this round" while one is still in progress —
@@ -270,71 +697,115 @@ export default function PlayScreen({
 
   const finished = game.status !== "in-progress";
   const won = game.status === "won";
+  const wordNumber = mode === "daily" ? wordNumberForDate(game.date) : null;
+
+  if (mode === "daily" && finished && user && wordNumber !== null) {
+    return (
+      <DailyRevealScreen
+        game={game}
+        user={user}
+        won={won}
+        wordNumber={wordNumber}
+        groupDaily={groupDaily}
+        onBack={onBack}
+        onPlayInfinite={onPlayInfinite}
+        onOpenLeaderboard={onOpenLeaderboard}
+      />
+    );
+  }
+
+  const guessNumber = Math.min(game.guesses.length + (finished ? 0 : 1), MAX_ATTEMPTS);
+  const guessesLeft = MAX_ATTEMPTS - game.guesses.length;
+  const known = buildKnownLetters(game.guesses);
 
   return (
-    <div className="relative mx-auto flex w-full max-w-lg flex-1 flex-col items-center gap-6 px-4 py-4">
-      <div className="flex w-full items-center justify-between gap-3">
-        <ScreenHeader title={mode === "daily" ? "Play Daily" : "Infinite"} onBack={onBack} />
+    <div className="relative mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-4 md:px-10 md:py-10">
+      {/* mobile top bar */}
+      <div className="flex items-center gap-3.5 md:hidden">
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="Back"
+          className="flex h-8.5 w-8.5 flex-none items-center justify-center rounded-xl bg-white/7 text-foreground transition-colors hover:bg-white/12"
+        >
+          <BackIcon />
+        </button>
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <span className="truncate text-[15.5px] font-semibold">{mode === "daily" ? "Play Daily" : "Infinite"}</span>
+          <span className="truncate text-xs text-foreground/55">
+            {mode === "daily" ? `No. ${wordNumber} · ` : ""}guess {guessNumber} of {MAX_ATTEMPTS}
+          </span>
+        </span>
         {mode === "infinite" && !finished && (
           <button
             type="button"
             onClick={handleNextWord}
-            className="whitespace-nowrap text-xs font-semibold text-foreground/50 transition-colors hover:text-accent"
+            className="ml-auto flex-none whitespace-nowrap rounded-full bg-white/8 px-3.5 py-2 text-xs font-semibold text-foreground/75 transition-colors hover:text-accent"
           >
             New word
           </button>
         )}
-        {mode === "daily" && finished && won && winCardDismissed && (
-          <button
-            type="button"
-            onClick={() => setWinCardDismissed(false)}
-            aria-label="Show today's result"
-            className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-accent/15 text-accent transition-colors hover:bg-accent/25"
-          >
-            🏆
-          </button>
+        {mode === "daily" && groupDaily && groupDaily.rank && (
+          <span className="ml-auto flex flex-none items-center gap-1.5 whitespace-nowrap rounded-full bg-accent/13 px-3.5 py-2 text-[12.5px] font-semibold text-accent">
+            <GroupIcon />
+            {ordinal(groupDaily.rank)} of {groupDaily.total}
+          </span>
         )}
       </div>
 
-      {finished && won && mode === "daily" && user ? (
-        !winCardDismissed && (
-          <DailyWinCard
-            game={game}
-            user={user}
-            onOpenLeaderboard={onOpenLeaderboard}
-            onClose={() => setWinCardDismissed(true)}
-          />
-        )
-      ) : (
-        finished && (
-          <div
-            className={`w-full max-w-xl animate-fade-in-up rounded-xl border p-4 text-center shadow-sm ${
-              won ? "border-correct/40 bg-correct/10 shadow-correct/10" : "border-border bg-surface"
-            }`}
-          >
-            <p className="text-lg font-bold">
-              {won ? (
-                <>
-                  You won! <span className="inline-block animate-tile-bounce">🎉</span>
-                </>
-              ) : mode === "daily" ? (
-                "Better luck tomorrow"
-              ) : (
-                "Out of guesses"
+      <div className="mt-4 md:hidden">
+        <ProgressBar used={game.guesses.length} active={!finished} />
+      </div>
+
+      <div className="mt-6 grid flex-1 items-start gap-8 md:mt-0 md:grid-cols-[260px_minmax(0,1fr)_300px] md:gap-12">
+        {/* left sidebar */}
+        <aside className="hidden flex-col gap-6.5 md:flex">
+          <div className="flex flex-col gap-2">
+            <span className="text-[12.5px] font-semibold uppercase tracking-[0.18em] text-foreground/50">
+              {mode === "daily" ? formatDateEyebrow(game.date) : "Infinite mode"}
+            </span>
+            <span className="text-[32px] font-light leading-none tracking-[-0.02em]">
+              {mode === "daily" ? `Word ${wordNumber}` : "Free play"}
+            </span>
+            <span className="text-sm text-foreground/65">
+              Guess {guessNumber} of {MAX_ATTEMPTS}
+            </span>
+          </div>
+
+          <div className="flex flex-col gap-2.5">
+            <ProgressBar used={game.guesses.length} active={!finished} />
+            <span className="text-[13px] text-foreground/50">
+              {finished
+                ? "Round over"
+                : `${NUMBER_WORDS[guessesLeft]} guess${guessesLeft === 1 ? "" : "es"} left`}
+            </span>
+          </div>
+
+          <KnownLettersPanel known={known} />
+        </aside>
+
+        {/* center column */}
+        <div className="relative flex w-full flex-1 flex-col items-center gap-6">
+          {finished && (
+            <div
+              className={`w-full max-w-xl animate-fade-in-up rounded-[20px] border p-4 text-center shadow-sm ${
+                won ? "border-correct/40 bg-correct/10 shadow-correct/10" : "border-border bg-surface"
+              }`}
+            >
+              <p className="text-lg font-bold">
+                {won ? (
+                  <>
+                    You won! <span className="inline-block animate-tile-bounce">🎉</span>
+                  </>
+                ) : (
+                  "Out of guesses"
+                )}
+              </p>
+              {game.word && (
+                <p className="text-sm text-foreground/70">
+                  The word was <span className="font-semibold uppercase">{game.word}</span>
+                </p>
               )}
-            </p>
-            {game.word && (
-              <p className="text-sm text-foreground/70">
-                The word was <span className="font-semibold uppercase">{game.word}</span>
-              </p>
-            )}
-            {mode === "daily" && user && (
-              <p className="mt-2 text-xs text-foreground/50">
-                Streak: {user.stats.currentStreak} · Wins: {user.stats.gamesWon}/
-                {user.stats.gamesPlayed}
-              </p>
-            )}
-            {mode === "infinite" && (
               <button
                 type="button"
                 onClick={handleNextWord}
@@ -342,25 +813,64 @@ export default function PlayScreen({
               >
                 Next word
               </button>
-            )}
-          </div>
-        )
-      )}
+            </div>
+          )}
 
-      {error && (
-        <p key={shakeSignal} className="animate-fade-in text-sm font-medium text-danger">
-          {error}
-        </p>
-      )}
+          {error && (
+            <p key={shakeSignal} className="animate-fade-in text-sm font-medium text-danger">
+              {error}
+            </p>
+          )}
 
-      <WordlyBoard
-        guesses={game.guesses}
-        currentGuess={currentGuess}
-        shakeSignal={shakeSignal}
-        celebrate={won}
-      />
+          <WordlyBoard
+            guesses={game.guesses}
+            currentGuess={currentGuess}
+            shakeSignal={shakeSignal}
+            celebrate={won}
+            interactive={!finished}
+          />
 
-      <Keyboard guesses={game.guesses} onKey={handleKey} disabled={finished || submitting} />
+          <Keyboard guesses={game.guesses} onKey={handleKey} disabled={finished || submitting} />
+        </div>
+
+        {/* right sidebar */}
+        <aside className="hidden flex-col gap-4.5 md:flex">
+          {mode === "daily" ? (
+            <div className="flex items-center justify-between gap-4 rounded-3xl border border-border bg-white/4.5 p-5">
+              <span className="flex flex-col gap-0.75">
+                <span className="text-[12.5px] text-foreground/50">Next word in</span>
+                <span className="text-[19px] font-semibold tabular-nums">{fullCountdown}</span>
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-4 rounded-3xl border border-border bg-white/4.5 p-5">
+              <span className="flex flex-col gap-0.75">
+                <span className="text-[12.5px] text-foreground/50">Unlimited practice</span>
+                <span className="text-[14.5px] font-semibold">No stats, no streak</span>
+              </span>
+              {!finished && (
+                <button
+                  type="button"
+                  onClick={handleNextWord}
+                  className="whitespace-nowrap rounded-xl bg-white/8 px-3.5 py-2 text-xs font-semibold text-foreground/80 transition-colors hover:bg-white/14 hover:text-foreground"
+                >
+                  New word
+                </button>
+              )}
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setHowToPlayOpen(true)}
+            className="rounded-xl border border-border bg-white/7 px-4 py-2.75 text-left text-[13.5px] font-semibold transition-colors hover:bg-white/12"
+          >
+            How to play
+          </button>
+        </aside>
+      </div>
+
+      {howToPlayOpen && <HowToPlayModal onClose={() => setHowToPlayOpen(false)} />}
     </div>
   );
 }

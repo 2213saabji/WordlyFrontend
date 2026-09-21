@@ -61,7 +61,7 @@ export default function Nav() {
         </Link>
 
         {user && (
-          <nav className="hidden items-center gap-8 md:flex">
+          <nav className="hidden animate-fade-in items-center gap-8 md:flex">
             {NAV_LINKS.map((link) => {
               const active = link.isActive(screen);
               return (
@@ -84,10 +84,13 @@ export default function Nav() {
 
         <div className="ml-auto flex items-center gap-3 text-sm">
           {user ? (
-            <>
-              <span className="hidden items-center gap-1.5 rounded-full bg-accent/12 px-3 py-1.5 text-[13px] font-semibold text-accent sm:inline-flex">
-                {user.username} · <span className="animate-pulse">🔥</span>
-                {user.stats.currentStreak}
+            <span className="flex animate-fade-in items-center gap-3">
+              <span
+                className={`hidden items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold sm:inline-flex ${
+                  user.stats.currentStreak > 0 ? "bg-accent/12 text-accent" : "bg-white/8 text-foreground/60"
+                }`}
+              >
+                {user.username} · {user.stats.currentStreak} streak
               </span>
               <button
                 onClick={handleLogout}
@@ -95,9 +98,9 @@ export default function Nav() {
               >
                 Log out
               </button>
-            </>
+            </span>
           ) : !loading ? (
-            <>
+            <span className="flex animate-fade-in items-center gap-3">
               <Link
                 href="/"
                 onClick={() => reset({ name: "login" })}
@@ -112,7 +115,7 @@ export default function Nav() {
               >
                 Sign up
               </Link>
-            </>
+            </span>
           ) : null}
         </div>
       </div>

@@ -152,13 +152,24 @@ function PeriodToggle({
   );
 }
 
-function PodiumCard({ entry, rank, isMe }: { entry: NormalizedEntry; rank: number; isMe: boolean }) {
+function PodiumCard({
+  entry,
+  rank,
+  isMe,
+  delayMs = 0,
+}: {
+  entry: NormalizedEntry;
+  rank: number;
+  isMe: boolean;
+  delayMs?: number;
+}) {
   const first = rank === 1;
   const label = first ? "1st place" : rank === 2 ? "2nd" : "3rd";
 
   return (
     <div
-      className={`flex flex-col gap-3.5 rounded-3xl border p-6 ${first ? "" : "mt-6"} ${
+      style={{ animationDelay: `${delayMs}ms` }}
+      className={`flex animate-fade-in-up flex-col gap-3.5 rounded-3xl border p-6 ${first ? "" : "mt-6"} ${
         first ? "border-accent/35 bg-accent/10" : isMe ? "border-accent/25 bg-accent/6" : "border-border bg-surface"
       }`}
     >
@@ -332,10 +343,10 @@ export default function Leaderboard({
         <>
           {/* desktop: podium + full table */}
           {podium.length === 3 && (
-            <div className="hidden animate-fade-in-up md:grid md:grid-cols-3 md:gap-5">
-              <PodiumCard entry={podium[1]} rank={2} isMe={podium[1].userId === user?.id} />
-              <PodiumCard entry={podium[0]} rank={1} isMe={podium[0].userId === user?.id} />
-              <PodiumCard entry={podium[2]} rank={3} isMe={podium[2].userId === user?.id} />
+            <div className="hidden md:grid md:grid-cols-3 md:gap-5">
+              <PodiumCard entry={podium[1]} rank={2} isMe={podium[1].userId === user?.id} delayMs={80} />
+              <PodiumCard entry={podium[0]} rank={1} isMe={podium[0].userId === user?.id} delayMs={0} />
+              <PodiumCard entry={podium[2]} rank={3} isMe={podium[2].userId === user?.id} delayMs={160} />
             </div>
           )}
 
@@ -357,7 +368,8 @@ export default function Leaderboard({
               return (
                 <div
                   key={entry.userId}
-                  className={`grid grid-cols-[56px_minmax(0,1fr)_100px_100px_110px] items-center gap-4 border-b border-border px-7 py-4 text-[15px] transition-colors duration-150 last:border-b-0 ${
+                  style={{ animationDelay: `${i * 40}ms` }}
+                  className={`grid animate-fade-in-up grid-cols-[56px_minmax(0,1fr)_100px_100px_110px] items-center gap-4 border-b border-border px-7 py-4 text-[15px] transition-colors duration-150 last:border-b-0 ${
                     isMe ? "bg-accent/8" : ""
                   }`}
                 >
@@ -445,7 +457,7 @@ export default function Leaderboard({
       {groupId && currentGroup && (
         <div className="flex items-center justify-between border-t border-border pt-5 text-xs text-foreground/50">
           <span>
-            Invite code: <span className="font-mono">{currentGroup.inviteCode}</span>
+            Invite code: <span className="select-text font-mono">{currentGroup.inviteCode}</span>
           </span>
           <span className="md:hidden">
             {currentGroup.members.length} member{currentGroup.members.length === 1 ? "" : "s"}

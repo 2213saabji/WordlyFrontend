@@ -58,7 +58,7 @@ function AppShell() {
               ? `play-${screen.mode}`
               : screen.name
         }
-        className="flex flex-1 flex-col animate-fade-in"
+        className="flex flex-1 flex-col animate-fade-in-up"
       >
         {screen.name === "home" && (
           <HomeScreen
@@ -74,6 +74,7 @@ function AppShell() {
             mode={screen.mode}
             onBack={back}
             onOpenLeaderboard={(groupId?: string) => push({ name: "leaderboard", groupId })}
+            onPlayInfinite={() => replace({ name: "play", mode: "infinite" })}
           />
         )}
         {screen.name === "history" && <HistoryScreen onBack={back} />}
