@@ -41,6 +41,8 @@ export interface Guess {
 
 export type GameStatus = "in-progress" | "won" | "lost" | "abandoned";
 
+export type GameDifficulty = "easy" | "medium" | "hard";
+
 export interface Game {
   mode?: "daily" | "infinite";
   date: string;
@@ -49,6 +51,10 @@ export interface Game {
   attemptsRemaining: number;
   guesses: Guess[];
   word?: string;
+  difficulty?: GameDifficulty;
+  /** Only present once the round is over — see the hint-button note in
+   * PlayScreen for how an in-progress hint is fetched instead. */
+  hint?: string;
   timeTakenMs?: number | null;
 }
 

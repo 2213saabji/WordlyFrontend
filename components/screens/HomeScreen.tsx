@@ -291,7 +291,7 @@ export default function HomeScreen({
             <span className="text-[15.5px] font-semibold">Your groups</span>
             <div className="flex flex-col">
               {groups && groups.length > 0 ? (
-                groups.map((group, i) => (
+                groups.slice(0, 4).map((group, i) => (
                   <button
                     key={group._id}
                     type="button"

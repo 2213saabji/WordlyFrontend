@@ -18,7 +18,7 @@ import { useAuth } from "@/lib/auth-context";
 import { isKnownGuess } from "@/lib/word-check";
 import { wordNumberForDate } from "@/lib/share";
 import type { PlayMode } from "@/lib/screen-context";
-import type { Game, Guess, LetterResult, User } from "@/types";
+import type { Game, GameDifficulty, Guess, LetterResult, User } from "@/types";
 
 const WORD_LENGTH = 5;
 const MAX_ATTEMPTS = 6;
@@ -178,6 +178,57 @@ function ShareIcon() {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" className="h-4.5 w-4.5">
       <path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7M12 3v13M8 7l4-4 4 4" />
     </svg>
+  );
+}
+
+function HintIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3">
+      <path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.4.3.6.8.6 1.3V16h5.8v-.8c0-.5.2-1 .6-1.3A6 6 0 0 0 12 3Z" />
+    </svg>
+  );
+}
+
+const DIFFICULTY_LABEL: Record<GameDifficulty, string> = { easy: "Easy", medium: "Medium", hard: "Hard" };
+const DIFFICULTY_STYLE: Record<GameDifficulty, string> = {
+  easy: "bg-correct/15 text-correct",
+  medium: "bg-present/15 text-present",
+  hard: "bg-danger/15 text-danger",
+};
+
+function DifficultyBadge({ difficulty }: { difficulty?: GameDifficulty }) {
+  if (!difficulty) return null;
+  return (
+    <span
+      className={`inline-flex flex-none items-center rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${DIFFICULTY_STYLE[difficulty]}`}
+    >
+      {DIFFICULTY_LABEL[difficulty]}
+    </span>
+  );
+}
+
+/** Hint text arrives with the game object itself (even mid-round) — this
+ * just toggles showing it, no separate fetch. */
+function HintButton({
+  hint,
+  revealed,
+  onToggle,
+}: {
+  hint?: string;
+  revealed: boolean;
+  onToggle: () => void;
+}) {
+  if (!hint) return null;
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-label={revealed ? "Hide hint" : "Show hint"}
+      title={revealed ? "Hide hint" : "Show hint"}
+      className="flex h-5.5 w-5.5 flex-none items-center justify-center rounded-full bg-white/8 text-foreground/60 transition-colors hover:bg-white/14 hover:text-accent"
+    >
+      <HintIcon />
+    </button>
   );
 }
 
@@ -418,6 +469,7 @@ function DailyRevealScreen({
               {eyebrow}
             </span>
             <span className="text-[34px] font-bold uppercase leading-none tracking-[0.06em]">{game.word}</span>
+            <DifficultyBadge difficulty={game.difficulty} />
           </div>
           <span className="ml-auto flex flex-none flex-col items-end gap-1.5">
             {won ? (
@@ -488,8 +540,9 @@ function DailyRevealScreen({
               {eyebrow}
             </span>
             <span className="text-[64px] font-bold uppercase leading-none tracking-[0.06em]">{game.word}</span>
-            <span className="text-[15px] text-foreground/65">
+            <span className="flex items-center gap-2.5 text-[15px] text-foreground/65">
               Word no. {wordNumber} · {formattedDate}
+              <DifficultyBadge difficulty={game.difficulty} />
             </span>
           </div>
 
@@ -562,6 +615,7 @@ export default function PlayScreen({
   const [shakeSignal, setShakeSignal] = useState(0);
   const [howToPlayOpen, setHowToPlayOpen] = useState(false);
   const [groupDaily, setGroupDaily] = useState<GroupDailyStats | null>(null);
+  const [hintRevealed, setHintRevealed] = useState(false);
   const fullCountdown = useFullCountdownToNextUtcMidnight();
 
   useEffect(() => {
@@ -572,6 +626,9 @@ export default function PlayScreen({
   }, [mode]);
 
   const hasGroup = mode === "daily" && !!user && user.groups.length > 0;
+  // Only "won"/"lost" (not the null -> "in-progress" transition on initial
+  // load) should trigger a leaderboard refetch below.
+  const gameFinished = game?.status === "won" || game?.status === "lost";
 
   useEffect(() => {
     if (!hasGroup || !user) return;
@@ -596,7 +653,7 @@ export default function PlayScreen({
     return () => {
       cancelled = true;
     };
-  }, [hasGroup, mode, user, game?.status]);
+  }, [hasGroup, mode, user, gameFinished]);
 
   const handleNextWord = useCallback(async () => {
     // Also doubles as "skip this round" while one is still in progress —
@@ -606,6 +663,7 @@ export default function PlayScreen({
       setGame(game);
       setCurrentGuess("");
       setError(null);
+      setHintRevealed(false);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Something went wrong");
     }
@@ -753,6 +811,18 @@ export default function PlayScreen({
         )}
       </div>
 
+      {(game.difficulty || game.hint) && (
+        <div className="mt-3 flex flex-col gap-1.5 md:hidden">
+          <div className="flex items-center gap-2">
+            <DifficultyBadge difficulty={game.difficulty} />
+            <HintButton hint={game.hint} revealed={hintRevealed} onToggle={() => setHintRevealed((r) => !r)} />
+          </div>
+          {game.hint && hintRevealed && (
+            <p className="animate-fade-in text-[13px] text-foreground/65">{game.hint}</p>
+          )}
+        </div>
+      )}
+
       <div className="mt-4 md:hidden">
         <ProgressBar used={game.guesses.length} active={!finished} />
       </div>
@@ -771,6 +841,18 @@ export default function PlayScreen({
               Guess {guessNumber} of {MAX_ATTEMPTS}
             </span>
           </div>
+
+          {(game.difficulty || game.hint) && (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <DifficultyBadge difficulty={game.difficulty} />
+                <HintButton hint={game.hint} revealed={hintRevealed} onToggle={() => setHintRevealed((r) => !r)} />
+              </div>
+              {game.hint && hintRevealed && (
+                <p className="animate-fade-in text-[13px] leading-relaxed text-foreground/65">{game.hint}</p>
+              )}
+            </div>
+          )}
 
           <div className="flex flex-col gap-2.5">
             <ProgressBar used={game.guesses.length} active={!finished} />

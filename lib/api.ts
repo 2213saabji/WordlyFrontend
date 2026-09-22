@@ -213,6 +213,19 @@ export function getMe(): Promise<{ user: User }> {
   return apiFetch("/auth/me");
 }
 
+/** idToken is the signed JWT credential from Google Identity Services — the
+ * backend verifies it against Google itself, so nothing decoded from it
+ * client-side (email, name, ...) is ever sent instead. Same deviceId scheme
+ * as login/signup; the backend auto-links this Google identity to an
+ * existing email/password account with the same email. */
+export function googleAuth(payload: { idToken: string; deviceId: string }): Promise<AuthResponse> {
+  return apiFetch("/auth/google", {
+    method: "POST",
+    body: payload,
+    skipAuth: true,
+  });
+}
+
 /** The silent-login call: trades the stored deviceId for a fresh access
  * token, no password needed. Returns null (rather than throwing) whenever
  * there's nothing to try or the device session is gone, since callers treat

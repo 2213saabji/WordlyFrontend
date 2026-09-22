@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { ApiRequestError } from "@/lib/api";
 import AuthLayout from "@/components/AuthLayout";
+import GoogleSignInButton from "@/components/GoogleSignInButton";
 
 export default function SignupScreen({
   onSuccess,
@@ -83,6 +84,16 @@ export default function SignupScreen({
           {submitting ? "Creating account…" : "Sign up"}
         </button>
       </form>
+
+      <div className="mt-5 flex items-center gap-3 text-xs text-foreground/45">
+        <span className="h-px flex-1 bg-border" />
+        or
+        <span className="h-px flex-1 bg-border" />
+      </div>
+
+      <div className="mt-5">
+        <GoogleSignInButton onSuccess={onSuccess} onError={setError} />
+      </div>
 
       <span className="mt-6 block text-sm text-foreground/70">
         Already have an account?{" "}

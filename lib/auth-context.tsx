@@ -33,6 +33,10 @@ interface AuthContextValue {
   /** Recovery login: no stored deviceId needed, re-establishes one from the
    * server on success. See the Passkey API doc's "Recovery" flow. */
   loginWithPasskey: () => Promise<void>;
+  /** Same endpoint handles both sign-up and sign-in for a Google identity
+   * (the backend auto-links by email) — one call for both flows, no
+   * separate "is this a new user" branch needed here. */
+  loginWithGoogle: (idToken: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -113,6 +117,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
+  const loginWithGoogle = useCallback(async (idToken: string) => {
+    const deviceId = getDeviceId();
+    const data = await api.googleAuth({ idToken, deviceId });
+    setToken(data.token);
+    setDeviceId(data.deviceId);
+    setUser(data.user);
+  }, []);
+
   const loginWithPasskey = useCallback(async () => {
     const options = await api.webauthnAuthenticateOptions();
     const response = await startAuthentication({ optionsJSON: options });
@@ -136,6 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         refreshUser,
         passkeySupported: browserSupportsWebAuthn(),
         loginWithPasskey,
+        loginWithGoogle,
       }}
     >
       {children}

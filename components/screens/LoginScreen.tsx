@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { ApiRequestError } from "@/lib/api";
 import AuthLayout from "@/components/AuthLayout";
+import GoogleSignInButton from "@/components/GoogleSignInButton";
 
 export default function LoginScreen({
   onSuccess,
@@ -108,22 +109,25 @@ export default function LoginScreen({
         </button>
       </form>
 
+      <div className="mt-5 flex items-center gap-3 text-xs text-foreground/45">
+        <span className="h-px flex-1 bg-border" />
+        or
+        <span className="h-px flex-1 bg-border" />
+      </div>
+
+      <div className="mt-5">
+        <GoogleSignInButton onSuccess={onSuccess} onError={setError} />
+      </div>
+
       {passkeySupported && (
-        <>
-          <div className="mt-5 flex items-center gap-3 text-xs text-foreground/45">
-            <span className="h-px flex-1 bg-border" />
-            or
-            <span className="h-px flex-1 bg-border" />
-          </div>
-          <button
-            type="button"
-            onClick={handlePasskeyLogin}
-            disabled={passkeySubmitting}
-            className="mt-5 flex items-center justify-center gap-2 rounded-lg border border-border bg-surface py-2 text-sm font-medium transition-all duration-150 hover:border-accent/30 hover:-translate-y-0.5 active:translate-y-0 disabled:pointer-events-none disabled:opacity-50"
-          >
-            🔑 {passkeySubmitting ? "Waiting for passkey…" : "Sign in with a passkey"}
-          </button>
-        </>
+        <button
+          type="button"
+          onClick={handlePasskeyLogin}
+          disabled={passkeySubmitting}
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface py-3 text-sm font-medium transition-all duration-150 hover:border-accent/30 hover:-translate-y-0.5 active:translate-y-0 disabled:pointer-events-none disabled:opacity-50"
+        >
+          🔑 {passkeySubmitting ? "Waiting for passkey…" : "Sign in with a passkey"}
+        </button>
       )}
 
       <div className="mt-6 flex flex-col gap-1 text-sm text-foreground/70">
