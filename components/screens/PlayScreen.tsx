@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import WordlyBoard from "@/components/WordlyBoard";
+import GuessWordBoard from "@/components/GuessWordBoard";
 import Keyboard from "@/components/Keyboard";
 import Loader from "@/components/Loader";
 import {
@@ -177,6 +177,14 @@ function ShareIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" className="h-4.5 w-4.5">
       <path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7M12 3v13M8 7l4-4 4 4" />
+    </svg>
+  );
+}
+
+function LeaderboardIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" className="h-4.5 w-4.5">
+      <path d="M4 20V10M12 20V4M20 20v-7" />
     </svg>
   );
 }
@@ -449,7 +457,7 @@ function DailyRevealScreen({
       </div>
 
       <div className="relative mt-5 animate-fade-in md:hidden">
-        <WordlyBoard guesses={game.guesses} currentGuess="" celebrate={won} interactive={false} />
+        <GuessWordBoard guesses={game.guesses} currentGuess="" celebrate={won} interactive={false} />
         <div
           className="pointer-events-none absolute inset-x-0 bottom-0 h-24"
           style={{ background: "linear-gradient(180deg, transparent 0%, var(--background) 92%)" }}
@@ -523,13 +531,21 @@ function DailyRevealScreen({
           >
             {secondaryAction.label}
           </button>
+          <button
+            type="button"
+            onClick={() => onOpenLeaderboard(groupDaily?.groupId)}
+            aria-label="Leaderboard"
+            className="flex flex-none items-center justify-center rounded-2xl border border-border bg-white/7 px-4.5 py-4 text-foreground/80 transition-colors hover:bg-white/12"
+          >
+            <LeaderboardIcon />
+          </button>
         </div>
       </div>
 
       {/* desktop reveal */}
       <div className="hidden flex-1 items-start justify-center gap-18 md:grid md:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
         <div className="w-full animate-fade-in-up">
-          <WordlyBoard guesses={game.guesses} currentGuess="" celebrate={won} interactive={false} />
+          <GuessWordBoard guesses={game.guesses} currentGuess="" celebrate={won} interactive={false} />
         </div>
 
         <div className="flex max-w-xl animate-fade-in-up flex-col gap-6.5" style={{ animationDelay: "100ms" }}>
@@ -576,6 +592,14 @@ function DailyRevealScreen({
               className="whitespace-nowrap rounded-2xl border border-border bg-white/7 px-6.5 py-4 text-[15.5px] font-semibold transition-colors hover:bg-white/12"
             >
               {secondaryAction.label}
+            </button>
+            <button
+              type="button"
+              onClick={() => onOpenLeaderboard(groupDaily?.groupId)}
+              className="flex items-center gap-2.5 whitespace-nowrap rounded-2xl border border-border bg-white/7 px-6.5 py-4 text-[15.5px] font-semibold transition-colors hover:bg-white/12"
+            >
+              <LeaderboardIcon />
+              Leaderboard
             </button>
           </div>
 
@@ -635,6 +659,8 @@ export default function PlayScreen({
     const first = user.groups[0];
     const groupId = typeof first === "string" ? first : first._id;
     let cancelled = false;
+    // Retry-once-on-failure is handled centrally by apiFetch (see lib/api.ts)
+    // — this call site only needs to handle the final outcome.
     getGroupDailyLeaderboard(groupId)
       .then(({ group, leaderboard }) => {
         if (cancelled) return;
@@ -904,7 +930,7 @@ export default function PlayScreen({
             </p>
           )}
 
-          <WordlyBoard
+          <GuessWordBoard
             guesses={game.guesses}
             currentGuess={currentGuess}
             shakeSignal={shakeSignal}

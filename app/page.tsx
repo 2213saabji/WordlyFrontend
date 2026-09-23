@@ -35,7 +35,7 @@ function AppShell() {
       {invite && (
         <div className="mx-auto flex w-full max-w-lg animate-fade-in items-center gap-3 px-4 pt-4">
           <p className="flex-1 rounded-xl border border-accent/25 bg-accent/10 px-4 py-2.5 text-sm text-foreground/80">
-            🎉 <span className="font-semibold">{invite.username}</span> invited you to today&apos;s Wordly — good
+            🎉 <span className="font-semibold">{invite.username}</span> invited you to today&apos;s GuessWord — good
             luck!
           </p>
           <button

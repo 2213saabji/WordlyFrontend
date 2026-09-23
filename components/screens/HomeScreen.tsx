@@ -6,12 +6,15 @@ import { getMyGroups, getGlobalWeeklyLeaderboard, ApiRequestError } from "@/lib/
 import type { Group, WeeklyLeaderboardEntry } from "@/types";
 
 const LOGO_TILES = [
-  { char: "W", className: "bg-accent text-background" },
+  { char: "G", className: "bg-accent text-background" },
+  { char: "U", className: "bg-white/10" },
+  { char: "E", className: "bg-white/10" },
+  { char: "S", className: "bg-white/10" },
+  { char: "S", className: "bg-white/10" },
+  { char: "W", className: "bg-accent-2 text-background" },
   { char: "O", className: "bg-white/10" },
   { char: "R", className: "bg-white/10" },
-  { char: "D", className: "bg-accent-2 text-background" },
-  { char: "L", className: "bg-white/10" },
-  { char: "Y", className: "bg-white/10" },
+  { char: "D", className: "bg-white/10" },
 ];
 
 function todayLabel() {
@@ -170,12 +173,12 @@ export default function HomeScreen({
 
           {/* mobile logo + headline */}
           <div className="flex flex-col gap-5 md:hidden">
-            <div className="flex gap-2">
+            <div className="flex gap-1.5">
               {LOGO_TILES.map((tile, i) => (
                 <span
-                  key={tile.char}
+                  key={i}
                   style={{ animationDelay: `${i * 70}ms` }}
-                  className={`flex size-9 animate-tile-bounce items-center justify-center rounded-[10px] text-lg font-bold ${tile.className}`}
+                  className={`flex size-7 animate-tile-bounce items-center justify-center rounded-lg text-sm font-bold ${tile.className}`}
                 >
                   {tile.char}
                 </span>
@@ -325,7 +328,7 @@ export default function HomeScreen({
       </div>
 
       <div className="mt-auto flex items-center justify-between px-5 py-6 text-xs text-foreground/45 md:px-8">
-        <span>Wordly</span>
+        <span>GuessWord</span>
         <span className="hidden md:inline">A word a day</span>
       </div>
     </div>

@@ -5,12 +5,15 @@ import { useAuth } from "@/lib/auth-context";
 import { useScreen, type Screen } from "@/lib/screen-context";
 
 const LOGO_TILES = [
-  { char: "W", className: "bg-accent text-background" },
+  { char: "G", className: "bg-accent text-background" },
+  { char: "U", className: "bg-white/10" },
+  { char: "E", className: "bg-white/10" },
+  { char: "S", className: "bg-white/10" },
+  { char: "S", className: "bg-white/10" },
+  { char: "W", className: "bg-accent-2 text-background" },
   { char: "O", className: "bg-white/10" },
   { char: "R", className: "bg-white/10" },
-  { char: "D", className: "bg-accent-2 text-background" },
-  { char: "L", className: "bg-white/10" },
-  { char: "Y", className: "bg-white/10" },
+  { char: "D", className: "bg-white/10" },
 ];
 
 const NAV_LINKS: { label: string; screen: Screen; isActive: (s: Screen) => boolean }[] = [
@@ -52,7 +55,7 @@ export default function Nav() {
               <span
                 key={i}
                 style={{ transitionDelay: `${i * 40}ms` }}
-                className={`flex h-6 w-6 items-center justify-center rounded-md text-xs font-bold text-foreground transition-transform duration-300 ease-out group-hover:-translate-y-1 ${tile.className}`}
+                className={`flex h-5 w-5 items-center justify-center rounded-md text-[10px] font-bold text-foreground transition-transform duration-300 ease-out group-hover:-translate-y-1 ${tile.className}`}
               >
                 {tile.char}
               </span>

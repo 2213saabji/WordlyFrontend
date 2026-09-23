@@ -27,7 +27,7 @@ function rowToEmoji(row: number[]): string {
 export function buildShareText(game: Game, wordNumber: number): string {
   const rows = resultRows(game).map(rowToEmoji);
   while (rows.length < MAX_ATTEMPTS) rows.push(PENDING_ROW);
-  return [`Wordly Daily #${wordNumber} ${game.guesses.length}/6`, "", ...rows].join("\n");
+  return [`GuessWord Daily #${wordNumber} ${game.guesses.length}/6`, "", ...rows].join("\n");
 }
 
 /**

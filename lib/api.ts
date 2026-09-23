@@ -20,10 +20,10 @@ import type {
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "https://wordly-backend-nu.vercel.app/api";
 
-const DEVICE_ID_KEY = "wordly_device_id";
+const DEVICE_ID_KEY = "guessword_device_id";
 /** Pre-device-session access token key, from before this flow shipped. Read
  * once at startup for migration, then abandoned — see `accessToken` below. */
-const LEGACY_TOKEN_KEY = "wordly_token";
+const LEGACY_TOKEN_KEY = "guessword_token";
 
 // Access tokens are short-lived (1h) and, per the auth flow, intentionally
 // NOT persisted — only deviceId needs to survive a reload. The access token
@@ -109,6 +109,19 @@ interface ApiFetchOptions {
   isRetry?: boolean;
 }
 
+const REQUEST_TIMEOUT_MS = 20_000;
+
+/** Thrown when a request is aborted for exceeding REQUEST_TIMEOUT_MS — kept
+ * distinct from a plain network failure (offline, DNS, connection refused,
+ * ...) so the retry policy below can tell a transient timeout apart from a
+ * connection that isn't there at all. */
+class ApiTimeoutError extends Error {
+  constructor() {
+    super("Request timed out");
+    this.name = "ApiTimeoutError";
+  }
+}
+
 function clearSession(): void {
   clearToken();
   clearDeviceId();
@@ -142,7 +155,7 @@ function ensureRefreshed(): Promise<{ token: string; user: User } | null> {
   return refreshPromise;
 }
 
-async function apiFetch<T>(
+async function performRequest<T>(
   path: string,
   { method = "GET", body, skipAuth = false, isRetry = false }: ApiFetchOptions = {},
 ): Promise<T> {
@@ -153,11 +166,23 @@ async function apiFetch<T>(
     if (token) headers.Authorization = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (controller.signal.aborted) throw new ApiTimeoutError();
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   const text = await res.text();
   const data = text ? (JSON.parse(text) as unknown) : null;
@@ -166,7 +191,7 @@ async function apiFetch<T>(
     if (res.status === 401 && !skipAuth && !isRetry) {
       const refreshed = await ensureRefreshed();
       if (refreshed) {
-        return apiFetch<T>(path, { method, body, skipAuth, isRetry: true });
+        return performRequest<T>(path, { method, body, skipAuth, isRetry: true });
       }
       // Stored device session is gone (revoked, or this is a stale
       // pre-device-session token) — there's nothing left to silently retry.
@@ -182,6 +207,31 @@ async function apiFetch<T>(
   }
 
   return data as T;
+}
+
+/** A 5xx or a timeout is treated as transient and worth one retry. Anything
+ * else — a 4xx the server actively rejected (bad request, invalid
+ * credentials, validation errors, ...) or a network failure with no
+ * response at all (offline, DNS, connection refused) — is final on the
+ * first try: retrying won't change a deterministic rejection, and a device
+ * with no connectivity won't suddenly have one a moment later. */
+function isRetryableFailure(err: unknown): boolean {
+  if (err instanceof ApiTimeoutError) return true;
+  if (err instanceof ApiRequestError) return err.status >= 500;
+  return false;
+}
+
+// Every endpoint below funnels through this one function — the project-wide
+// policy is "success takes exactly one request; only a 5xx or a timeout
+// earns a second attempt, with identical arguments." A second consecutive
+// failure is final and reaches the caller as normal.
+async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
+  try {
+    return await performRequest<T>(path, options);
+  } catch (err) {
+    if (!isRetryableFailure(err)) throw err;
+    return await performRequest<T>(path, options);
+  }
 }
 
 // --- Auth ---

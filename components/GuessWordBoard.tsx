@@ -43,7 +43,7 @@ function tileVars(theme: TileTheme, prefix: "start" | "end"): CSSProperties {
   } as CSSProperties;
 }
 
-export default function WordlyBoard({
+export default function GuessWordBoard({
   guesses,
   currentGuess,
   shakeSignal,

@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Wordly",
-  description: "A Wordly Game to Guess the Word of the Day",
+  title: "GuessWord",
+  description: "A GuessWord Game to Guess the Word of the Day",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

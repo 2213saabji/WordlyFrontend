@@ -202,7 +202,7 @@ export default function Leaderboard({
   onSwitchScope: (groupId?: string) => void;
 }) {
   const { user } = useAuth();
-  const [period, setPeriod] = useState<Period>("weekly");
+  const [period, setPeriod] = useState<Period>("daily");
   const [groups, setGroups] = useState<Group[] | null>(null);
   const [data, setData] = useState<NormalizedData | null>(null);
   const [error, setError] = useState<string | null>(null);

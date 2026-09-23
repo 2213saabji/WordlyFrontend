@@ -319,7 +319,7 @@ export default function GroupsScreen({
       </div>
 
       <div className="mt-auto flex items-center justify-between border-t border-border pt-5 text-xs text-foreground/45">
-        <span>Wordly</span>
+        <span>GuessWord</span>
         <span>Weekly rank resets every Monday</span>
       </div>
     </div>

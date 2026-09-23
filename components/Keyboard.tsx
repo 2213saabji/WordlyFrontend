@@ -20,9 +20,9 @@ function letterStatuses(guesses: Guess[]): Record<string, LetterResult> {
 function keyClasses(status: LetterResult | undefined) {
   if (status === 1) return "bg-correct text-white shadow-sm shadow-correct/30";
   if (status === -1) return "bg-present text-background shadow-sm shadow-present/30";
-  // Tried and not in the word — dulled down so it visually reads as "used up",
-  // distinct from an untried key.
-  if (status === 0) return "bg-white/5 text-foreground/35";
+  // Tried and not in the word — dropped to low opacity so it visually reads
+  // as "used up", distinct from an untried key.
+  if (status === 0) return "bg-white/10 text-foreground opacity-25";
   return "bg-white/10 text-foreground";
 }
 

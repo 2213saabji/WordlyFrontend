@@ -13,12 +13,15 @@ const COLORS = {
 };
 
 const LOGO_TILES: { char: string; bg: string; fg: string }[] = [
-  { char: "W", bg: COLORS.accent, fg: COLORS.background },
+  { char: "G", bg: COLORS.accent, fg: COLORS.background },
+  { char: "U", bg: "rgba(255,255,255,0.08)", fg: COLORS.foreground },
+  { char: "E", bg: "rgba(255,255,255,0.08)", fg: COLORS.foreground },
+  { char: "S", bg: "rgba(255,255,255,0.08)", fg: COLORS.foreground },
+  { char: "S", bg: "rgba(255,255,255,0.08)", fg: COLORS.foreground },
+  { char: "W", bg: COLORS.correct, fg: COLORS.background },
   { char: "O", bg: "rgba(255,255,255,0.08)", fg: COLORS.foreground },
   { char: "R", bg: "rgba(255,255,255,0.08)", fg: COLORS.foreground },
-  { char: "D", bg: COLORS.correct, fg: COLORS.background },
-  { char: "L", bg: "rgba(255,255,255,0.08)", fg: COLORS.foreground },
-  { char: "Y", bg: "rgba(255,255,255,0.08)", fg: COLORS.foreground },
+  { char: "D", bg: "rgba(255,255,255,0.08)", fg: COLORS.foreground },
 ];
 
 const MAX_ATTEMPTS = 6;
@@ -98,9 +101,11 @@ export function renderShareImage(canvas: HTMLCanvasElement, data: ShareImageData
   const cardW = width - pad * 2;
   const innerPad = format === "square" ? 56 : 72;
 
-  // Logo row + puzzle meta
-  const logoTile = format === "square" ? 40 : 48;
-  const logoGap = 6;
+  // Logo row + puzzle meta — sized down from the original 6-letter wordmark
+  // (40/48px tiles, 6px gap) so the 9-letter one still clears the right-
+  // aligned "No. N · date" text on the same row.
+  const logoTile = format === "square" ? 34 : 42;
+  const logoGap = 5;
   const logoToGridGap = format === "square" ? 64 : 96;
   const tile = format === "square" ? 44 : 56;
   const gridGap = 12;
@@ -157,7 +162,7 @@ export function renderShareImage(canvas: HTMLCanvasElement, data: ShareImageData
     statsY += 36;
     ctx.font = "500 24px Sora, sans-serif";
     ctx.fillStyle = COLORS.muted;
-    ctx.fillText("wordly.app", statsX, statsY);
+    ctx.fillText("guessword.app", statsX, statsY);
   } else {
     const gridX = cardX + (cardW - grid.width) / 2;
     drawGrid(ctx, data.rows, gridX, cursorY, tile, gridGap);
@@ -174,7 +179,7 @@ export function renderShareImage(canvas: HTMLCanvasElement, data: ShareImageData
     statsY += 46;
     ctx.font = "500 28px Sora, sans-serif";
     ctx.fillStyle = COLORS.muted;
-    ctx.fillText("wordly.app", cardX + cardW / 2, statsY);
+    ctx.fillText("guessword.app", cardX + cardW / 2, statsY);
   }
 }
 

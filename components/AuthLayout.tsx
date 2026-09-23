@@ -45,7 +45,7 @@ export default function AuthLayout({
         />
 
         <div className="relative z-10 animate-fade-in-up">
-          <p className="text-sm font-semibold uppercase tracking-widest text-white/70">Wordly</p>
+          <p className="text-sm font-semibold uppercase tracking-widest text-white/70">GuessWord</p>
           <h2 className="mt-2 text-3xl font-extrabold leading-tight">{title}</h2>
           <p className="mt-3 max-w-xs text-sm text-white/80">{subtitle}</p>
         </div>

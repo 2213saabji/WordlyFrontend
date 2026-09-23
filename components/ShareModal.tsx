@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { getMyGroups } from "@/lib/api";
 import { buildReplayLink, buildShareText, resultRows } from "@/lib/share";
 import { canvasToPngBlob, IMAGE_DIMENSIONS, renderShareImage, type ImageFormat } from "@/lib/share-image";
-import type { Game, Group, User } from "@/types";
+import type { Game, User } from "@/types";
 
 type Tab = "text" | "image" | "link";
 
@@ -57,16 +56,7 @@ function CopyIcon() {
   );
 }
 
-function GroupIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" className={className}>
-      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-    </svg>
-  );
-}
-
-function OtherAppsIcon() {
+function ShareIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" className="h-4.25 w-4.25 text-foreground/60">
       <path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7M12 3v13M8 7l4-4 4 4" />
@@ -86,20 +76,13 @@ export default function ShareModal({
   onClose: () => void;
 }) {
   const [tab, setTab] = useState<Tab>("text");
-  const [groups, setGroups] = useState<Group[]>([]);
   const [copiedText, setCopiedText] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedImage, setCopiedImage] = useState(false);
-  const [postFeedback, setPostFeedback] = useState<string | null>(null);
+  const [shared, setShared] = useState(false);
   const [imageFormat, setImageFormat] = useState<ImageFormat>("square");
   const [replayEnabled, setReplayEnabled] = useState(true);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    getMyGroups()
-      .then(({ groups }) => setGroups(groups))
-      .catch(() => setGroups([]));
-  }, []);
 
   const rows = resultRows(game);
   const shareText = buildShareText(game, wordNumber);
@@ -129,18 +112,18 @@ export default function ShareModal({
     }
   }
 
-  async function handlePostTo(label: string) {
+  async function handleShare() {
     if (typeof navigator !== "undefined" && navigator.share) {
       try {
-        await navigator.share({ text: shareText, title: "Wordly" });
+        await navigator.share({ text: shareText, title: "GuessWord" });
         return;
       } catch {
         // User dismissed the OS share sheet, or it failed — fall back to clipboard below.
       }
     }
     await navigator.clipboard.writeText(shareText).catch(() => undefined);
-    setPostFeedback(label);
-    setTimeout(() => setPostFeedback(null), 1500);
+    setShared(true);
+    setTimeout(() => setShared(false), 1500);
   }
 
   async function handleCopyImage() {
@@ -163,7 +146,7 @@ export default function ShareModal({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `wordly-${wordNumber}-${imageFormat}.png`;
+    a.download = `guessword-${wordNumber}-${imageFormat}.png`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -205,11 +188,11 @@ export default function ShareModal({
             <div className="flex items-start gap-6 rounded-[22px] border border-white/9 bg-white/5 p-6">
               <div className="flex flex-col gap-3.5">
                 <span className="text-[15.5px] font-semibold">
-                  Wordly {wordNumber} &nbsp;{game.guesses.length}/6
+                  GuessWord {wordNumber} &nbsp;{game.guesses.length}/6
                 </span>
                 <MiniGrid rows={rows} />
                 <span className="text-[13px] text-foreground/50">
-                  wordly.app · {user.stats.currentStreak} day streak
+                  guessword.app · {user.stats.currentStreak} day streak
                 </span>
               </div>
               <div className="ml-auto flex flex-col items-end gap-3">
@@ -227,30 +210,14 @@ export default function ShareModal({
               </div>
             </div>
 
-            <div className="flex flex-col gap-3">
-              <span className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground/50">Post to</span>
-              <div className="flex flex-wrap gap-3">
-                {groups.map((group) => (
-                  <button
-                    key={group._id}
-                    type="button"
-                    onClick={() => handlePostTo(group.name)}
-                    className="flex items-center gap-2.5 whitespace-nowrap rounded-[14px] border border-white/10 bg-white/7 px-4.5 py-3.25 text-sm font-semibold transition-colors hover:bg-white/12"
-                  >
-                    <GroupIcon className="h-4.25 w-4.25 text-accent" />
-                    {postFeedback === group.name ? "Copied!" : group.name}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => handlePostTo("Other apps")}
-                  className="flex items-center gap-2.5 whitespace-nowrap rounded-[14px] border border-white/10 bg-white/7 px-4.5 py-3.25 text-sm font-semibold transition-colors hover:bg-white/12"
-                >
-                  <OtherAppsIcon />
-                  {postFeedback === "Other apps" ? "Copied!" : "Other apps"}
-                </button>
-              </div>
-            </div>
+            <button
+              type="button"
+              onClick={handleShare}
+              className="flex items-center justify-center gap-2.5 whitespace-nowrap rounded-[14px] border border-white/10 bg-white/7 px-4.5 py-3.25 text-sm font-semibold transition-colors hover:bg-white/12"
+            >
+              <ShareIcon />
+              {shared ? "Shared!" : "Share"}
+            </button>
           </>
         )}
 
@@ -328,12 +295,12 @@ export default function ShareModal({
                 </span>
                 <div className="flex min-w-0 flex-col gap-1">
                   <span className="text-[15.5px] font-semibold">
-                    {user.username} solved Wordly {wordNumber} in {game.guesses.length}
+                    {user.username} solved GuessWord {wordNumber} in {game.guesses.length}
                   </span>
                   <span className="text-[13.5px] leading-snug text-foreground/60">
                     Play today&apos;s word before the link expires at midnight.
                   </span>
-                  <span className="text-[12.5px] text-foreground/50">wordly.app</span>
+                  <span className="text-[12.5px] text-foreground/50">guessword.app</span>
                 </div>
               </div>
             </div>
