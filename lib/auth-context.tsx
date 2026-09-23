@@ -28,6 +28,10 @@ interface AuthContextValue {
   signup: (username: string, email: string, password: string) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
+  /** Applies the server's returned user object directly (it trims whitespace
+   * and re-validates length before saving) rather than the raw typed value —
+   * see api.updateUsername. */
+  updateUsername: (username: string) => Promise<void>;
   /** Browser/OS-level WebAuthn support — gate any passkey UI behind this. */
   passkeySupported: boolean;
   /** Recovery login: no stored deviceId needed, re-establishes one from the
@@ -117,6 +121,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
+  const updateUsername = useCallback(async (username: string) => {
+    const { user } = await api.updateUsername(username);
+    setUser(user);
+  }, []);
+
   const loginWithGoogle = useCallback(async (idToken: string) => {
     const deviceId = getDeviceId();
     const data = await api.googleAuth({ idToken, deviceId });
@@ -146,6 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signup,
         logout,
         refreshUser,
+        updateUsername,
         passkeySupported: browserSupportsWebAuthn(),
         loginWithPasskey,
         loginWithGoogle,

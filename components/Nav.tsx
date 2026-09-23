@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { useScreen, type Screen } from "@/lib/screen-context";
+import EditNameModal from "@/components/EditNameModal";
 
 const LOGO_TILES = [
   { char: "G", className: "bg-accent text-background" },
@@ -15,6 +17,15 @@ const LOGO_TILES = [
   { char: "R", className: "bg-white/10" },
   { char: "D", className: "bg-white/10" },
 ];
+
+function PencilIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  );
+}
 
 const NAV_LINKS: { label: string; screen: Screen; isActive: (s: Screen) => boolean }[] = [
   { label: "Play", screen: { name: "play", mode: "daily" }, isActive: (s) => s.name === "play" },
@@ -34,6 +45,7 @@ const NAV_LINKS: { label: string; screen: Screen; isActive: (s: Screen) => boole
 export default function Nav() {
   const { user, logout, loading } = useAuth();
   const { screen, push, reset } = useScreen();
+  const [editNameOpen, setEditNameOpen] = useState(false);
 
   const handleLogout = () => {
     logout();
@@ -88,13 +100,26 @@ export default function Nav() {
         <div className="ml-auto flex items-center gap-3 text-sm">
           {user ? (
             <span className="flex animate-fade-in items-center gap-3">
-              <span
-                className={`hidden items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold sm:inline-flex ${
-                  user.stats.currentStreak > 0 ? "bg-accent/12 text-accent" : "bg-white/8 text-foreground/60"
+              <button
+                type="button"
+                onClick={() => setEditNameOpen(true)}
+                aria-label="Edit your name"
+                className="flex h-8 w-8 flex-none cursor-pointer items-center justify-center rounded-md border border-border text-foreground/70 transition-colors hover:border-accent/40 hover:text-accent sm:hidden"
+              >
+                <PencilIcon />
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditNameOpen(true)}
+                title="Edit your name"
+                className={`hidden cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors duration-150 sm:inline-flex ${
+                  user.stats.currentStreak > 0
+                    ? "bg-accent/12 text-accent hover:bg-accent/20"
+                    : "bg-white/8 text-foreground/60 hover:bg-white/14"
                 }`}
               >
                 {user.username} · {user.stats.currentStreak} streak
-              </span>
+              </button>
               <button
                 onClick={handleLogout}
                 className="rounded-md border border-border px-2.5 py-1.5 text-foreground/70 transition-all duration-150 hover:border-danger/40 hover:bg-danger/10 hover:text-danger active:scale-95"
@@ -122,6 +147,8 @@ export default function Nav() {
           ) : null}
         </div>
       </div>
+
+      {editNameOpen && user && <EditNameModal onClose={() => setEditNameOpen(false)} />}
     </header>
   );
 }

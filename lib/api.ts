@@ -263,6 +263,14 @@ export function getMe(): Promise<{ user: User }> {
   return apiFetch("/auth/me");
 }
 
+/** The backend trims whitespace and re-validates length (2-30 chars) server
+ * side before saving, so the returned user object — not the raw input — is
+ * the actual saved value; callers should apply that object rather than
+ * optimistically setting the name from what was typed. */
+export function updateUsername(username: string): Promise<{ user: User }> {
+  return apiFetch("/auth/username", { method: "PATCH", body: { username } });
+}
+
 /** idToken is the signed JWT credential from Google Identity Services — the
  * backend verifies it against Google itself, so nothing decoded from it
  * client-side (email, name, ...) is ever sent instead. Same deviceId scheme
