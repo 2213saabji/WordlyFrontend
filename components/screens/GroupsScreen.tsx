@@ -398,11 +398,6 @@ export default function GroupsScreen({
           </form>
         </div>
       </div>
-
-      <div className="mt-auto flex items-center justify-between border-t border-border pt-5 text-xs text-foreground/45">
-        <span>GuessWord</span>
-        <span>Weekly rank resets every Monday</span>
-      </div>
     </div>
   );
 }

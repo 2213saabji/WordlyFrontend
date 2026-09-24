@@ -1,4 +1,5 @@
 import Link from "next/link";
+import packageJson from "@/package.json";
 
 const COLUMNS: { heading: string; links: { href: string; label: string }[] }[] = [
   {
@@ -46,8 +47,9 @@ export default function InfoFooter() {
           </div>
         ))}
 
-        <div className="basis-full border-t border-white/6 pt-5.5 text-[12.5px] text-[#9a8aa2]">
-          © {new Date().getFullYear()} GuessWord
+        <div className="flex basis-full justify-between border-t border-white/6 pt-5.5 text-[12.5px] text-[#9a8aa2]">
+          <span>© {new Date().getFullYear()} GuessWord</span>
+          <span>v{packageJson.version}</span>
         </div>
       </div>
     </footer>

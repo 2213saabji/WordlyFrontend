@@ -356,11 +356,6 @@ export default function HomeScreen({
           </div>
         </div>
       </div>
-
-      <div className="mt-auto flex items-center justify-between px-5 py-6 text-xs text-foreground/45 md:px-8">
-        <span>GuessWord</span>
-        <span className="hidden md:inline">A word a day</span>
-      </div>
     </div>
   );
 }
