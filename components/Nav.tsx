@@ -80,9 +80,12 @@ export default function Nav() {
             {NAV_LINKS.map((link) => {
               const active = link.isActive(screen);
               return (
-                <button
+                // A real Link (not just push()) because these might be
+                // clicked from a standalone route like /faq or /about,
+                // which don't read screen-context at all.
+                <Link
                   key={link.label}
-                  type="button"
+                  href="/"
                   onClick={() => push(link.screen)}
                   className={`text-[14.5px] font-medium transition-colors duration-150 ${
                     active
@@ -91,7 +94,7 @@ export default function Nav() {
                   }`}
                 >
                   {link.label}
-                </button>
+                </Link>
               );
             })}
           </nav>

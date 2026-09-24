@@ -1,9 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Sora, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { AuthProvider } from "@/lib/auth-context";
-import { ScreenProvider } from "@/lib/screen-context";
-import Nav from "@/components/Nav";
 
 const sora = Sora({
   variable: "--font-sora",
@@ -83,63 +80,25 @@ export const viewport: Viewport = {
 
 // Plain, verifiable facts only — no fabricated ratings, review counts, or
 // publisher identity, since false structured data risks a manual penalty
-// from Google rather than helping ranking.
-const structuredData = [
-  {
-    "@context": "https://schema.org",
-    "@type": "WebApplication",
-    name: SITE_NAME,
-    url: SITE_URL,
-    description: DESCRIPTION,
-    applicationCategory: "GameApplication",
-    operatingSystem: "Any",
-    offers: {
-      "@type": "Offer",
-      price: "0",
-      priceCurrency: "USD",
-    },
-    genre: "Word Game",
-    inLanguage: "en",
+// from Google rather than helping ranking. FAQPage structured data lives on
+// /faq itself instead of here, so it matches the page that actually
+// displays those questions.
+const structuredData = {
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  name: SITE_NAME,
+  url: SITE_URL,
+  description: DESCRIPTION,
+  applicationCategory: "GameApplication",
+  operatingSystem: "Any",
+  offers: {
+    "@type": "Offer",
+    price: "0",
+    priceCurrency: "USD",
   },
-  {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    mainEntity: [
-      {
-        "@type": "Question",
-        name: "How do you play GuessWord?",
-        acceptedAnswer: {
-          "@type": "Answer",
-          text: "Guess the five-letter word in six tries. Each guess must be a real word. After each guess, tiles turn green for a letter that's in the correct spot, amber for a letter that's in the word but the wrong spot, and gray for a letter that isn't in the word at all.",
-        },
-      },
-      {
-        "@type": "Question",
-        name: "Is GuessWord free to play?",
-        acceptedAnswer: {
-          "@type": "Answer",
-          text: "Yes, GuessWord is completely free to play, with no download required.",
-        },
-      },
-      {
-        "@type": "Question",
-        name: "Is there a new GuessWord puzzle every day?",
-        acceptedAnswer: {
-          "@type": "Answer",
-          text: "Yes, a new daily word is available every day at midnight UTC, plus an unlimited Infinite mode for practicing with a fresh random word any time.",
-        },
-      },
-      {
-        "@type": "Question",
-        name: "Can I play GuessWord with friends?",
-        acceptedAnswer: {
-          "@type": "Answer",
-          text: "Yes — create or join a group to compare daily and weekly results with friends on a shared leaderboard, alongside the global leaderboard.",
-        },
-      },
-    ],
-  },
-];
+  genre: "Word Game",
+  inLanguage: "en",
+};
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
@@ -152,12 +111,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
         />
-        <AuthProvider>
-          <ScreenProvider>
-            <Nav />
-            <main className="flex flex-1 flex-col">{children}</main>
-          </ScreenProvider>
-        </AuthProvider>
+        {children}
       </body>
     </html>
   );
