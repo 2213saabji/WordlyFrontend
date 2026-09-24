@@ -37,6 +37,15 @@ function ordinal(n: number) {
   }
 }
 
+function SearchIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="size-4">
+      <circle cx="11" cy="11" r="7" />
+      <path d="m21 21-4.3-4.3" />
+    </svg>
+  );
+}
+
 function CopyIcon({ copied }: { copied: boolean }) {
   if (copied) {
     return (
@@ -152,16 +161,43 @@ export default function GroupsScreen({
 }) {
   const { user } = useAuth();
   const [groups, setGroups] = useState<Group[] | null>(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [ranks, setRanks] = useState<Record<string, number | undefined>>({});
   const [groupName, setGroupName] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
-    getMyGroups().then(({ groups }) => setGroups(groups));
+    getMyGroups({ page: 1, limit: 20 }).then(({ groups, pagination }) => {
+      setGroups(groups);
+      setPage(pagination.page);
+      setTotalPages(pagination.totalPages);
+      setTotal(pagination.total);
+    });
   }, []);
+
+  const canLoadMore = page < totalPages;
+
+  async function handleLoadMore() {
+    if (loadingMore || !canLoadMore) return;
+    setLoadingMore(true);
+    try {
+      const { groups: nextGroups, pagination } = await getMyGroups({ page: page + 1, limit: 20 });
+      setGroups((prev) => [...(prev ?? []), ...nextGroups]);
+      setPage(pagination.page);
+      setTotalPages(pagination.totalPages);
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : "Something went wrong");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   useEffect(() => {
     const multiMemberGroups = (groups ?? []).filter((g) => g.members.length > 1);
@@ -170,7 +206,11 @@ export default function GroupsScreen({
     let cancelled = false;
     Promise.all(
       multiMemberGroups.map((g) =>
-        getGroupWeeklyLeaderboard(g._id)
+        // Just looking up one person's rank here, not paging through a
+        // list — weekly has no `me` field, so request the server's max
+        // page size (100) to make finding them in one shot as reliable as
+        // it was before pagination existed.
+        getGroupWeeklyLeaderboard(g._id, { limit: 100 })
           .then((res) => [g._id, res.leaderboard.find((e) => e.userId === user?.id)?.rank] as const)
           .catch(() => [g._id, undefined] as const),
       ),
@@ -189,6 +229,7 @@ export default function GroupsScreen({
     try {
       const { group } = await createGroup(groupName);
       setGroups((prev) => [group, ...(prev ?? [])]);
+      setTotal((t) => t + 1);
       setGroupName("");
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Something went wrong");
@@ -203,7 +244,9 @@ export default function GroupsScreen({
     setSubmitting(true);
     try {
       const group = await joinGroup(joinCode);
+      const alreadyJoined = (groups ?? []).some((g) => g._id === group._id);
       setGroups((prev) => [group, ...(prev ?? []).filter((g) => g._id !== group._id)]);
+      if (!alreadyJoined) setTotal((t) => t + 1);
       setJoinCode("");
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Something went wrong");
@@ -217,6 +260,7 @@ export default function GroupsScreen({
     try {
       await leaveGroup(id);
       setGroups((prev) => (prev ?? []).filter((g) => g._id !== id));
+      setTotal((t) => Math.max(0, t - 1));
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Something went wrong");
     }
@@ -232,6 +276,12 @@ export default function GroupsScreen({
     }
   }
 
+  // Purely client-side — filters the groups already fetched via getMyGroups
+  // above, no separate search endpoint.
+  const filteredGroups = (groups ?? []).filter((g) =>
+    g.name.toLowerCase().includes(search.trim().toLowerCase()),
+  );
+
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-4 py-4 md:gap-10 md:px-8 md:py-10">
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
@@ -242,7 +292,7 @@ export default function GroupsScreen({
           </p>
         </div>
         <span className="pl-12 text-xs text-foreground/50 md:pl-0">
-          {groups ? `${groups.length} joined` : ""}
+          {groups ? `${total} joined` : ""}
         </span>
       </div>
 
@@ -250,12 +300,32 @@ export default function GroupsScreen({
 
       <div className="flex flex-col gap-8 md:grid md:grid-cols-[minmax(0,1fr)_360px] md:items-start md:gap-12">
         <div className="flex flex-col gap-3">
+          {groups && groups.length > 0 && (
+            <div className="relative mb-2">
+              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40">
+                <SearchIcon />
+              </span>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search groups"
+                className="w-full rounded-xl border border-white/15 bg-background/55 py-3 pl-10.5 pr-4 text-sm outline-none transition-all duration-150 focus:border-accent focus:ring-2 focus:ring-accent/25"
+              />
+            </div>
+          )}
+
           {groups === null ? (
             <Loader label="Loading groups…" />
           ) : groups.length === 0 ? (
             <p className="animate-fade-in text-sm text-foreground/60">You&apos;re not in any groups yet.</p>
+          ) : filteredGroups.length === 0 ? (
+            <p className="animate-fade-in text-sm text-foreground/60">
+              No groups match &ldquo;{search.trim()}&rdquo;
+              {canLoadMore ? " among those loaded so far — try loading more below." : "."}
+            </p>
           ) : (
-            groups.map((group, i) => (
+            filteredGroups.map((group, i) => (
               <GroupCard
                 key={group._id}
                 group={group}
@@ -268,6 +338,17 @@ export default function GroupsScreen({
                 onLeave={() => handleLeave(group._id)}
               />
             ))
+          )}
+
+          {groups && groups.length > 0 && canLoadMore && (
+            <button
+              type="button"
+              onClick={handleLoadMore}
+              disabled={loadingMore}
+              className="mt-1 self-center rounded-xl border border-white/12 bg-white/7 px-5 py-2.5 text-sm font-semibold transition-colors duration-150 hover:bg-white/12 disabled:pointer-events-none disabled:opacity-50"
+            >
+              {loadingMore ? "Loading…" : "Load more"}
+            </button>
           )}
         </div>
 

@@ -14,6 +14,7 @@ import type {
   GroupDailyLeaderboardResponse,
   GroupWeeklyLeaderboardResponse,
   LeaderboardResponse,
+  Pagination,
   User,
 } from "@/types";
 
@@ -117,7 +118,10 @@ const REQUEST_TIMEOUT_MS = 20_000;
  * connection that isn't there at all. */
 class ApiTimeoutError extends Error {
   constructor() {
-    super("Request timed out");
+    // User-facing text, deliberately generic — every screen's catch block
+    // falls back to this same copy for a non-ApiRequestError anyway, but
+    // setting it here means that's true by construction, not convention.
+    super("Something went wrong");
     this.name = "ApiTimeoutError";
   }
 }
@@ -199,11 +203,12 @@ async function performRequest<T>(
       redirectToLogin();
     }
     const errorBody = data as ApiErrorBody | null;
-    throw new ApiRequestError(
-      errorBody?.message ?? "Something went wrong",
-      res.status,
-      errorBody,
-    );
+    // 5xx bodies are the backend's own internals leaking through (stack
+    // traces, DB errors, ...), not user-facing copy — every screen shows
+    // this verbatim, so it's overridden here rather than trusted like a 4xx
+    // validation message.
+    const message = res.status >= 500 ? "Something went wrong" : errorBody?.message ?? "Something went wrong";
+    throw new ApiRequestError(message, res.status, errorBody);
   }
 
   return data as T;
@@ -421,30 +426,56 @@ export async function joinGroup(code: string): Promise<Group> {
   return "group" in data ? data.group : data;
 }
 
-export function getMyGroups(): Promise<{ groups: Group[] }> {
-  return apiFetch("/groups/mine");
+export function getMyGroups(options: PageOptions = {}): Promise<{ groups: Group[]; pagination: Pagination }> {
+  return apiFetch(`/groups/mine?${pageQuery(options)}`);
 }
 
 export function leaveGroup(id: string): Promise<{ message: string }> {
   return apiFetch(`/groups/${id}/leave`, { method: "POST" });
 }
 
-export function getLeaderboard(id: string): Promise<LeaderboardResponse> {
-  return apiFetch(`/groups/${id}/leaderboard`);
+interface PageOptions {
+  page?: number;
+  limit?: number;
 }
 
-export function getGlobalDailyLeaderboard(date?: string): Promise<GlobalDailyLeaderboardResponse> {
-  return apiFetch(`/leaderboard/daily${date ? `?date=${date}` : ""}`);
+/** page/limit default to the same values the backend defaults to (1/20) —
+ * passed explicitly anyway so the batch size here can't silently drift from
+ * what the UI assumes it's getting. */
+function pageQuery({ page = 1, limit = 20 }: PageOptions, extra?: Record<string, string | undefined>): string {
+  const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+  for (const [key, value] of Object.entries(extra ?? {})) {
+    if (value) params.set(key, value);
+  }
+  return params.toString();
 }
 
-export function getGlobalWeeklyLeaderboard(date?: string): Promise<GlobalWeeklyLeaderboardResponse> {
-  return apiFetch(`/leaderboard/weekly${date ? `?date=${date}` : ""}`);
+export function getLeaderboard(id: string, options: PageOptions = {}): Promise<LeaderboardResponse> {
+  return apiFetch(`/groups/${id}/leaderboard?${pageQuery(options)}`);
 }
 
-export function getGroupDailyLeaderboard(id: string, date?: string): Promise<GroupDailyLeaderboardResponse> {
-  return apiFetch(`/groups/${id}/leaderboard/daily${date ? `?date=${date}` : ""}`);
+export function getGlobalDailyLeaderboard(
+  options: PageOptions & { date?: string } = {},
+): Promise<GlobalDailyLeaderboardResponse> {
+  return apiFetch(`/leaderboard/daily?${pageQuery(options, { date: options.date })}`);
 }
 
-export function getGroupWeeklyLeaderboard(id: string, date?: string): Promise<GroupWeeklyLeaderboardResponse> {
-  return apiFetch(`/groups/${id}/leaderboard/weekly${date ? `?date=${date}` : ""}`);
+export function getGlobalWeeklyLeaderboard(
+  options: PageOptions & { date?: string } = {},
+): Promise<GlobalWeeklyLeaderboardResponse> {
+  return apiFetch(`/leaderboard/weekly?${pageQuery(options, { date: options.date })}`);
+}
+
+export function getGroupDailyLeaderboard(
+  id: string,
+  options: PageOptions & { date?: string } = {},
+): Promise<GroupDailyLeaderboardResponse> {
+  return apiFetch(`/groups/${id}/leaderboard/daily?${pageQuery(options, { date: options.date })}`);
+}
+
+export function getGroupWeeklyLeaderboard(
+  id: string,
+  options: PageOptions & { date?: string } = {},
+): Promise<GroupWeeklyLeaderboardResponse> {
+  return apiFetch(`/groups/${id}/leaderboard/weekly?${pageQuery(options, { date: options.date })}`);
 }

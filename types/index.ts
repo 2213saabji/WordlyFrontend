@@ -58,7 +58,20 @@ export interface Game {
   timeTakenMs?: number | null;
 }
 
+/** Shared by every paginated group leaderboard endpoint. `page` is clamped
+ * server-side to the last valid page, so an out-of-range request never
+ * comes back with an empty array unless the group truly has zero ranked
+ * entries — check `page >= totalPages` to know there's nothing more to load,
+ * not an empty `leaderboard`. */
+export interface Pagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
 export interface LeaderboardEntry {
+  rank: number;
   userId: string;
   username: string;
   gamesPlayed: number;
@@ -71,6 +84,7 @@ export interface LeaderboardEntry {
 export interface LeaderboardResponse {
   group: { id: string; name: string; inviteCode: string };
   leaderboard: LeaderboardEntry[];
+  pagination: Pagination;
 }
 
 export interface DailyLeaderboardEntry {
@@ -95,23 +109,32 @@ export interface WeeklyLeaderboardEntry {
 export interface GlobalDailyLeaderboardResponse {
   date: string;
   leaderboard: DailyLeaderboardEntry[];
+  pagination: Pagination;
 }
 
 export interface GlobalWeeklyLeaderboardResponse {
   week: { start: string; end: string };
   leaderboard: WeeklyLeaderboardEntry[];
+  pagination: Pagination;
 }
 
 export interface GroupDailyLeaderboardResponse {
   group: { id: string; name: string };
   date: string;
   leaderboard: DailyLeaderboardEntry[];
+  pagination: Pagination;
+  /** The caller's own ranked entry, returned regardless of which page was
+   * requested — null if they haven't finished today's game yet. Only treat
+   * it as already shown in `leaderboard` when its rank actually falls
+   * within the loaded pages (see the Leaderboard component). */
+  me: DailyLeaderboardEntry | null;
 }
 
 export interface GroupWeeklyLeaderboardResponse {
   group: { id: string; name: string };
   week: { start: string; end: string };
   leaderboard: WeeklyLeaderboardEntry[];
+  pagination: Pagination;
 }
 
 export interface ApiErrorBody {

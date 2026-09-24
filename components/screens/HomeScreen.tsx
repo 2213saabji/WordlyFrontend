@@ -75,6 +75,24 @@ function PlusIcon() {
   );
 }
 
+/** Shown while a widget's data is still in flight (distinct from that
+ * widget's actual empty state) — a plain "Loading…" line would otherwise
+ * momentarily read the same as "nothing here", or worse, share a branch
+ * with the empty state and flash real empty-state copy before data arrives. */
+function SkeletonRows({ count = 4 }: { count?: number }) {
+  return (
+    <>
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="flex animate-pulse items-center gap-3.5 border-t border-border py-3 first:border-t-0">
+          <span className="h-4 w-4 flex-none rounded-full bg-white/8" />
+          <span className="h-3.5 w-28 max-w-[40%] flex-1 rounded bg-white/8" />
+          <span className="ml-auto h-3 w-12 flex-none rounded bg-white/8" />
+        </div>
+      ))}
+    </>
+  );
+}
+
 function Stat({ value, label }: { value: string | number; label: string }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -123,16 +141,26 @@ export default function HomeScreen({
 }) {
   const { user } = useAuth();
   const [groups, setGroups] = useState<Group[] | null>(null);
+  const [groupsTotal, setGroupsTotal] = useState(0);
   const [weekly, setWeekly] = useState<WeeklyLeaderboardEntry[] | null>(null);
 
   useEffect(() => {
-    getMyGroups()
-      .then(({ groups }) => setGroups(groups))
+    // Only the top 4 are ever shown here (see the .slice(0, 4) below), but
+    // `pagination.total` still reports the true count across all of the
+    // user's groups regardless of the requested limit — used for the "N
+    // active" label below.
+    getMyGroups({ limit: 4 })
+      .then(({ groups, pagination }) => {
+        setGroups(groups);
+        setGroupsTotal(pagination.total);
+      })
       .catch(() => setGroups([]));
   }, []);
 
   useEffect(() => {
-    getGlobalWeeklyLeaderboard()
+    // Only the top 4 are ever shown here (see the .slice(0, 4) below), so
+    // request just that instead of the default page of 20.
+    getGlobalWeeklyLeaderboard({ limit: 4 })
       .then((res) => setWeekly(res.leaderboard))
       .catch((err) => {
         if (!(err instanceof ApiRequestError)) throw err;
@@ -233,7 +261,7 @@ export default function HomeScreen({
 
           {/* mobile-only menu rows */}
           <div className="flex animate-fade-in-up flex-col md:hidden" style={{ animationDelay: "300ms" }}>
-            <MenuRow icon={<UsersIcon />} label="Groups" meta={groups ? `${groups.length} active` : "…"} onClick={onGroups} />
+            <MenuRow icon={<UsersIcon />} label="Groups" meta={groups ? `${groupsTotal} active` : "…"} onClick={onGroups} />
             <MenuRow
               icon={<TrophyIcon />}
               label="Leaderboard"
@@ -285,7 +313,7 @@ export default function HomeScreen({
               ) : weekly ? (
                 <p className="animate-fade-in py-2 text-sm text-foreground/55">Nobody has finished a game this week yet.</p>
               ) : (
-                <p className="py-2 text-sm text-foreground/55">Loading…</p>
+                <SkeletonRows />
               )}
             </div>
           </div>
@@ -293,7 +321,9 @@ export default function HomeScreen({
           <div className="flex flex-col gap-3.5 rounded-[26px] border border-border bg-surface p-7">
             <span className="text-[15.5px] font-semibold">Your groups</span>
             <div className="flex flex-col">
-              {groups && groups.length > 0 ? (
+              {groups === null ? (
+                <SkeletonRows />
+              ) : groups.length > 0 ? (
                 groups.slice(0, 4).map((group, i) => (
                   <button
                     key={group._id}

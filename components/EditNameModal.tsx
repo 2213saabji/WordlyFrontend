@@ -117,6 +117,12 @@ export default function EditNameModal({ onClose }: { onClose: () => void }) {
   const isValid = trimmed.length >= MIN_LENGTH && trimmed.length <= MAX_LENGTH;
   const words = useMemo(() => buildNameWords(value), [value]);
 
+  useEffect(() => {
+    if (!error) return;
+    const id = setTimeout(() => setError(null), 10_000);
+    return () => clearTimeout(id);
+  }, [error]);
+
   function handleChange(next: string) {
     setValue(next.replace(ALLOWED_CHARS, "").slice(0, MAX_LENGTH));
     setError(null);

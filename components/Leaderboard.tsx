@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getGlobalDailyLeaderboard,
   getGlobalWeeklyLeaderboard,
@@ -12,7 +12,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import Loader from "@/components/Loader";
 import ScreenHeader from "@/components/ScreenHeader";
-import type { Group } from "@/types";
+import type { DailyLeaderboardEntry, Group, WeeklyLeaderboardEntry } from "@/types";
 
 type Period = "daily" | "weekly";
 
@@ -21,9 +21,18 @@ const PERIOD_OPTIONS: { key: Period; label: string }[] = [
   { key: "weekly", label: "Weekly" },
 ];
 
+// Batch size for the daily/weekly endpoints — group-scoped and global alike
+// paginate the same way.
+const PAGE_SIZE = 20;
+// The next batch starts loading once the row this many positions from the
+// end of what's currently loaded scrolls into view, rather than waiting
+// for the user to actually hit the bottom.
+const LOAD_MORE_LOOKAHEAD = 10;
+
 type NormalizedEntry = {
   userId: string;
   username: string;
+  rank: number;
   statLine: string;
   columns: [string, string, string];
 };
@@ -32,6 +41,14 @@ type NormalizedData = {
   subtitle: string;
   columnHeaders: [string, string, string];
   entries: NormalizedEntry[];
+  page: number;
+  totalPages: number;
+  /** Only present for group + daily scope — the caller's own entry
+   * regardless of which pages are loaded. null means they haven't finished
+   * today's game; undefined means this scope/period doesn't support it at
+   * all (weekly has no `me`, and global scope has no `me` on either
+   * endpoint). */
+  rawMe: NormalizedEntry | null | undefined;
 };
 
 function initial(name: string) {
@@ -48,6 +65,148 @@ function formatDuration(ms: number | null) {
 
 function formatDateLabel(iso: string) {
   return new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
+
+function toDailyEntry(e: DailyLeaderboardEntry): NormalizedEntry {
+  return {
+    userId: e.userId,
+    username: e.username,
+    rank: e.rank,
+    statLine: `${e.status === "won" ? "Won" : "Lost"} · ${e.attemptsUsed} guesses · ${formatDuration(e.timeTakenMs)}`,
+    columns: [e.status === "won" ? "Won" : "Lost", String(e.attemptsUsed), formatDuration(e.timeTakenMs)],
+  };
+}
+
+function toWeeklyEntry(e: WeeklyLeaderboardEntry): NormalizedEntry {
+  return {
+    userId: e.userId,
+    username: e.username,
+    rank: e.rank,
+    statLine: `${e.gamesWon}/${e.gamesPlayed} wins${e.avgAttempts != null ? ` · avg ${e.avgAttempts.toFixed(1)}g` : ""}`,
+    columns: [
+      `${e.gamesWon}/${e.gamesPlayed}`,
+      e.avgAttempts != null ? e.avgAttempts.toFixed(1) : "—",
+      formatDuration(e.avgTimeMs),
+    ],
+  };
+}
+
+type FetchedPage = {
+  subtitle: string;
+  columnHeaders: [string, string, string];
+  entries: NormalizedEntry[];
+  page: number;
+  totalPages: number;
+  rawMe: NormalizedEntry | null | undefined;
+};
+
+/** Group and global scope both paginate identically (page/limit, clamped
+ * page, `total`/`totalPages`) — the one real difference is `me`: only the
+ * group daily endpoint returns it, so global scope can never pin the
+ * caller's own rank outside the loaded pages (see rawMe below). */
+async function fetchPage(groupId: string | undefined, period: Period, page: number): Promise<FetchedPage> {
+  if (groupId) {
+    if (period === "daily") {
+      const res = await getGroupDailyLeaderboard(groupId, { page, limit: PAGE_SIZE });
+      return {
+        subtitle: formatDateLabel(res.date),
+        columnHeaders: ["Result", "Guesses", "Time"],
+        entries: res.leaderboard.map(toDailyEntry),
+        page: res.pagination.page,
+        totalPages: res.pagination.totalPages,
+        rawMe: res.me ? toDailyEntry(res.me) : null,
+      };
+    }
+    const res = await getGroupWeeklyLeaderboard(groupId, { page, limit: PAGE_SIZE });
+    return {
+      subtitle: `Week of ${formatDateLabel(res.week.start)}`,
+      columnHeaders: ["Won", "Avg guesses", "Avg time"],
+      entries: res.leaderboard.map(toWeeklyEntry),
+      page: res.pagination.page,
+      totalPages: res.pagination.totalPages,
+      rawMe: undefined,
+    };
+  }
+
+  if (period === "weekly") {
+    const res = await getGlobalWeeklyLeaderboard({ page, limit: PAGE_SIZE });
+    return {
+      subtitle: `Week of ${formatDateLabel(res.week.start)}`,
+      columnHeaders: ["Won", "Avg guesses", "Avg time"],
+      entries: res.leaderboard.map(toWeeklyEntry),
+      page: res.pagination.page,
+      totalPages: res.pagination.totalPages,
+      // No `me` field for global scope — there's no way to pin your own
+      // rank here even if it falls outside the loaded pages.
+      rawMe: undefined,
+    };
+  }
+  const res = await getGlobalDailyLeaderboard({ page, limit: PAGE_SIZE });
+  return {
+    subtitle: formatDateLabel(res.date),
+    columnHeaders: ["Result", "Guesses", "Time"],
+    entries: res.leaderboard.map(toDailyEntry),
+    page: res.pagination.page,
+    totalPages: res.pagination.totalPages,
+    rawMe: undefined,
+  };
+}
+
+/** Fires onIntersect once whenever the node currently attached to this ref
+ * scrolls into view. The target node moves as more pages load (the "10th
+ * from the end" row is a different element each time), so this re-observes
+ * on every attach rather than watching one fixed element for the page's
+ * lifetime. */
+function useSentinelRef(onIntersect: () => void, enabled: boolean) {
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const onIntersectRef = useRef(onIntersect);
+  useEffect(() => {
+    onIntersectRef.current = onIntersect;
+  }, [onIntersect]);
+
+  return useCallback(
+    (node: HTMLElement | null) => {
+      observerRef.current?.disconnect();
+      observerRef.current = null;
+      if (!node || !enabled) return;
+      const observer = new IntersectionObserver(([entry]) => {
+        if (entry.isIntersecting) onIntersectRef.current();
+      });
+      observer.observe(node);
+      observerRef.current = observer;
+    },
+    [enabled],
+  );
+}
+
+/** Second, independent trigger alongside the row sentinel above — fires
+ * onNearBottom whenever the window has scrolled within `thresholdRatio` of
+ * the bottom of the page (default 0.9, i.e. "10% of the page left to
+ * scroll"). Whichever of the two conditions is met first calls loadMore();
+ * loadMore()'s own in-flight/no-more-pages guards make firing both
+ * harmless. */
+function useNearBottomScroll(onNearBottom: () => void, enabled: boolean, thresholdRatio = 0.9) {
+  const onNearBottomRef = useRef(onNearBottom);
+  useEffect(() => {
+    onNearBottomRef.current = onNearBottom;
+  }, [onNearBottom]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    function checkScrollPosition() {
+      const scrollHeight = document.documentElement.scrollHeight;
+      if (scrollHeight <= 0) return;
+      const scrolled = window.scrollY + window.innerHeight;
+      if (scrolled / scrollHeight >= thresholdRatio) onNearBottomRef.current();
+    }
+    checkScrollPosition();
+    window.addEventListener("scroll", checkScrollPosition, { passive: true });
+    window.addEventListener("resize", checkScrollPosition);
+    return () => {
+      window.removeEventListener("scroll", checkScrollPosition);
+      window.removeEventListener("resize", checkScrollPosition);
+    };
+  }, [enabled, thresholdRatio]);
 }
 
 function ChevronDownIcon({ open }: { open: boolean }) {
@@ -192,6 +351,31 @@ function PodiumCard({
   );
 }
 
+/** The "you're not in the top N but here's your spot" pinned row, or a
+ * nudge to play if `me` came back null (group + daily, hasn't finished
+ * today's game yet). */
+function MePin({ me, notPlayedYet }: { me: NormalizedEntry | null; notPlayedYet: boolean }) {
+  if (!me && !notPlayedYet) return null;
+  return (
+    <div className="animate-fade-in rounded-2xl border border-accent/25 bg-accent/6 px-5 py-3.5">
+      {me ? (
+        <span className="flex items-center gap-3">
+          <span className="w-8 flex-none text-sm font-semibold text-accent">#{me.rank}</span>
+          <span className="flex size-8 flex-none items-center justify-center rounded-lg bg-accent/20 text-xs font-semibold text-accent">
+            {initial(me.username)}
+          </span>
+          <span className="flex min-w-0 flex-col gap-0.5">
+            <span className="truncate text-sm font-semibold text-accent">You</span>
+            <span className="text-xs text-accent/80">{me.statLine}</span>
+          </span>
+        </span>
+      ) : (
+        <span className="text-sm text-accent">Finish today&apos;s game to join the leaderboard</span>
+      )}
+    </div>
+  );
+}
+
 export default function Leaderboard({
   groupId,
   onBack,
@@ -205,10 +389,14 @@ export default function Leaderboard({
   const [period, setPeriod] = useState<Period>("daily");
   const [groups, setGroups] = useState<Group[] | null>(null);
   const [data, setData] = useState<NormalizedData | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getMyGroups()
+    // Populates the scope-switcher dropdown, not a paginated list — request
+    // the server's max page size so every group the user belongs to shows
+    // up in one shot.
+    getMyGroups({ limit: 100 })
       .then(({ groups }) => setGroups(groups))
       .catch(() => setGroups([]));
   }, []);
@@ -219,70 +407,18 @@ export default function Leaderboard({
     async function load() {
       setData(null);
       setError(null);
+      setLoadingMore(false);
       try {
-        let normalized: NormalizedData;
-
-        if (groupId) {
-          if (period === "daily") {
-            const res = await getGroupDailyLeaderboard(groupId);
-            normalized = {
-              subtitle: formatDateLabel(res.date),
-              columnHeaders: ["Result", "Guesses", "Time"],
-              entries: res.leaderboard.map((e) => ({
-                userId: e.userId,
-                username: e.username,
-                statLine: `${e.status === "won" ? "Won" : "Lost"} · ${e.attemptsUsed} guesses · ${formatDuration(e.timeTakenMs)}`,
-                columns: [e.status === "won" ? "Won" : "Lost", String(e.attemptsUsed), formatDuration(e.timeTakenMs)],
-              })),
-            };
-          } else {
-            const res = await getGroupWeeklyLeaderboard(groupId);
-            normalized = {
-              subtitle: `Week of ${formatDateLabel(res.week.start)}`,
-              columnHeaders: ["Won", "Avg guesses", "Avg time"],
-              entries: res.leaderboard.map((e) => ({
-                userId: e.userId,
-                username: e.username,
-                statLine: `${e.gamesWon}/${e.gamesPlayed} wins${e.avgAttempts != null ? ` · avg ${e.avgAttempts.toFixed(1)}g` : ""}`,
-                columns: [
-                  `${e.gamesWon}/${e.gamesPlayed}`,
-                  e.avgAttempts != null ? e.avgAttempts.toFixed(1) : "—",
-                  formatDuration(e.avgTimeMs),
-                ],
-              })),
-            };
-          }
-        } else if (period === "weekly") {
-          const res = await getGlobalWeeklyLeaderboard();
-          normalized = {
-            subtitle: `Week of ${formatDateLabel(res.week.start)}`,
-            columnHeaders: ["Won", "Avg guesses", "Avg time"],
-            entries: res.leaderboard.map((e) => ({
-              userId: e.userId,
-              username: e.username,
-              statLine: `${e.gamesWon}/${e.gamesPlayed} wins${e.avgAttempts != null ? ` · avg ${e.avgAttempts.toFixed(1)}g` : ""}`,
-              columns: [
-                `${e.gamesWon}/${e.gamesPlayed}`,
-                e.avgAttempts != null ? e.avgAttempts.toFixed(1) : "—",
-                formatDuration(e.avgTimeMs),
-              ],
-            })),
-          };
-        } else {
-          const res = await getGlobalDailyLeaderboard();
-          normalized = {
-            subtitle: formatDateLabel(res.date),
-            columnHeaders: ["Result", "Guesses", "Time"],
-            entries: res.leaderboard.map((e) => ({
-              userId: e.userId,
-              username: e.username,
-              statLine: `${e.status === "won" ? "Won" : "Lost"} · ${e.attemptsUsed} guesses · ${formatDuration(e.timeTakenMs)}`,
-              columns: [e.status === "won" ? "Won" : "Lost", String(e.attemptsUsed), formatDuration(e.timeTakenMs)],
-            })),
-          };
-        }
-
-        if (!cancelled) setData(normalized);
+        const page = await fetchPage(groupId, period, 1);
+        if (cancelled) return;
+        setData({
+          subtitle: page.subtitle,
+          columnHeaders: page.columnHeaders,
+          entries: page.entries,
+          page: page.page,
+          totalPages: page.totalPages,
+          rawMe: page.rawMe,
+        });
       } catch (err) {
         if (!cancelled) setError(err instanceof ApiRequestError ? err.message : "Something went wrong");
       }
@@ -293,6 +429,29 @@ export default function Leaderboard({
       cancelled = true;
     };
   }, [groupId, period]);
+
+  const canLoadMore = !!data && data.page < data.totalPages;
+
+  const loadMore = useCallback(() => {
+    if (!data || loadingMore || data.page >= data.totalPages) return;
+    setLoadingMore(true);
+    fetchPage(groupId, period, data.page + 1)
+      .then((next) => {
+        setData((latest) =>
+          latest
+            ? { ...latest, entries: [...latest.entries, ...next.entries], page: next.page, totalPages: next.totalPages }
+            : latest,
+        );
+      })
+      .catch(() => {
+        // A failed "load more" isn't worth blowing away what's already
+        // shown — the sentinel just retries next time it's visible.
+      })
+      .finally(() => setLoadingMore(false));
+  }, [groupId, period, loadingMore, data]);
+
+  const sentinelRef = useSentinelRef(loadMore, canLoadMore);
+  useNearBottomScroll(loadMore, canLoadMore);
 
   const currentGroup = groupId ? groups?.find((g) => g._id === groupId) : undefined;
   const title = groupId ? (currentGroup?.name ?? "Group") : "Global";
@@ -306,8 +465,14 @@ export default function Leaderboard({
     );
   }
 
-  const podium = data && data.entries.length >= 3 ? data.entries.slice(0, 3) : [];
-  const top = data?.entries[0];
+  const entries = data?.entries ?? [];
+  const lastLoadedRank = entries.length > 0 ? entries[entries.length - 1].rank : 0;
+  const mePin = data?.rawMe && data.rawMe.rank > lastLoadedRank ? data.rawMe : null;
+  const meNotPlayedYet = data?.rawMe === null;
+  const sentinelIndex = Math.max(0, entries.length - 1 - LOAD_MORE_LOOKAHEAD);
+
+  const podium = entries.length >= 3 ? entries.slice(0, 3) : [];
+  const top = entries[0];
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-4 py-4 md:gap-10 md:px-8 md:py-10">
@@ -335,122 +500,132 @@ export default function Leaderboard({
 
       {!data ? (
         <Loader label="Loading leaderboard…" />
-      ) : data.entries.length === 0 ? (
-        <p className="animate-fade-in text-sm text-foreground/55">
-          {groupId ? "No games played in this group yet." : "Nobody has finished a game in this window yet."}
-        </p>
       ) : (
         <>
-          {/* desktop: podium + full table */}
-          {podium.length === 3 && (
-            <div className="hidden md:grid md:grid-cols-3 md:gap-5">
-              <PodiumCard entry={podium[1]} rank={2} isMe={podium[1].userId === user?.id} delayMs={80} />
-              <PodiumCard entry={podium[0]} rank={1} isMe={podium[0].userId === user?.id} delayMs={0} />
-              <PodiumCard entry={podium[2]} rank={3} isMe={podium[2].userId === user?.id} delayMs={160} />
-            </div>
-          )}
+          {entries.length === 0 ? (
+            <p className="animate-fade-in text-sm text-foreground/55">
+              {groupId ? "No games played in this group yet." : "Nobody has finished a game in this window yet."}
+            </p>
+          ) : (
+            <>
+              {/* desktop: podium + full table */}
+              {podium.length === 3 && (
+                <div className="hidden md:grid md:grid-cols-3 md:gap-5">
+                  <PodiumCard entry={podium[1]} rank={2} isMe={podium[1].userId === user?.id} delayMs={80} />
+                  <PodiumCard entry={podium[0]} rank={1} isMe={podium[0].userId === user?.id} delayMs={0} />
+                  <PodiumCard entry={podium[2]} rank={3} isMe={podium[2].userId === user?.id} delayMs={160} />
+                </div>
+              )}
 
-          <div
-            className="hidden animate-fade-in-up overflow-hidden rounded-3xl border border-border bg-surface md:block"
-            style={{ animationDelay: "80ms" }}
-          >
-            <div className="grid grid-cols-[56px_minmax(0,1fr)_100px_100px_110px] gap-4 border-b border-border px-7 py-4 text-xs font-semibold uppercase tracking-wider text-foreground/50">
-              <span>#</span>
-              <span>Player</span>
-              {data.columnHeaders.map((h) => (
-                <span key={h} className="text-right">
-                  {h}
-                </span>
-              ))}
-            </div>
-            {data.entries.map((entry, i) => {
-              const isMe = entry.userId === user?.id;
-              return (
-                <div
-                  key={entry.userId}
-                  style={{ animationDelay: `${i * 40}ms` }}
-                  className={`grid animate-fade-in-up grid-cols-[56px_minmax(0,1fr)_100px_100px_110px] items-center gap-4 border-b border-border px-7 py-4 text-[15px] transition-colors duration-150 last:border-b-0 ${
-                    isMe ? "bg-accent/8" : ""
-                  }`}
-                >
-                  <span className={isMe ? "font-semibold text-accent" : "text-foreground/50"}>{i + 1}</span>
-                  <span className="flex min-w-0 items-center gap-3">
-                    <span
-                      className={`flex size-8 shrink-0 items-center justify-center rounded-lg text-xs font-semibold ${
-                        isMe ? "bg-accent/20 text-accent" : "bg-white/10"
-                      }`}
-                    >
-                      {initial(entry.username)}
-                    </span>
-                    <span className={`truncate font-semibold ${isMe ? "text-accent" : ""}`}>
-                      {entry.username}
-                      {isMe && <span className="font-normal opacity-70"> · you</span>}
-                    </span>
-                  </span>
-                  {entry.columns.map((c, ci) => (
-                    <span key={ci} className={`text-right ${isMe ? "text-foreground" : "text-foreground/65"}`}>
-                      {c}
+              <div
+                className="hidden animate-fade-in-up overflow-hidden rounded-3xl border border-border bg-surface md:block"
+                style={{ animationDelay: "80ms" }}
+              >
+                <div className="grid grid-cols-[56px_minmax(0,1fr)_100px_100px_110px] gap-4 border-b border-border px-7 py-4 text-xs font-semibold uppercase tracking-wider text-foreground/50">
+                  <span>#</span>
+                  <span>Player</span>
+                  {data.columnHeaders.map((h) => (
+                    <span key={h} className="text-right">
+                      {h}
                     </span>
                   ))}
                 </div>
-              );
-            })}
-          </div>
-
-          {/* mobile: hero card for #1 + flat list from #2 */}
-          {top && (
-            <div className="animate-fade-in-up md:hidden">
-              <div className="flex items-center gap-3.5 rounded-[22px] border border-accent/35 bg-accent/10 p-5">
-                <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-accent text-lg font-bold text-background">
-                  {initial(top.username)}
-                </span>
-                <span className="flex flex-col gap-0.5">
-                  <span className="text-lg font-bold tracking-tight">
-                    {top.username}
-                    {top.userId === user?.id && <span className="font-normal opacity-70"> · you</span>}
-                  </span>
-                  <span className="text-xs text-foreground/85">1st · {top.statLine}</span>
-                </span>
-                <span className="ml-auto text-xs font-semibold uppercase tracking-widest text-accent">Top</span>
+                {entries.map((entry, i) => {
+                  const isMe = entry.userId === user?.id;
+                  return (
+                    <div
+                      key={entry.userId}
+                      ref={i === sentinelIndex ? sentinelRef : undefined}
+                      style={{ animationDelay: `${i * 40}ms` }}
+                      className={`grid animate-fade-in-up grid-cols-[56px_minmax(0,1fr)_100px_100px_110px] items-center gap-4 border-b border-border px-7 py-4 text-[15px] transition-colors duration-150 last:border-b-0 ${
+                        isMe ? "bg-accent/8" : ""
+                      }`}
+                    >
+                      <span className={isMe ? "font-semibold text-accent" : "text-foreground/50"}>{entry.rank}</span>
+                      <span className="flex min-w-0 items-center gap-3">
+                        <span
+                          className={`flex size-8 shrink-0 items-center justify-center rounded-lg text-xs font-semibold ${
+                            isMe ? "bg-accent/20 text-accent" : "bg-white/10"
+                          }`}
+                        >
+                          {initial(entry.username)}
+                        </span>
+                        <span className={`truncate font-semibold ${isMe ? "text-accent" : ""}`}>
+                          {entry.username}
+                          {isMe && <span className="font-normal opacity-70"> · you</span>}
+                        </span>
+                      </span>
+                      {entry.columns.map((c, ci) => (
+                        <span key={ci} className={`text-right ${isMe ? "text-foreground" : "text-foreground/65"}`}>
+                          {c}
+                        </span>
+                      ))}
+                    </div>
+                  );
+                })}
               </div>
-            </div>
+
+              {/* mobile: hero card for #1 + flat list from #2 */}
+              {top && (
+                <div className="animate-fade-in-up md:hidden">
+                  <div className="flex items-center gap-3.5 rounded-[22px] border border-accent/35 bg-accent/10 p-5">
+                    <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-accent text-lg font-bold text-background">
+                      {initial(top.username)}
+                    </span>
+                    <span className="flex flex-col gap-0.5">
+                      <span className="text-lg font-bold tracking-tight">
+                        {top.username}
+                        {top.userId === user?.id && <span className="font-normal opacity-70"> · you</span>}
+                      </span>
+                      <span className="text-xs text-foreground/85">1st · {top.statLine}</span>
+                    </span>
+                    <span className="ml-auto text-xs font-semibold uppercase tracking-widest text-accent">Top</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-col md:hidden">
+                {entries.slice(1).map((entry, i) => {
+                  const globalIndex = i + 1;
+                  const isMe = entry.userId === user?.id;
+                  return (
+                    <div
+                      key={entry.userId}
+                      ref={globalIndex === sentinelIndex ? sentinelRef : undefined}
+                      className={`flex animate-fade-in-up items-center gap-3.5 border-b border-border py-3.5 last:border-b-0 ${
+                        isMe ? "-mx-2.5 rounded-2xl border-b-0 bg-accent/8 px-2.5" : ""
+                      }`}
+                      style={{ animationDelay: `${i * 40}ms` }}
+                    >
+                      <span className={`w-5 text-xs ${isMe ? "font-semibold text-accent" : "text-foreground/50"}`}>
+                        {entry.rank}
+                      </span>
+                      <span
+                        className={`flex size-8 shrink-0 items-center justify-center rounded-lg text-xs font-semibold ${
+                          isMe ? "bg-accent/20 text-accent" : "bg-white/10"
+                        }`}
+                      >
+                        {initial(entry.username)}
+                      </span>
+                      <span className="flex min-w-0 flex-col gap-0.5">
+                        <span className={`truncate text-[15px] font-semibold ${isMe ? "text-accent" : ""}`}>
+                          {entry.username}
+                          {isMe && <span className="font-normal opacity-70"> · you</span>}
+                        </span>
+                        <span className={`text-xs ${isMe ? "text-accent/80" : "text-foreground/50"}`}>
+                          {entry.statLine}
+                        </span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {loadingMore && <p className="animate-fade-in text-center text-xs text-foreground/45">Loading more…</p>}
+            </>
           )}
 
-          <div className="flex flex-col md:hidden">
-            {data.entries.slice(1).map((entry, i) => {
-              const rank = i + 2;
-              const isMe = entry.userId === user?.id;
-              return (
-                <div
-                  key={entry.userId}
-                  className={`flex animate-fade-in-up items-center gap-3.5 border-b border-border py-3.5 last:border-b-0 ${
-                    isMe ? "-mx-2.5 rounded-2xl border-b-0 bg-accent/8 px-2.5" : ""
-                  }`}
-                  style={{ animationDelay: `${i * 40}ms` }}
-                >
-                  <span className={`w-5 text-xs ${isMe ? "font-semibold text-accent" : "text-foreground/50"}`}>
-                    {rank}
-                  </span>
-                  <span
-                    className={`flex size-8 shrink-0 items-center justify-center rounded-lg text-xs font-semibold ${
-                      isMe ? "bg-accent/20 text-accent" : "bg-white/10"
-                    }`}
-                  >
-                    {initial(entry.username)}
-                  </span>
-                  <span className="flex min-w-0 flex-col gap-0.5">
-                    <span className={`truncate text-[15px] font-semibold ${isMe ? "text-accent" : ""}`}>
-                      {entry.username}
-                      {isMe && <span className="font-normal opacity-70"> · you</span>}
-                    </span>
-                    <span className={`text-xs ${isMe ? "text-accent/80" : "text-foreground/50"}`}>
-                      {entry.statLine}
-                    </span>
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+          <MePin me={mePin} notPlayedYet={!!meNotPlayedYet} />
         </>
       )}
 

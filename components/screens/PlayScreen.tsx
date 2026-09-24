@@ -22,6 +22,9 @@ import type { Game, GameDifficulty, Guess, LetterResult, User } from "@/types";
 
 const WORD_LENGTH = 5;
 const MAX_ATTEMPTS = 6;
+// The hint stays locked until this many guesses have been submitted — it's
+// a fallback for once you're stuck, not a shortcut from guess one.
+const HINT_UNLOCK_ATTEMPT = 4;
 const NUMBER_WORDS = ["No", "One", "Two", "Three", "Four", "Five", "Six"];
 const NUMBER_WORDS_FULL = [
   "zero",
@@ -216,17 +219,35 @@ function DifficultyBadge({ difficulty }: { difficulty?: GameDifficulty }) {
 }
 
 /** Hint text arrives with the game object itself (even mid-round) — this
- * just toggles showing it, no separate fetch. */
+ * just toggles showing it, no separate fetch. Stays locked (shows a lock
+ * icon instead) until HINT_UNLOCK_ATTEMPT guesses are in. */
 function HintButton({
   hint,
+  unlocked,
   revealed,
   onToggle,
+  onLockedClick,
 }: {
   hint?: string;
+  unlocked: boolean;
   revealed: boolean;
   onToggle: () => void;
+  onLockedClick: () => void;
 }) {
   if (!hint) return null;
+  if (!unlocked) {
+    return (
+      <button
+        type="button"
+        onClick={onLockedClick}
+        aria-label={`Hint unlocks after guess ${HINT_UNLOCK_ATTEMPT}`}
+        title={`Hint unlocks after guess ${HINT_UNLOCK_ATTEMPT}`}
+        className="flex h-5.5 w-5.5 flex-none items-center justify-center rounded-full bg-white/5 text-foreground/30 transition-colors hover:bg-white/9"
+      >
+        <HintIcon />
+      </button>
+    );
+  }
   return (
     <button
       type="button"
@@ -237,6 +258,27 @@ function HintButton({
     >
       <HintIcon />
     </button>
+  );
+}
+
+/** Animates its own height (via a grid-template-rows transition, the
+ * standard trick for animating to/from an unknown content height) rather
+ * than just mounting/unmounting the text — so whatever sits below it eases
+ * into the freed-up space instead of snapping up the instant this closes. */
+function HintLockedMessage({ show, className }: { show: boolean; className: string }) {
+  return (
+    <div
+      className="grid overflow-hidden transition-[grid-template-rows] duration-[900ms] ease-in-out"
+      style={{ gridTemplateRows: show ? "1fr" : "0fr" }}
+    >
+      <p
+        className={`min-h-0 overflow-hidden transition-all duration-[900ms] ease-in-out ${
+          show ? "translate-y-0 opacity-100" : "-translate-y-3.5 opacity-0"
+        } ${className}`}
+      >
+        Hint unlocks after guess {HINT_UNLOCK_ATTEMPT}
+      </p>
+    </div>
   );
 }
 
@@ -640,7 +682,20 @@ export default function PlayScreen({
   const [howToPlayOpen, setHowToPlayOpen] = useState(false);
   const [groupDaily, setGroupDaily] = useState<GroupDailyStats | null>(null);
   const [hintRevealed, setHintRevealed] = useState(false);
+  const [hintLockedMsgOpen, setHintLockedMsgOpen] = useState(false);
   const fullCountdown = useFullCountdownToNextUtcMidnight();
+
+  // Clicking the still-locked hint icon surfaces the "unlocks after guess N"
+  // message; it's not shown by default, and closes itself after 10s if the
+  // player hasn't reached the unlock threshold by then. The message stays
+  // mounted either way — HintLockedMessage below animates its own height via
+  // a grid-template-rows transition, so the content below it eases into the
+  // freed-up space instead of snapping up the instant this flips to false.
+  useEffect(() => {
+    if (!hintLockedMsgOpen) return;
+    const id = setTimeout(() => setHintLockedMsgOpen(false), 10_000);
+    return () => clearTimeout(id);
+  }, [hintLockedMsgOpen]);
 
   useEffect(() => {
     const fetchCurrent = mode === "daily" ? getTodayGame : getInfiniteCurrent;
@@ -660,16 +715,19 @@ export default function PlayScreen({
     const groupId = typeof first === "string" ? first : first._id;
     let cancelled = false;
     // Retry-once-on-failure is handled centrally by apiFetch (see lib/api.ts)
-    // — this call site only needs to handle the final outcome.
-    getGroupDailyLeaderboard(groupId)
-      .then(({ group, leaderboard }) => {
+    // — this call site only needs to handle the final outcome. This is a
+    // summary badge, not the paginated leaderboard screen, so it requests
+    // the server's max page size (100) in one shot rather than paging
+    // through everything just to count wins — `me` gives the caller's own
+    // rank directly regardless of page, per the pagination contract.
+    getGroupDailyLeaderboard(groupId, { limit: 100 })
+      .then(({ group, leaderboard, pagination, me }) => {
         if (cancelled) return;
-        const idx = leaderboard.findIndex((e) => e.userId === user.id);
         setGroupDaily({
           groupId,
           groupName: group.name,
-          rank: idx === -1 ? null : idx + 1,
-          total: leaderboard.length,
+          rank: me?.rank ?? null,
+          total: pagination.total,
           wonCount: leaderboard.filter((e) => e.status === "won").length,
         });
       })
@@ -690,6 +748,7 @@ export default function PlayScreen({
       setCurrentGuess("");
       setError(null);
       setHintRevealed(false);
+      setHintLockedMsgOpen(false);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Something went wrong");
     }
@@ -801,6 +860,7 @@ export default function PlayScreen({
   const guessNumber = Math.min(game.guesses.length + (finished ? 0 : 1), MAX_ATTEMPTS);
   const guessesLeft = MAX_ATTEMPTS - game.guesses.length;
   const known = buildKnownLetters(game.guesses);
+  const hintUnlocked = game.guesses.length >= HINT_UNLOCK_ATTEMPT;
 
   return (
     <div className="relative mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-4 md:px-10 md:py-10">
@@ -841,9 +901,18 @@ export default function PlayScreen({
         <div className="mt-3 flex flex-col gap-1.5 md:hidden">
           <div className="flex items-center gap-2">
             <DifficultyBadge difficulty={game.difficulty} />
-            <HintButton hint={game.hint} revealed={hintRevealed} onToggle={() => setHintRevealed((r) => !r)} />
+            <HintButton
+              hint={game.hint}
+              unlocked={hintUnlocked}
+              revealed={hintRevealed}
+              onToggle={() => setHintRevealed((r) => !r)}
+              onLockedClick={() => setHintLockedMsgOpen(true)}
+            />
           </div>
-          {game.hint && hintRevealed && (
+          {game.hint && !hintUnlocked && (
+            <HintLockedMessage show={hintLockedMsgOpen} className="text-[13px] text-foreground/50" />
+          )}
+          {game.hint && hintUnlocked && hintRevealed && (
             <p className="animate-fade-in text-[13px] text-foreground/65">{game.hint}</p>
           )}
         </div>
@@ -872,9 +941,18 @@ export default function PlayScreen({
             <div className="flex flex-col gap-2">
               <div className="flex items-center gap-2">
                 <DifficultyBadge difficulty={game.difficulty} />
-                <HintButton hint={game.hint} revealed={hintRevealed} onToggle={() => setHintRevealed((r) => !r)} />
+                <HintButton
+                  hint={game.hint}
+                  unlocked={hintUnlocked}
+                  revealed={hintRevealed}
+                  onToggle={() => setHintRevealed((r) => !r)}
+                  onLockedClick={() => setHintLockedMsgOpen(true)}
+                />
               </div>
-              {game.hint && hintRevealed && (
+              {game.hint && !hintUnlocked && (
+                <HintLockedMessage show={hintLockedMsgOpen} className="text-[13px] leading-relaxed text-foreground/50" />
+              )}
+              {game.hint && hintUnlocked && hintRevealed && (
                 <p className="animate-fade-in text-[13px] leading-relaxed text-foreground/65">{game.hint}</p>
               )}
             </div>
