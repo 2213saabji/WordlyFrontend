@@ -334,7 +334,7 @@ function KnownLettersPanel({ known }: { known: KnownLetters }) {
             <span
               key={`c-${c.letter}`}
               style={{ animationDuration: "0.35s" }}
-              className="animate-pop rounded-[10px] bg-correct px-2 py-1 text-xs font-medium uppercase text-white"
+              className="animate-pop rounded-[10px] bg-correct px-2 py-1 text-xs font-medium uppercase text-white min-h-8.5"
             >
               {c.letter} · {ordinal(c.pos)}
             </span>

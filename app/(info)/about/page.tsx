@@ -1,11 +1,24 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import ContentPage from "@/components/ContentPage";
+import { JsonLd, SITE_URL, breadcrumbJsonLd, pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "About",
+const PATH = "/about";
+
+export const metadata: Metadata = pageMetadata({
+  title: "About Us — A Free Daily Word Game",
   description:
-    "GuessWord is a free daily word-guessing game with an unlimited practice mode and group leaderboards — no download, no cost.",
+    "GuessWord is a free daily word-guessing game: one five-letter word a day, six tries, an unlimited practice mode, and group leaderboards — no download, no cost.",
+  path: PATH,
+});
+
+const aboutJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "AboutPage",
+  url: `${SITE_URL}${PATH}`,
+  name: "About GuessWord",
+  about: { "@id": `${SITE_URL}/#game` },
+  isPartOf: { "@id": `${SITE_URL}/#website` },
 };
 
 const LOGO_TILES = [
@@ -48,7 +61,8 @@ export default function AboutPage() {
       }
       subtitle="GuessWord gives you one five-letter word a day and six tries to find it. It takes a couple of minutes, and it's more fun with friends, family or coworkers playing the same word."
     >
-      <div className="flex flex-wrap gap-1.5">
+      <JsonLd data={[aboutJsonLd, breadcrumbJsonLd("About", PATH)]} />
+      <div className="flex flex-wrap gap-1.5" role="img" aria-label="GuessWord">
         {LOGO_TILES.map((tile, i) => (
           <span
             key={i}
@@ -63,7 +77,7 @@ export default function AboutPage() {
         {FEATURES.map((feature) => (
           <div key={feature.number} className="flex flex-col gap-2.5 border-t border-white/10 pt-5.5">
             <span className="text-[13px] font-semibold text-accent">{feature.number}</span>
-            <span className="text-[19px] font-semibold">{feature.heading}</span>
+            <h2 className="text-[19px] font-semibold">{feature.heading}</h2>
             <span className="text-[14.5px] leading-relaxed text-[#c9bfcc]">{feature.body}</span>
           </div>
         ))}

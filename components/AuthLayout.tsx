@@ -33,7 +33,7 @@ export default function AuthLayout({
   children: ReactNode;
 }) {
   return (
-    <div className="mx-auto grid w-full max-w-4xl flex-1 overflow-hidden md:grid-cols-2 md:rounded-2xl md:my-8 md:border md:border-border md:shadow-xl md:shadow-black/5">
+    <div className="mx-auto grid w-full max-w-4xl flex-1 overflow-hidden md:grid-cols-2 md:rounded-2xl md:my-8 md:border md:border-border md:shadow-xl md:shadow-black/5 min-h-[82vh]">
       <div className="relative hidden flex-col justify-between overflow-hidden bg-linear-to-br from-accent to-accent-2 p-8 text-white md:flex">
         <div
           className="pointer-events-none absolute -left-16 -top-16 h-64 w-64 animate-float rounded-full bg-white/15 blur-3xl"

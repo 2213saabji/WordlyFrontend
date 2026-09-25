@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
 import LegalPage, { type LegalSection } from "@/components/LegalPage";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Privacy Policy",
-  description: "How GuessWord collects, uses, and protects your information.",
-};
+  description:
+    "How GuessWord collects, uses, and protects your information — what we store, what other players can see, cookies, data retention, and your choices.",
+  path: "/privacy-policy",
+});
 
 const SECTIONS: LegalSection[] = [
   {

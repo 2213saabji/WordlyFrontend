@@ -1,5 +1,15 @@
+import type { Metadata } from "next";
 import ResetPasswordForm from "@/components/ResetPasswordForm";
 import AuthLayout from "@/components/AuthLayout";
+
+// Single-use, per-person links — kept out of search results (it's also left
+// out of the sitemap), and the referrer policy stops the token in the URL
+// leaking to any third-party request the page makes.
+export const metadata: Metadata = {
+  title: "Reset Password",
+  robots: { index: false, follow: false, googleBot: { index: false, follow: false } },
+  referrer: "no-referrer",
+};
 
 export default async function ResetPasswordPage({
   params,

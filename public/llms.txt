@@ -1,0 +1,26 @@
+# GuessWord
+
+> GuessWord (guessword.games) is a free daily word guessing game played in the browser. Players guess a secret five-letter word in six tries, using color-coded tile feedback. No download is required; a free account saves progress, streaks, and group memberships.
+
+## How it works
+
+- Each guess must be a real five-letter word; players get six tries.
+- Green tile: the letter is in the word and in the right spot.
+- Amber tile: the letter is in the word but in a different spot.
+- Gray tile: the letter is not in the word.
+- After four guesses without solving, a hint with a short clue becomes available. It never reveals the word.
+
+## Modes
+
+- Daily: one word for everyone, changing at midnight UTC. Solving it extends the player's streak.
+- Infinite: unlimited practice rounds. Never affects streaks, stats, or leaderboards.
+- Groups: friends join with an eight-character invite code and rank on daily and weekly leaderboards.
+
+## Pages
+
+- [How to play](https://www.guessword.games/how-to-play): rules, tile colors, and game modes
+- [FAQ](https://www.guessword.games/faq): daily word timing, streaks, leaderboards, hints, accounts, mobile play
+- [About](https://www.guessword.games/about): what GuessWord is and why it exists
+- [Contact](https://www.guessword.games/contact): support@guessword.games
+- [Privacy policy](https://www.guessword.games/privacy-policy)
+- [Terms of service](https://www.guessword.games/terms)

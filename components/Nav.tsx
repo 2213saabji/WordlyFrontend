@@ -210,7 +210,9 @@ export default function Nav() {
               </div>
             </>
           ) : !loading ? (
-            <span className="flex animate-fade-in items-center gap-3">
+            // Hidden on mobile — signed-out visitors already land on the login
+            // screen, which links to sign up, so the header stays uncluttered.
+            <span className="hidden animate-fade-in items-center gap-3 sm:flex">
               <Link
                 href="/"
                 onClick={() => reset({ name: "login" })}

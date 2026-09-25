@@ -1,11 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import FaqAccordion, { type FaqItem } from "@/components/FaqAccordion";
+import { JsonLd, breadcrumbJsonLd, pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "FAQ",
-  description: "Answers to common questions about GuessWord — free daily word game with an unlimited practice mode.",
-};
+const PATH = "/faq";
+
+export const metadata: Metadata = pageMetadata({
+  title: "FAQ — Daily Word, Streaks, Groups & Hints",
+  description:
+    "Answers to common GuessWord questions: when the daily word changes, how streaks and leaderboards work, Infinite mode, hints, groups, and playing on mobile.",
+  path: PATH,
+});
 
 const FAQS: FaqItem[] = [
   {
@@ -71,7 +76,7 @@ const structuredData = {
 export default function FaqPage() {
   return (
     <div className="mx-auto flex w-full max-w-270 px-5 py-9 md:px-14 md:py-20">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }} />
+      <JsonLd data={[structuredData, breadcrumbJsonLd("FAQ", PATH)]} />
       <div className="flex w-full flex-wrap items-start gap-10 md:gap-20">
         <div className="flex flex-1 flex-col gap-4 basis-70" style={{ maxWidth: 380 }}>
           <span className="text-[12.5px] font-semibold uppercase tracking-[0.18em] text-[#9a8aa2]">FAQ</span>

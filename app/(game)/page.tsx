@@ -1,125 +1,69 @@
-"use client";
+import Link from "next/link";
+import GameApp from "./GameApp";
 
-import { useEffect, useState } from "react";
-import Leaderboard from "@/components/Leaderboard";
-import Loader from "@/components/Loader";
-import HomeScreen from "@/components/screens/HomeScreen";
-import PlayScreen from "@/components/screens/PlayScreen";
-import HistoryScreen from "@/components/screens/HistoryScreen";
-import GroupsScreen from "@/components/screens/GroupsScreen";
-import LoginScreen from "@/components/screens/LoginScreen";
-import SignupScreen from "@/components/screens/SignupScreen";
-import ForgotPasswordScreen from "@/components/screens/ForgotPasswordScreen";
-import { useAuth } from "@/lib/auth-context";
-import { useScreen } from "@/lib/screen-context";
-import { parseReplayParam, type ReplayInvite } from "@/lib/share";
+const HIGHLIGHTS = [
+  {
+    heading: "Daily puzzle",
+    body: "One five-letter word for everyone, new every day at midnight UTC. Solve it to build your streak.",
+  },
+  {
+    heading: "Infinite mode",
+    body: "Unlimited practice rounds with a fresh word each time — it never affects your streak or stats.",
+  },
+  {
+    heading: "Play with friends",
+    body: "Create a group, share the invite code, and compete on daily and weekly leaderboards.",
+  },
+];
 
-function AppShell() {
-  const { screen, push, back, replace } = useScreen();
-  const [invite, setInvite] = useState<ReplayInvite | null>(() =>
-    typeof window === "undefined" ? null : parseReplayParam(window.location.search),
-  );
-
-  useEffect(() => {
-    if (!invite) return;
-    // A replay link is only valid same-day (daily mode's word is already
-    // server-date-scoped — see lib/share.ts), so this just deep-links into
-    // today's Play Daily rather than fetching anything invite-specific.
-    push({ name: "play", mode: "daily" });
-    window.history.replaceState(null, "", window.location.pathname);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  return (
-    <div className="flex flex-1 flex-col">
-      {invite && (
-        <div className="mx-auto flex w-full max-w-lg animate-fade-in items-center gap-3 px-4 pt-4">
-          <p className="flex-1 rounded-xl border border-accent/25 bg-accent/10 px-4 py-2.5 text-sm text-foreground/80">
-            🎉 <span className="font-semibold">{invite.username}</span> invited you to today&apos;s GuessWord — good
-            luck!
-          </p>
-          <button
-            type="button"
-            onClick={() => setInvite(null)}
-            aria-label="Dismiss"
-            className="flex h-7 w-7 flex-none items-center justify-center rounded-full text-foreground/50 transition-colors hover:bg-white/10 hover:text-foreground"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="h-3.5 w-3.5">
-              <path d="M18 6 6 18M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
-      <div
-        key={
-          screen.name === "leaderboard"
-            ? `leaderboard-${screen.groupId}`
-            : screen.name === "play"
-              ? `play-${screen.mode}`
-              : screen.name
-        }
-        className="flex flex-1 flex-col animate-fade-in-up"
-      >
-        {screen.name === "home" && (
-          <HomeScreen
-            onPlay={() => push({ name: "play", mode: "daily" })}
-            onPlayInfinite={() => push({ name: "play", mode: "infinite" })}
-            onHistory={() => push({ name: "history" })}
-            onGroups={() => push({ name: "groups" })}
-            onOpenLeaderboard={(groupId?: string) => push({ name: "leaderboard", groupId })}
-          />
-        )}
-        {screen.name === "play" && (
-          <PlayScreen
-            mode={screen.mode}
-            onBack={back}
-            onOpenLeaderboard={(groupId?: string) => push({ name: "leaderboard", groupId })}
-            onPlayInfinite={() => replace({ name: "play", mode: "infinite" })}
-          />
-        )}
-        {screen.name === "history" && <HistoryScreen onBack={back} />}
-        {screen.name === "groups" && (
-          <GroupsScreen onBack={back} onOpenLeaderboard={(groupId) => push({ name: "leaderboard", groupId })} />
-        )}
-        {screen.name === "leaderboard" && (
-          <Leaderboard
-            groupId={screen.groupId}
-            onBack={back}
-            onSwitchScope={(groupId) => replace({ name: "leaderboard", groupId })}
-          />
-        )}
-      </div>
-    </div>
-  );
+export default function HomePage() {
+  return <GameApp intro={<Intro />} />;
 }
 
-export default function RootPage() {
-  const { user, loading } = useAuth();
-  const { screen, reset } = useScreen();
+// The game itself is client-only (auth state decides which screen shows, and
+// the first server render is just a loader), so on its own this route would
+// give crawlers — which never sign in — only a loader and a login form. This
+// visible intro is rendered on the server and handed to GameApp, which shows
+// it under the login screen only; home-page metadata comes from the root
+// layout. Headings start at <h2> since the login screen already has the <h1>.
+function Intro() {
+  return (
+    <section
+      aria-labelledby="about-guessword"
+      className="mx-auto flex w-full max-w-270 flex-col gap-8 px-5 py-14 md:px-14 md:py-20"
+    >
+      <div className="flex max-w-160 flex-col gap-4">
+        <h2 id="about-guessword" className="text-[28px] font-light leading-[1.1] tracking-[-0.03em] md:text-[42px]">
+          GuessWord — a free <strong className="font-bold">daily word guessing game.</strong>
+        </h2>
+        <p className="text-[15px] leading-relaxed text-[#c9bfcc] md:text-[16.5px]">
+          GuessWord is a free online word game where you guess the word — a secret five-letter word — in six
+          tries. After each guess, green tiles mark letters in the right spot, amber tiles mark letters in the word
+          but in the wrong spot, and gray tiles mark letters that aren&apos;t in the word. It&apos;s a quick daily
+          word puzzle that stretches your vocabulary, and it runs in any browser with no download.
+        </p>
+      </div>
 
-  if (loading) {
-    return <Loader label="Loading…" />;
-  }
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+        {HIGHLIGHTS.map((item) => (
+          <div key={item.heading} className="flex flex-col gap-2 border-t border-white/10 pt-5">
+            <h3 className="text-lg font-semibold">{item.heading}</h3>
+            <p className="text-[14.5px] leading-relaxed text-[#c9bfcc]">{item.body}</p>
+          </div>
+        ))}
+      </div>
 
-  if (!user) {
-    // Falls through to LoginScreen for "login" and for any stale post-auth
-    // screen.name (e.g. right after a logout/failed refresh) — this branch
-    // never renders authenticated content, regardless of what screen.name
-    // currently is.
-    if (screen.name === "signup") {
-      return <SignupScreen onSuccess={() => reset({ name: "home" })} onLogin={() => reset({ name: "login" })} />;
-    }
-    if (screen.name === "forgot-password") {
-      return <ForgotPasswordScreen onBack={() => reset({ name: "login" })} />;
-    }
-    return (
-      <LoginScreen
-        onSuccess={() => reset({ name: "home" })}
-        onSignup={() => reset({ name: "signup" })}
-        onForgotPassword={() => reset({ name: "forgot-password" })}
-      />
-    );
-  }
-
-  return <AppShell />;
+      <p className="text-[14.5px] text-[#c9bfcc]">
+        New here? Read{" "}
+        <Link href="/how-to-play" className="text-accent underline hover:no-underline">
+          how to play
+        </Link>{" "}
+        or browse the{" "}
+        <Link href="/faq" className="text-accent underline hover:no-underline">
+          FAQ
+        </Link>
+        .
+      </p>
+    </section>
+  );
 }

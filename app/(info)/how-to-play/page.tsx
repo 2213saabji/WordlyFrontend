@@ -1,11 +1,52 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import ContentPage, { Eyebrow } from "@/components/ContentPage";
+import { JsonLd, SITE_URL, breadcrumbJsonLd, pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "How to Play",
+const PATH = "/how-to-play";
+
+export const metadata: Metadata = pageMetadata({
+  title: "How to Play — Rules & Tile Colors",
   description:
-    "Learn how to play GuessWord: guess the five-letter word in six tries, what the green, amber, and gray tiles mean, and how the daily word and hints work.",
+    "Learn how to play GuessWord: guess the five-letter word in six tries, what the green, amber, and gray tiles mean, and how Daily, Infinite, and Groups modes work.",
+  path: PATH,
+});
+
+// HowTo mirrors the steps this page actually shows, giving answer engines a
+// clean, quotable "how do you play" answer.
+const howToJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "HowTo",
+  name: "How to play GuessWord",
+  description: "Guess the secret five-letter word in six tries using color-coded tile feedback.",
+  url: `${SITE_URL}${PATH}`,
+  totalTime: "PT5M",
+  step: [
+    {
+      "@type": "HowToStep",
+      position: 1,
+      name: "Enter a guess",
+      text: "Type any real five-letter word and submit it. You have six tries to find the secret word.",
+    },
+    {
+      "@type": "HowToStep",
+      position: 2,
+      name: "Read the tile colors",
+      text: "Green means the letter is in the word and in the right spot. Amber means the letter is in the word but in a different spot. Gray means the letter is not in the word.",
+    },
+    {
+      "@type": "HowToStep",
+      position: 3,
+      name: "Narrow it down",
+      text: "Use the feedback to choose your next guess. After four guesses without solving it, a hint with a short clue becomes available.",
+    },
+    {
+      "@type": "HowToStep",
+      position: 4,
+      name: "Keep your streak",
+      text: "Solve the daily word to grow your streak, or play Infinite mode for unlimited practice that doesn't affect your stats.",
+    },
+  ],
 };
 
 type TileTone = "correct" | "present" | "plain" | "dimmed";
@@ -49,7 +90,7 @@ function ColorCard({
     <div className="flex flex-col gap-4.5 rounded-3xl border border-white/8 bg-white/4 p-6.5">
       <TileRow letters={letters} tones={tones} />
       <div className="flex flex-col gap-1.5">
-        <span className={`text-base font-semibold ${nameColor}`}>{name}</span>
+        <h2 className={`text-base font-semibold ${nameColor}`}>{name}</h2>
         <span className="text-[14.5px] leading-relaxed text-[#c9bfcc]">{description}</span>
       </div>
     </div>
@@ -81,6 +122,7 @@ export default function HowToPlayPage() {
       }
       subtitle="Every guess must be a real five-letter word. After each guess the tiles change color to show how close you are."
     >
+      <JsonLd data={[howToJsonLd, breadcrumbJsonLd("How to Play", PATH)]} />
       <div className="grid grid-cols-1 gap-4.5 sm:grid-cols-3">
         <ColorCard
           letters="CRANE"
@@ -110,7 +152,7 @@ export default function HowToPlayPage() {
         <div className="grid grid-cols-1 gap-px overflow-hidden rounded-3xl border border-white/8 bg-white/8 sm:grid-cols-3">
           {WAYS_TO_PLAY.map((way) => (
             <div key={way.heading} className="flex flex-col gap-2.5 bg-background p-7">
-              <span className="text-lg font-semibold">{way.heading}</span>
+              <h2 className="text-lg font-semibold">{way.heading}</h2>
               <span className="text-[14.5px] leading-relaxed text-[#c9bfcc]">{way.body}</span>
             </div>
           ))}
