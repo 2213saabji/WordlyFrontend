@@ -12,7 +12,11 @@ import {
   ApiRequestError,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import type { Group } from "@/types";
+import { readCache, writeCache } from "@/lib/cache";
+import type { Group, Pagination } from "@/types";
+
+const GROUPS_CACHE_KEY = "groups:first-page";
+const RANKS_CACHE_KEY = "groups:ranks";
 
 const AVATAR_PALETTE = ["bg-accent/18 text-accent", "bg-accent-2/18 text-accent-2", "bg-white/10 text-foreground"];
 
@@ -160,12 +164,17 @@ export default function GroupsScreen({
   onOpenLeaderboard: (groupId: string) => void;
 }) {
   const { user } = useAuth();
-  const [groups, setGroups] = useState<Group[] | null>(null);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [total, setTotal] = useState(0);
+  // First page and ranks are seeded from the last visit (lib/cache.ts) so a
+  // reload renders straight away; the effects below revalidate them.
+  const [cached] = useState(() => readCache<{ groups: Group[]; pagination: Pagination }>(GROUPS_CACHE_KEY));
+  const [groups, setGroups] = useState<Group[] | null>(cached?.groups ?? null);
+  const [page, setPage] = useState(cached?.pagination.page ?? 1);
+  const [totalPages, setTotalPages] = useState(cached?.pagination.totalPages ?? 1);
+  const [total, setTotal] = useState(cached?.pagination.total ?? 0);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [ranks, setRanks] = useState<Record<string, number | undefined>>({});
+  const [ranks, setRanks] = useState<Record<string, number | undefined>>(
+    () => readCache<Record<string, number | undefined>>(RANKS_CACHE_KEY) ?? {},
+  );
   const [groupName, setGroupName] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -175,6 +184,7 @@ export default function GroupsScreen({
 
   useEffect(() => {
     getMyGroups({ page: 1, limit: 20 }).then(({ groups, pagination }) => {
+      writeCache(GROUPS_CACHE_KEY, { groups, pagination });
       setGroups(groups);
       setPage(pagination.page);
       setTotalPages(pagination.totalPages);
@@ -215,7 +225,10 @@ export default function GroupsScreen({
           .catch(() => [g._id, undefined] as const),
       ),
     ).then((pairs) => {
-      if (!cancelled) setRanks(Object.fromEntries(pairs));
+      if (cancelled) return;
+      const next = Object.fromEntries(pairs);
+      setRanks(next);
+      writeCache(RANKS_CACHE_KEY, next);
     });
     return () => {
       cancelled = true;

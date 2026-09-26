@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useState,
   type ReactNode,
 } from "react";
@@ -19,7 +20,10 @@ import {
   setDeviceId,
   setToken,
 } from "@/lib/api";
+import { clearCache, readCache, writeCache } from "@/lib/cache";
 import type { User } from "@/types";
+
+const USER_CACHE_KEY = "user";
 
 interface AuthContextValue {
   user: User | null;
@@ -60,12 +64,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  useEffect(() => {
+  // Layout effect, not a plain effect: the server can't see localStorage, so
+  // the first render is always `loading` — this swaps in the cached user
+  // before the browser paints, instead of flashing the loader for the
+  // length of an /auth/refresh round-trip on every reload.
+  useLayoutEffect(() => {
     async function bootstrap() {
       if (getStoredDeviceId()) {
         // A device that's been here before — silently trade the stored
-        // deviceId for a fresh access token, no password prompt.
-        const result = await api.refreshSession();
+        // deviceId for a fresh access token, no password prompt. Started
+        // before anything awaits, so screens' own requests queue behind it
+        // (see performRequest in lib/api.ts).
+        const refreshing = api.refreshSession();
+        // Show the last-known user immediately and revalidate below.
+        const cached = readCache<User>(USER_CACHE_KEY);
+        if (cached) {
+          setUser(cached);
+          setLoading(false);
+        }
+        const result = await refreshing;
         if (result) {
           setUser(result.user);
           setLoading(false);
@@ -90,6 +107,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     bootstrap();
   }, []);
+
+  // Keeps the cache in step with the session: the latest user is what the
+  // next reload renders first, and every cached screen's data goes with the
+  // session when it ends, so nothing leaks into the next account.
+  useEffect(() => {
+    if (loading) return;
+    if (user) writeCache(USER_CACHE_KEY, user);
+    else clearCache();
+  }, [user, loading]);
 
   const login = useCallback(async (email: string, password: string) => {
     const data = await api.login({ email, password });

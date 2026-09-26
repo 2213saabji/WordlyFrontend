@@ -3,7 +3,11 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { getMyGroups, getGlobalWeeklyLeaderboard, ApiRequestError } from "@/lib/api";
+import { readCache, writeCache } from "@/lib/cache";
 import type { Group, WeeklyLeaderboardEntry } from "@/types";
+
+const GROUPS_CACHE_KEY = "home:groups";
+const WEEKLY_CACHE_KEY = "home:weekly";
 
 const LOGO_TILES = [
   { char: "G", className: "bg-accent text-background" },
@@ -140,9 +144,14 @@ export default function HomeScreen({
   onOpenLeaderboard: (groupId?: string) => void;
 }) {
   const { user } = useAuth();
-  const [groups, setGroups] = useState<Group[] | null>(null);
-  const [groupsTotal, setGroupsTotal] = useState(0);
-  const [weekly, setWeekly] = useState<WeeklyLeaderboardEntry[] | null>(null);
+  // Seeded from the last visit's data (lib/cache.ts) so a reload renders
+  // straight away; the effects below revalidate it.
+  const [cachedGroups] = useState(() => readCache<{ groups: Group[]; total: number }>(GROUPS_CACHE_KEY));
+  const [groups, setGroups] = useState<Group[] | null>(cachedGroups?.groups ?? null);
+  const [groupsTotal, setGroupsTotal] = useState(cachedGroups?.total ?? 0);
+  const [weekly, setWeekly] = useState<WeeklyLeaderboardEntry[] | null>(() =>
+    readCache<WeeklyLeaderboardEntry[]>(WEEKLY_CACHE_KEY),
+  );
 
   useEffect(() => {
     // Only the top 4 are ever shown here (see the .slice(0, 4) below), but
@@ -153,15 +162,19 @@ export default function HomeScreen({
       .then(({ groups, pagination }) => {
         setGroups(groups);
         setGroupsTotal(pagination.total);
+        writeCache(GROUPS_CACHE_KEY, { groups, total: pagination.total });
       })
-      .catch(() => setGroups([]));
+      .catch(() => setGroups((prev) => prev ?? []));
   }, []);
 
   useEffect(() => {
     // Only the top 4 are ever shown here (see the .slice(0, 4) below), so
     // request just that instead of the default page of 20.
     getGlobalWeeklyLeaderboard({ limit: 4 })
-      .then((res) => setWeekly(res.leaderboard))
+      .then((res) => {
+        setWeekly(res.leaderboard);
+        writeCache(WEEKLY_CACHE_KEY, res.leaderboard);
+      })
       .catch((err) => {
         if (!(err instanceof ApiRequestError)) throw err;
       });

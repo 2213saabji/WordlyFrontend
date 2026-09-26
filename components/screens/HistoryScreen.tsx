@@ -4,9 +4,15 @@ import { useEffect, useState } from "react";
 import Loader from "@/components/Loader";
 import ScreenHeader from "@/components/ScreenHeader";
 import { getHistory, getInfiniteHistory } from "@/lib/api";
+import { readCache, writeCache } from "@/lib/cache";
 import type { Game } from "@/types";
 
+
 type Mode = "daily" | "infinite";
+
+function cacheKey(mode: Mode): string {
+  return `history:${mode}`;
+}
 
 const MODE_OPTIONS: { key: Mode; label: string }[] = [
   { key: "daily", label: "Daily" },
@@ -35,16 +41,28 @@ function statusBorder(status: Game["status"]) {
 
 export default function HistoryScreen({ onBack }: { onBack: () => void }) {
   const [mode, setMode] = useState<Mode>("daily");
-  const [games, setGames] = useState<Game[] | null>(null);
+  const [games, setGames] = useState<Game[] | null>(() => readCache<Game[]>(cacheKey(mode)));
+
+  function selectMode(next: Mode) {
+    if (next === mode) return;
+    setMode(next);
+    // Show the last-seen list for that tab right away (or the loader if
+    // there isn't one) — the effect below revalidates it.
+    setGames(readCache<Game[]>(cacheKey(next)));
+  }
 
   useEffect(() => {
+    let cancelled = false;
     async function load() {
-      setGames(null);
       const fetchHistory = mode === "daily" ? getHistory : getInfiniteHistory;
       const { games } = await fetchHistory();
-      setGames(games);
+      writeCache(cacheKey(mode), games);
+      if (!cancelled) setGames(games);
     }
     load();
+    return () => {
+      cancelled = true;
+    };
   }, [mode]);
 
   return (
@@ -56,7 +74,7 @@ export default function HistoryScreen({ onBack }: { onBack: () => void }) {
             <button
               key={opt.key}
               type="button"
-              onClick={() => setMode(opt.key)}
+              onClick={() => selectMode(opt.key)}
               className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors duration-150 ${
                 mode === opt.key ? "bg-accent text-background" : "text-foreground/65 hover:text-foreground"
               }`}

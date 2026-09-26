@@ -30,6 +30,20 @@ function AppShell() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const screenKey =
+    screen.name === "leaderboard"
+      ? `leaderboard-${screen.groupId}`
+      : screen.name === "play"
+        ? `play-${screen.mode}`
+        : screen.name;
+
+  // The fade-in is a transition between screens — the screen the page loads
+  // on (e.g. after a refresh) just appears, rather than visibly animating in
+  // on every reload.
+  const [initialScreenKey] = useState(screenKey);
+  const [hasNavigated, setHasNavigated] = useState(false);
+  if (!hasNavigated && screenKey !== initialScreenKey) setHasNavigated(true);
+
   return (
     <div className="flex flex-1 flex-col">
       {invite && (
@@ -50,16 +64,7 @@ function AppShell() {
           </button>
         </div>
       )}
-      <div
-        key={
-          screen.name === "leaderboard"
-            ? `leaderboard-${screen.groupId}`
-            : screen.name === "play"
-              ? `play-${screen.mode}`
-              : screen.name
-        }
-        className="flex flex-1 flex-col animate-fade-in-up"
-      >
+      <div key={screenKey} className={`flex flex-1 flex-col ${hasNavigated ? "animate-fade-in-up" : ""}`}>
         {screen.name === "home" && (
           <HomeScreen
             onPlay={() => push({ name: "play", mode: "daily" })}
@@ -101,11 +106,14 @@ export default function GameApp({ intro }: { intro: ReactNode }) {
   const { screen, reset } = useScreen();
 
   if (loading) {
+    // .auth-pending is hidden before first paint for a returning player with
+    // a cached session (see the inline script in app/layout.tsx) — they go
+    // straight to their cached screen instead of seeing this, then the intro.
     return (
-      <>
+      <div className="auth-pending contents">
         <Loader label="Loading…" />
         {intro}
-      </>
+      </div>
     );
   }
 

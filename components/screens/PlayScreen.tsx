@@ -15,6 +15,7 @@ import {
 } from "@/lib/api";
 import ShareModal from "@/components/ShareModal";
 import { useAuth } from "@/lib/auth-context";
+import { readCache, writeCache } from "@/lib/cache";
 import { isKnownGuess } from "@/lib/word-check";
 import { wordNumberForDate } from "@/lib/share";
 import type { PlayMode } from "@/lib/screen-context";
@@ -22,6 +23,13 @@ import type { Game, GameDifficulty, Guess, LetterResult, User } from "@/types";
 
 const WORD_LENGTH = 5;
 const MAX_ATTEMPTS = 6;
+const GROUP_DAILY_CACHE_KEY = "play:group-daily";
+
+/** Today's daily board is only valid until UTC midnight — reads of the
+ * daily key pass `sameDay` so yesterday's board never flashes up. */
+function gameCacheKey(mode: PlayMode): string {
+  return `play:${mode}`;
+}
 // The hint stays locked until this many guesses have been submitted — it's
 // a fallback for once you're stuck, not a shortcut from guess one.
 const HINT_UNLOCK_ATTEMPT = 4;
@@ -673,14 +681,19 @@ export default function PlayScreen({
   onPlayInfinite: () => void;
 }) {
   const { user, refreshUser } = useAuth();
-  const [game, setGame] = useState<Game | null>(null);
+  // Seeded from the last-seen board (lib/cache.ts) so a reload renders it
+  // straight away instead of a loader; the fetch below revalidates it, and
+  // the server stays the authority on every guess regardless.
+  const [game, setGame] = useState<Game | null>(() => readCache<Game>(gameCacheKey(mode), { sameDay: mode === "daily" }));
   const [currentGuess, setCurrentGuess] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => game === null);
   const [submitting, setSubmitting] = useState(false);
   const [shakeSignal, setShakeSignal] = useState(0);
   const [howToPlayOpen, setHowToPlayOpen] = useState(false);
-  const [groupDaily, setGroupDaily] = useState<GroupDailyStats | null>(null);
+  const [groupDaily, setGroupDaily] = useState<GroupDailyStats | null>(() =>
+    mode === "daily" ? readCache<GroupDailyStats>(GROUP_DAILY_CACHE_KEY, { sameDay: true }) : null,
+  );
   const [hintRevealed, setHintRevealed] = useState(false);
   const [hintLockedMsgOpen, setHintLockedMsgOpen] = useState(false);
   const fullCountdown = useFullCountdownToNextUtcMidnight();
@@ -704,6 +717,12 @@ export default function PlayScreen({
       .finally(() => setLoading(false));
   }, [mode]);
 
+  // Every board change (initial fetch, each guess, a new infinite round) is
+  // what the next reload shows first.
+  useEffect(() => {
+    if (game) writeCache(gameCacheKey(mode), game);
+  }, [game, mode]);
+
   const hasGroup = mode === "daily" && !!user && user.groups.length > 0;
   // Only "won"/"lost" (not the null -> "in-progress" transition on initial
   // load) should trigger a leaderboard refetch below.
@@ -723,13 +742,15 @@ export default function PlayScreen({
     getGroupDailyLeaderboard(groupId, { limit: 100 })
       .then(({ group, leaderboard, pagination, me }) => {
         if (cancelled) return;
-        setGroupDaily({
+        const stats: GroupDailyStats = {
           groupId,
           groupName: group.name,
           rank: me?.rank ?? null,
           total: pagination.total,
           wonCount: leaderboard.filter((e) => e.status === "won").length,
-        });
+        };
+        setGroupDaily(stats);
+        writeCache(GROUP_DAILY_CACHE_KEY, stats);
       })
       .catch(() => {
         if (!cancelled) setGroupDaily(null);

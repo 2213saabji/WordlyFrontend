@@ -10,6 +10,7 @@ import {
   ApiRequestError,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { readCache, writeCache } from "@/lib/cache";
 import Loader from "@/components/Loader";
 import ScreenHeader from "@/components/ScreenHeader";
 import type { DailyLeaderboardEntry, Group, WeeklyLeaderboardEntry } from "@/types";
@@ -50,6 +51,19 @@ type NormalizedData = {
    * endpoint). */
   rawMe: NormalizedEntry | null | undefined;
 };
+
+const GROUPS_CACHE_KEY = "leaderboard:groups";
+
+function firstPageCacheKey(groupId: string | undefined, period: Period): string {
+  return `leaderboard:${groupId ?? "global"}:${period}`;
+}
+
+/** Only the first page is cached — enough to fill the screen on a reload.
+ * A daily board from before today's UTC midnight is a different day's
+ * results entirely, so it's never shown. */
+function readFirstPage(groupId: string | undefined, period: Period): NormalizedData | null {
+  return readCache<NormalizedData>(firstPageCacheKey(groupId, period), { sameDay: period === "daily" });
+}
 
 function initial(name: string) {
   return name.trim().charAt(0).toUpperCase() || "?";
@@ -387,38 +401,50 @@ export default function Leaderboard({
 }) {
   const { user } = useAuth();
   const [period, setPeriod] = useState<Period>("daily");
-  const [groups, setGroups] = useState<Group[] | null>(null);
-  const [data, setData] = useState<NormalizedData | null>(null);
+  const [groups, setGroups] = useState<Group[] | null>(() => readCache<Group[]>(GROUPS_CACHE_KEY));
+  // The first page is seeded from the last visit (lib/cache.ts) so a reload
+  // renders straight away; the effect below revalidates it.
+  const [data, setData] = useState<NormalizedData | null>(() => readFirstPage(groupId, period));
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function selectPeriod(next: Period) {
+    if (next === period) return;
+    setPeriod(next);
+    setData(readFirstPage(groupId, next));
+  }
 
   useEffect(() => {
     // Populates the scope-switcher dropdown, not a paginated list — request
     // the server's max page size so every group the user belongs to shows
     // up in one shot.
     getMyGroups({ limit: 100 })
-      .then(({ groups }) => setGroups(groups))
-      .catch(() => setGroups([]));
+      .then(({ groups }) => {
+        setGroups(groups);
+        writeCache(GROUPS_CACHE_KEY, groups);
+      })
+      .catch(() => setGroups((prev) => prev ?? []));
   }, []);
 
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
-      setData(null);
       setError(null);
       setLoadingMore(false);
       try {
         const page = await fetchPage(groupId, period, 1);
         if (cancelled) return;
-        setData({
+        const next: NormalizedData = {
           subtitle: page.subtitle,
           columnHeaders: page.columnHeaders,
           entries: page.entries,
           page: page.page,
           totalPages: page.totalPages,
           rawMe: page.rawMe,
-        });
+        };
+        setData(next);
+        writeCache(firstPageCacheKey(groupId, period), next);
       } catch (err) {
         if (!cancelled) setError(err instanceof ApiRequestError ? err.message : "Something went wrong");
       }
@@ -487,7 +513,7 @@ export default function Leaderboard({
           <PeriodToggle
             options={PERIOD_OPTIONS}
             value={period}
-            onChange={(p) => setPeriod(p)}
+            onChange={selectPeriod}
           />
           <ScopeSwitcher
             currentLabel={groupId ? title : "Global"}

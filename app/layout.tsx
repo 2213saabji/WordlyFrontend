@@ -139,7 +139,22 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       className={`${sora.variable} ${geistMono.variable} h-full antialiased`}
+      // The inline script below may add data-cached-session before hydration.
+      suppressHydrationWarning
     >
+      <head>
+        {/* The server can't see localStorage, so the game's server HTML is
+            always its "checking your session" loader. A returning player
+            with a cached session (lib/cache.ts) gets that placeholder hidden
+            before first paint instead of flashing it until hydration, when
+            AuthProvider swaps in the cached user. Must match the check in
+            AuthProvider's bootstrap. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{if(localStorage.getItem("guessword_device_id")&&localStorage.getItem("guessword_cache:user"))document.documentElement.setAttribute("data-cached-session","")}catch(e){}})()`,
+          }}
+        />
+      </head>
       <body className="min-h-full flex flex-col">
         <JsonLd data={structuredData} />
         {children}

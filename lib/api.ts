@@ -17,6 +17,7 @@ import type {
   Pagination,
   User,
 } from "@/types";
+import { clearCache } from "@/lib/cache";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "https://wordly-backend-nu.vercel.app/api";
@@ -129,6 +130,7 @@ class ApiTimeoutError extends Error {
 function clearSession(): void {
   clearToken();
   clearDeviceId();
+  clearCache();
 }
 
 function redirectToLogin(): void {
@@ -147,17 +149,8 @@ function redirectToLogin(): void {
 // Concurrent 401s during the same tick (a burst of calls right as the access
 // token expires) should share one /auth/refresh call rather than firing one
 // each — the refresh token itself isn't rotated, so this is purely about not
-// being wasteful.
+// being wasteful. App start shares it too (see refreshSession).
 let refreshPromise: Promise<{ token: string; user: User } | null> | null = null;
-
-function ensureRefreshed(): Promise<{ token: string; user: User } | null> {
-  if (!refreshPromise) {
-    refreshPromise = refreshSession().finally(() => {
-      refreshPromise = null;
-    });
-  }
-  return refreshPromise;
-}
 
 async function performRequest<T>(
   path: string,
@@ -166,6 +159,10 @@ async function performRequest<T>(
   const headers: Record<string, string> = { "Content-Type": "application/json" };
 
   if (!skipAuth) {
+    // On a reload, screens render straight from the cache (lib/cache.ts) and
+    // start fetching while the startup /auth/refresh is still in flight —
+    // wait for its token rather than firing a request that's sure to 401.
+    if (refreshPromise) await refreshPromise;
     const token = getToken();
     if (token) headers.Authorization = `Bearer ${token}`;
   }
@@ -193,7 +190,7 @@ async function performRequest<T>(
 
   if (!res.ok) {
     if (res.status === 401 && !skipAuth && !isRetry) {
-      const refreshed = await ensureRefreshed();
+      const refreshed = await refreshSession();
       if (refreshed) {
         return performRequest<T>(path, { method, body, skipAuth, isRetry: true });
       }
@@ -292,8 +289,18 @@ export function googleAuth(payload: { idToken: string; deviceId: string }): Prom
 /** The silent-login call: trades the stored deviceId for a fresh access
  * token, no password needed. Returns null (rather than throwing) whenever
  * there's nothing to try or the device session is gone, since callers treat
- * "couldn't refresh" as a normal, expected outcome. */
-export async function refreshSession(): Promise<{ token: string; user: User } | null> {
+ * "couldn't refresh" as a normal, expected outcome. Concurrent callers share
+ * one in-flight call. */
+export function refreshSession(): Promise<{ token: string; user: User } | null> {
+  if (!refreshPromise) {
+    refreshPromise = performRefresh().finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
+}
+
+async function performRefresh(): Promise<{ token: string; user: User } | null> {
   const deviceId = getStoredDeviceId();
   if (!deviceId) return null;
   try {

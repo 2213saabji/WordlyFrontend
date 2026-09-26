@@ -76,6 +76,13 @@ textarea,
   cursor: text;
 }
 
+/* Returning player with a cached session: hide the server-rendered session
+   loader until hydration swaps in their cached screen — see the inline
+   script in app/layout.tsx. */
+html[data-cached-session] .auth-pending {
+  visibility: hidden;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
