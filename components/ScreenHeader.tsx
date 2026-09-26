@@ -1,4 +1,15 @@
-export default function ScreenHeader({ title, onBack }: { title: string; onBack: () => void }) {
+import type { ReactNode } from "react";
+
+export default function ScreenHeader({
+  title,
+  onBack,
+  trailing,
+}: {
+  title: string;
+  onBack: () => void;
+  /** Optional right-aligned slot (e.g. the Infinite hub's tier chip). */
+  trailing?: ReactNode;
+}) {
   return (
     <div className="mb-2 flex animate-fade-in-up items-center gap-3">
       <button
@@ -23,6 +34,7 @@ export default function ScreenHeader({ title, onBack }: { title: string; onBack:
         </svg>
       </button>
       <h1 className="text-xl font-bold tracking-tight">{title}</h1>
+      {trailing && <div className="ml-auto">{trailing}</div>}
     </div>
   );
 }

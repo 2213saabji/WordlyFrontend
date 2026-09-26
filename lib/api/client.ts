@@ -1,22 +1,9 @@
-import type {
-  AuthenticationResponseJSON,
-  PublicKeyCredentialCreationOptionsJSON,
-  PublicKeyCredentialRequestOptionsJSON,
-  RegistrationResponseJSON,
-} from "@simplewebauthn/browser";
-import type {
-  ApiErrorBody,
-  AuthResponse,
-  Game,
-  GlobalDailyLeaderboardResponse,
-  GlobalWeeklyLeaderboardResponse,
-  Group,
-  GroupDailyLeaderboardResponse,
-  GroupWeeklyLeaderboardResponse,
-  LeaderboardResponse,
-  Pagination,
-  User,
-} from "@/types";
+// Shared HTTP client for every feature module in lib/api/: base URL, the
+// in-memory access token, the stored deviceId, silent session refresh, the
+// timeout/retry policy and pagination helpers. Feature modules only ever
+// call apiFetch() — none of them talk to fetch() directly.
+
+import type { ApiErrorBody, User } from "@/types";
 import { clearCache } from "@/lib/cache";
 
 const API_BASE_URL =
@@ -102,7 +89,7 @@ export class ApiRequestError extends Error {
   }
 }
 
-interface ApiFetchOptions {
+export interface ApiFetchOptions {
   method?: string;
   body?: unknown;
   skipAuth?: boolean;
@@ -135,8 +122,9 @@ function clearSession(): void {
 
 function redirectToLogin(): void {
   // The login screen lives at "/" (it's part of the single-page app, not a
-  // separate route) — the only other real route is /reset-password/[token],
-  // which never makes an authenticated call, so it can't hit this path.
+  // separate route). Of the other real routes, /reset-password/[token] never
+  // makes an authenticated call; /verify-email/[token] does, and lands here
+  // (→ "/") when its link is opened without a signed-in session.
   if (typeof window !== "undefined" && window.location.pathname !== "/") {
     // Plain module outside the React tree (no useRouter here); a hard
     // navigation also clears any in-memory state left over from the expired
@@ -227,63 +215,13 @@ function isRetryableFailure(err: unknown): boolean {
 // policy is "success takes exactly one request; only a 5xx or a timeout
 // earns a second attempt, with identical arguments." A second consecutive
 // failure is final and reaches the caller as normal.
-async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
+export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
   try {
     return await performRequest<T>(path, options);
   } catch (err) {
     if (!isRetryableFailure(err)) throw err;
     return await performRequest<T>(path, options);
   }
-}
-
-// --- Auth ---
-
-export function signup(payload: {
-  username: string;
-  email: string;
-  password: string;
-}): Promise<AuthResponse> {
-  return apiFetch("/auth/signup", {
-    method: "POST",
-    body: { ...payload, deviceId: getDeviceId() },
-    skipAuth: true,
-  });
-}
-
-export function login(payload: {
-  email: string;
-  password: string;
-}): Promise<AuthResponse> {
-  return apiFetch("/auth/login", {
-    method: "POST",
-    body: { ...payload, deviceId: getDeviceId() },
-    skipAuth: true,
-  });
-}
-
-export function getMe(): Promise<{ user: User }> {
-  return apiFetch("/auth/me");
-}
-
-/** The backend trims whitespace and re-validates length (2-30 chars) server
- * side before saving, so the returned user object — not the raw input — is
- * the actual saved value; callers should apply that object rather than
- * optimistically setting the name from what was typed. */
-export function updateUsername(username: string): Promise<{ user: User }> {
-  return apiFetch("/auth/username", { method: "PATCH", body: { username } });
-}
-
-/** idToken is the signed JWT credential from Google Identity Services — the
- * backend verifies it against Google itself, so nothing decoded from it
- * client-side (email, name, ...) is ever sent instead. Same deviceId scheme
- * as login/signup; the backend auto-links this Google identity to an
- * existing email/password account with the same email. */
-export function googleAuth(payload: { idToken: string; deviceId: string }): Promise<AuthResponse> {
-  return apiFetch("/auth/google", {
-    method: "POST",
-    body: payload,
-    skipAuth: true,
-  });
 }
 
 /** The silent-login call: trades the stored deviceId for a fresh access
@@ -316,132 +254,8 @@ async function performRefresh(): Promise<{ token: string; user: User } | null> {
   }
 }
 
-/** Revokes this device's session server-side. Requires the current access
- * token, so call it before clearing local state. */
-export function logoutDevice(): Promise<{ message: string }> {
-  return apiFetch("/auth/logout", { method: "POST", body: { deviceId: getDeviceId() } });
-}
 
-export function forgotPassword(email: string): Promise<{ message: string }> {
-  return apiFetch("/auth/forgot-password", {
-    method: "POST",
-    body: { email },
-    skipAuth: true,
-  });
-}
-
-export function resetPassword(
-  token: string,
-  password: string,
-): Promise<{ message: string }> {
-  return apiFetch(`/auth/reset-password/${token}`, {
-    method: "POST",
-    body: { password },
-    skipAuth: true,
-  });
-}
-
-// --- Passkeys (WebAuthn) ---
-// Recovery path for when localStorage is cleared and the stored deviceId is
-// lost with it — see the Passkey API doc. Enrollment needs an authenticated
-// session already; the authenticate/* pair is deliberately public (there's
-// no deviceId left to send) — it's how a wiped device gets back in without
-// a password.
-
-export interface WebauthnDevice {
-  deviceId: string;
-  deviceType: string;
-  backedUp: boolean;
-  createdAt: string;
-  lastUsedAt: string;
-}
-
-export function getWebauthnDevices(): Promise<{ devices: WebauthnDevice[] }> {
-  return apiFetch("/auth/webauthn/devices");
-}
-
-export function webauthnRegisterOptions(deviceId: string): Promise<PublicKeyCredentialCreationOptionsJSON> {
-  return apiFetch("/auth/webauthn/register/options", { method: "POST", body: { deviceId } });
-}
-
-export function webauthnRegisterVerify(
-  deviceId: string,
-  response: RegistrationResponseJSON,
-): Promise<{ message: string }> {
-  return apiFetch("/auth/webauthn/register/verify", { method: "POST", body: { deviceId, response } });
-}
-
-export function webauthnAuthenticateOptions(): Promise<PublicKeyCredentialRequestOptionsJSON> {
-  return apiFetch("/auth/webauthn/authenticate/options", { method: "POST", body: {}, skipAuth: true });
-}
-
-export function webauthnAuthenticateVerify(
-  response: AuthenticationResponseJSON,
-): Promise<{ token: string; deviceId: string; user: User }> {
-  return apiFetch("/auth/webauthn/authenticate/verify", { method: "POST", body: { response }, skipAuth: true });
-}
-
-export function webauthnRevoke(deviceId: string): Promise<{ message: string }> {
-  return apiFetch("/auth/webauthn/revoke", { method: "POST", body: { deviceId } });
-}
-
-// --- Game ---
-
-export function getTodayGame(): Promise<{ game: Game }> {
-  return apiFetch("/game/today");
-}
-
-export function submitGuess(guess: string): Promise<{ result: number[]; game: Game }> {
-  return apiFetch("/game/guess", { method: "POST", body: { guess } });
-}
-
-export function getHistory(): Promise<{ games: Game[] }> {
-  return apiFetch("/game/history");
-}
-
-// --- Infinite mode (unlimited, per-round random word — never touches stats/leaderboards) ---
-
-export function getInfiniteCurrent(): Promise<{ game: Game }> {
-  return apiFetch("/game/infinite/current");
-}
-
-export function startNewInfiniteRound(): Promise<{ game: Game }> {
-  return apiFetch("/game/infinite/new", { method: "POST" });
-}
-
-export function submitInfiniteGuess(guess: string): Promise<{ result: number[]; game: Game }> {
-  return apiFetch("/game/infinite/guess", { method: "POST", body: { guess } });
-}
-
-export function getInfiniteHistory(): Promise<{ games: Game[] }> {
-  return apiFetch("/game/infinite/history");
-}
-
-// --- Groups ---
-
-export function createGroup(name: string): Promise<{ group: Group }> {
-  return apiFetch("/groups", { method: "POST", body: { name } });
-}
-
-// Docs describe the response as "the updated group object" without a wrapper,
-// but every sibling endpoint wraps in { group }; normalize to accept either.
-export async function joinGroup(code: string): Promise<Group> {
-  const data = await apiFetch<Group | { group: Group }>(
-    `/groups/join/${encodeURIComponent(code)}`,
-    { method: "POST" },
-  );
-  return "group" in data ? data.group : data;
-}
-
-export function getMyGroups(options: PageOptions = {}): Promise<{ groups: Group[]; pagination: Pagination }> {
-  return apiFetch(`/groups/mine?${pageQuery(options)}`);
-}
-
-export function leaveGroup(id: string): Promise<{ message: string }> {
-  return apiFetch(`/groups/${id}/leave`, { method: "POST" });
-}
-
-interface PageOptions {
+export interface PageOptions {
   page?: number;
   limit?: number;
 }
@@ -449,56 +263,10 @@ interface PageOptions {
 /** page/limit default to the same values the backend defaults to (1/20) —
  * passed explicitly anyway so the batch size here can't silently drift from
  * what the UI assumes it's getting. */
-function pageQuery({ page = 1, limit = 20 }: PageOptions, extra?: Record<string, string | undefined>): string {
+export function pageQuery({ page = 1, limit = 20 }: PageOptions, extra?: Record<string, string | undefined>): string {
   const params = new URLSearchParams({ page: String(page), limit: String(limit) });
   for (const [key, value] of Object.entries(extra ?? {})) {
     if (value) params.set(key, value);
   }
   return params.toString();
-}
-
-export function getLeaderboard(id: string, options: PageOptions = {}): Promise<LeaderboardResponse> {
-  return apiFetch(`/groups/${id}/leaderboard?${pageQuery(options)}`);
-}
-
-export function getGlobalDailyLeaderboard(
-  options: PageOptions & { date?: string } = {},
-): Promise<GlobalDailyLeaderboardResponse> {
-  return apiFetch(`/leaderboard/daily?${pageQuery(options, { date: options.date })}`);
-}
-
-export function getGlobalWeeklyLeaderboard(
-  options: PageOptions & { date?: string } = {},
-): Promise<GlobalWeeklyLeaderboardResponse> {
-  return apiFetch(`/leaderboard/weekly?${pageQuery(options, { date: options.date })}`);
-}
-
-export function getGroupDailyLeaderboard(
-  id: string,
-  options: PageOptions & { date?: string } = {},
-): Promise<GroupDailyLeaderboardResponse> {
-  return apiFetch(`/groups/${id}/leaderboard/daily?${pageQuery(options, { date: options.date })}`);
-}
-
-export function getGroupWeeklyLeaderboard(
-  id: string,
-  options: PageOptions & { date?: string } = {},
-): Promise<GroupWeeklyLeaderboardResponse> {
-  return apiFetch(`/groups/${id}/leaderboard/weekly?${pageQuery(options, { date: options.date })}`);
-}
-
-// --- Contact ---
-
-export type ContactCategory = "bug" | "word-suggestion" | "account" | "groups" | "other";
-
-/** Public — no auth needed, and none is sent (the contact page is reachable
- * whether or not you're signed in). Fire-and-forget once the 201 comes
- * back: no confirmation email, no echoed data. */
-export function submitContactMessage(payload: {
-  category: ContactCategory;
-  name: string;
-  email: string;
-  message: string;
-}): Promise<{ message: string }> {
-  return apiFetch("/contact", { method: "POST", body: payload, skipAuth: true });
 }

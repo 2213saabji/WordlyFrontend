@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Sora, Geist_Mono } from "next/font/google";
+import { Sora, Geist_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { JsonLd, SITE_NAME, SITE_URL } from "@/lib/seo";
 
@@ -13,7 +13,14 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const TITLE = "GuessWord — Free Daily Word Guessing Game";
+// Numerals only — tier numbers and counters on the Infinite tier screens.
+const spaceGrotesk = Space_Grotesk({
+  variable: "--font-space-grotesk",
+  subsets: ["latin"],
+  weight: "700",
+});
+
+const TITLE ="GuessWord — Free Daily Word Guessing Game";
 const DESCRIPTION =
   "Guess the secret five-letter word in six tries. Play a new puzzle every day, practice with unlimited rounds in Infinite mode, and compete with friends on group and global leaderboards — free, no download required.";
 
@@ -138,7 +145,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${sora.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${sora.variable} ${geistMono.variable} ${spaceGrotesk.variable} h-full antialiased`}
       // The inline script below may add data-cached-session before hydration.
       suppressHydrationWarning
     >

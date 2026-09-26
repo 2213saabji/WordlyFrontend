@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import GuessWordBoard from "@/components/GuessWordBoard";
 import Keyboard from "@/components/Keyboard";
 import Loader from "@/components/Loader";
@@ -8,12 +8,23 @@ import {
   getGroupDailyLeaderboard,
   getInfiniteCurrent,
   getTodayGame,
+  revealInfiniteHint,
   startNewInfiniteRound,
   submitGuess,
   submitInfiniteGuess,
   ApiRequestError,
 } from "@/lib/api";
 import ShareModal from "@/components/ShareModal";
+import { TierChip } from "@/components/TierBadge";
+import {
+  HintsOffNotice,
+  TierResultCard,
+  TodayCard,
+  TodayStrip,
+  useInfiniteTier,
+  type TierRoundResult,
+} from "@/components/InfiniteTierPanel";
+import { INFINITE_TIERS_ENABLED } from "@/lib/flags";
 import { useAuth } from "@/lib/auth-context";
 import { readCache, writeCache } from "@/lib/cache";
 import { isKnownGuess } from "@/lib/word-check";
@@ -226,23 +237,24 @@ function DifficultyBadge({ difficulty }: { difficulty?: GameDifficulty }) {
   );
 }
 
-/** Hint text arrives with the game object itself (even mid-round) — this
- * just toggles showing it, no separate fetch. Stays locked (shows a lock
- * icon instead) until HINT_UNLOCK_ATTEMPT guesses are in. */
+/** Toggles showing the hint. Its text either arrives with the game object
+ * or, for Infinite with tiers on, is fetched on first reveal (see
+ * toggleHint in PlayScreen). Stays locked (shows a lock icon instead) until
+ * HINT_UNLOCK_ATTEMPT guesses are in. */
 function HintButton({
-  hint,
+  available,
   unlocked,
   revealed,
   onToggle,
   onLockedClick,
 }: {
-  hint?: string;
+  available: boolean;
   unlocked: boolean;
   revealed: boolean;
   onToggle: () => void;
   onLockedClick: () => void;
 }) {
-  if (!hint) return null;
+  if (!available) return null;
   if (!unlocked) {
     return (
       <button
@@ -674,11 +686,14 @@ export default function PlayScreen({
   onBack,
   onOpenLeaderboard,
   onPlayInfinite,
+  onOpenTierLeaderboard,
 }: {
   mode: PlayMode;
   onBack: () => void;
   onOpenLeaderboard: (groupId?: string) => void;
   onPlayInfinite: () => void;
+  /** The tier result's "Board" / "Leaderboard" button. */
+  onOpenTierLeaderboard?: () => void;
 }) {
   const { user, refreshUser } = useAuth();
   // Seeded from the last-seen board (lib/cache.ts) so a reload renders it
@@ -697,6 +712,26 @@ export default function PlayScreen({
   const [hintRevealed, setHintRevealed] = useState(false);
   const [hintLockedMsgOpen, setHintLockedMsgOpen] = useState(false);
   const fullCountdown = useFullCountdownToNextUtcMidnight();
+
+  // Infinite tier leaderboard: tier status, today's progress and the
+  // active-time heartbeat. Inert for Daily or with the feature flag off.
+  const tierMode = INFINITE_TIERS_ENABLED && mode === "infinite";
+  const { me: tierMe, tiers, today, setToday, hintsOffFrom } = useInfiniteTier(tierMode, game);
+  // The tier summary for the round that just ended (from its final guess
+  // response) — shown as a bottom sheet on mobile, a sidebar card on desktop.
+  const [tierResult, setTierResult] = useState<TierRoundResult | null>(null);
+  const [resultSheetOpen, setResultSheetOpen] = useState(false);
+  // Rank going into the next round, for the result's ↑/↓ delta.
+  const prevRankRef = useRef<number | null | undefined>(undefined);
+  useEffect(() => {
+    if (tierMe && prevRankRef.current === undefined) prevRankRef.current = tierMe.rank;
+  }, [tierMe]);
+  // With tiers on, an in-progress round no longer carries `hint` — it's
+  // fetched from POST /game/infinite/hint on first reveal and kept here.
+  const [fetchedHint, setFetchedHint] = useState<string | null>(null);
+  // The hint endpoint said no (403 HINTS_DISABLED_FOR_TIER), e.g. after an
+  // overnight promotion into Tier 6 mid-round.
+  const [hintsRejected, setHintsRejected] = useState(false);
 
   // Clicking the still-locked hint icon surfaces the "unlocks after guess N"
   // message; it's not shown by default, and closes itself after 10s if the
@@ -770,6 +805,10 @@ export default function PlayScreen({
       setError(null);
       setHintRevealed(false);
       setHintLockedMsgOpen(false);
+      setFetchedHint(null);
+      setHintsRejected(false);
+      setTierResult(null);
+      setResultSheetOpen(false);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Something went wrong");
     }
@@ -798,9 +837,19 @@ export default function PlayScreen({
     setError(null);
     try {
       const submit = mode === "daily" ? submitGuess : submitInfiniteGuess;
-      const { game } = await submit(currentGuess);
+      const res = await submit(currentGuess);
+      const { game } = res;
       setGame(game);
       setCurrentGuess("");
+      // The guess that ends an Infinite round carries the updated tier
+      // progress — no need to wait for the next heartbeat.
+      const tierBlock = mode === "infinite" ? (res as Awaited<ReturnType<typeof submitInfiniteGuess>>).tier : undefined;
+      if (tierBlock) {
+        setToday(tierBlock.today);
+        setTierResult({ block: tierBlock, prevRank: prevRankRef.current ?? null });
+        setResultSheetOpen(true);
+        prevRankRef.current = tierBlock.rank;
+      }
       // Infinite rounds never touch stats/streaks — only refresh the daily
       // streak/wins display when a daily game actually finishes.
       if (mode === "daily" && game.status !== "in-progress") {
@@ -818,7 +867,7 @@ export default function PlayScreen({
     } finally {
       setSubmitting(false);
     }
-  }, [mode, currentGuess, submitting, refreshUser]);
+  }, [mode, currentGuess, submitting, refreshUser, setToday]);
 
   const handleKey = useCallback(
     (key: string) => {
@@ -883,6 +932,34 @@ export default function PlayScreen({
   const known = buildKnownLetters(game.guesses);
   const hintUnlocked = game.guesses.length >= HINT_UNLOCK_ATTEMPT;
 
+  // --- hints: from the payload (Daily, finished rounds, older backend) or,
+  // with tiers on, from POST /game/infinite/hint; hidden in Tiers 1–6. ---
+  const hintsOnForTier = game.hintsEnabled ?? tierMe?.hintsEnabled;
+  const hintsOff = tierMode && !finished && !game.hint && (hintsOnForTier === false || hintsRejected);
+  const hintText = game.hint ?? fetchedHint ?? undefined;
+  const hintAvailable = !hintsOff && (!!hintText || (tierMode && !finished && hintsOnForTier === true));
+
+  async function toggleHint() {
+    if (hintText) {
+      setHintRevealed((r) => !r);
+      return;
+    }
+    try {
+      const { hint } = await revealInfiniteHint();
+      setFetchedHint(hint);
+      setHintRevealed(true);
+    } catch (err) {
+      if (err instanceof ApiRequestError && err.data?.code === "HINTS_DISABLED_FOR_TIER") setHintsRejected(true);
+      else setError(err instanceof ApiRequestError ? err.message : "Something went wrong");
+    }
+  }
+
+  // "word 7": today's completed rounds, plus the one being played.
+  const wordOfDay = tierMode && today ? today.gamesCompleted + (finished ? 0 : 1) : null;
+  const hintsOffNotice = hintsOff && (
+    <HintsOffNotice fromName={hintsOffFrom?.name} fromTier={hintsOffFrom?.tier} />
+  );
+
   return (
     <div className="relative mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-4 md:px-10 md:py-10">
       {/* mobile top bar */}
@@ -896,19 +973,26 @@ export default function PlayScreen({
           <BackIcon />
         </button>
         <span className="flex min-w-0 flex-col gap-0.5">
-          <span className="truncate text-[15.5px] font-semibold">{mode === "daily" ? "Play Daily" : "Infinite"}</span>
+          <span className="truncate text-[15.5px] font-semibold">
+            {mode === "daily" ? "Play Daily" : wordOfDay ? `Infinite · word ${wordOfDay}` : "Infinite"}
+          </span>
           <span className="truncate text-xs text-foreground/55">
             {mode === "daily" ? `No. ${wordNumber} · ` : ""}guess {guessNumber} of {MAX_ATTEMPTS}
           </span>
         </span>
-        {mode === "infinite" && !finished && (
-          <button
-            type="button"
-            onClick={handleNextWord}
-            className="ml-auto flex-none whitespace-nowrap rounded-full bg-white/8 px-3.5 py-2 text-xs font-semibold text-foreground/75 transition-colors hover:text-accent"
-          >
-            New word
-          </button>
+        {mode === "infinite" && (!finished || (tierMode && tierMe)) && (
+          <span className="ml-auto flex flex-none items-center gap-2">
+            {tierMode && tierMe && <TierChip tier={tierMe.tier} name={tierMe.tierName} />}
+            {!finished && (
+              <button
+                type="button"
+                onClick={handleNextWord}
+                className="flex-none whitespace-nowrap rounded-full bg-white/8 px-3.5 py-2 text-xs font-semibold text-foreground/75 transition-colors hover:text-accent"
+              >
+                New word
+              </button>
+            )}
+          </span>
         )}
         {mode === "daily" && groupDaily && groupDaily.rank && (
           <span className="ml-auto flex flex-none items-center gap-1.5 whitespace-nowrap rounded-full bg-accent/13 px-3.5 py-2 text-[12.5px] font-semibold text-accent">
@@ -918,23 +1002,29 @@ export default function PlayScreen({
         )}
       </div>
 
-      {(game.difficulty || game.hint) && (
+      {tierMode && today && (
+        <div className="mt-4 md:hidden">
+          <TodayStrip today={today} />
+        </div>
+      )}
+
+      {(game.difficulty || hintAvailable) && (
         <div className="mt-3 flex flex-col gap-1.5 md:hidden">
           <div className="flex items-center gap-2">
             <DifficultyBadge difficulty={game.difficulty} />
             <HintButton
-              hint={game.hint}
+              available={hintAvailable}
               unlocked={hintUnlocked}
               revealed={hintRevealed}
-              onToggle={() => setHintRevealed((r) => !r)}
+              onToggle={toggleHint}
               onLockedClick={() => setHintLockedMsgOpen(true)}
             />
           </div>
-          {game.hint && !hintUnlocked && (
+          {hintAvailable && !hintUnlocked && (
             <HintLockedMessage show={hintLockedMsgOpen} className="text-[13px] text-foreground/50" />
           )}
-          {game.hint && hintUnlocked && hintRevealed && (
-            <p className="animate-fade-in text-[13px] text-foreground/65">{game.hint}</p>
+          {hintText && hintUnlocked && hintRevealed && (
+            <p className="animate-fade-in text-[13px] text-foreground/65">{hintText}</p>
           )}
         </div>
       )}
@@ -948,7 +1038,7 @@ export default function PlayScreen({
         <aside className="hidden flex-col gap-6.5 md:flex">
           <div className="flex flex-col gap-2">
             <span className="text-[12.5px] font-semibold uppercase tracking-[0.18em] text-foreground/50">
-              {mode === "daily" ? formatDateEyebrow(game.date) : "Infinite mode"}
+              {mode === "daily" ? formatDateEyebrow(game.date) : wordOfDay ? `Infinite · word ${wordOfDay}` : "Infinite mode"}
             </span>
             <span className="text-[32px] font-light leading-none tracking-[-0.02em]">
               {mode === "daily" ? `Word ${wordNumber}` : "Free play"}
@@ -958,23 +1048,31 @@ export default function PlayScreen({
             </span>
           </div>
 
-          {(game.difficulty || game.hint) && (
+          {tierMode && today && (
+            <TodayCard
+              today={today}
+              stickDays={tierMe?.counter.stickDays}
+              daysToStick={tierMe?.counter.daysToStick}
+            />
+          )}
+
+          {(game.difficulty || hintAvailable) && (
             <div className="flex flex-col gap-2">
               <div className="flex items-center gap-2">
                 <DifficultyBadge difficulty={game.difficulty} />
                 <HintButton
-                  hint={game.hint}
+                  available={hintAvailable}
                   unlocked={hintUnlocked}
                   revealed={hintRevealed}
-                  onToggle={() => setHintRevealed((r) => !r)}
+                  onToggle={toggleHint}
                   onLockedClick={() => setHintLockedMsgOpen(true)}
                 />
               </div>
-              {game.hint && !hintUnlocked && (
+              {hintAvailable && !hintUnlocked && (
                 <HintLockedMessage show={hintLockedMsgOpen} className="text-[13px] leading-relaxed text-foreground/50" />
               )}
-              {game.hint && hintUnlocked && hintRevealed && (
-                <p className="animate-fade-in text-[13px] leading-relaxed text-foreground/65">{game.hint}</p>
+              {hintText && hintUnlocked && hintRevealed && (
+                <p className="animate-fade-in text-[13px] leading-relaxed text-foreground/65">{hintText}</p>
               )}
             </div>
           )}
@@ -993,11 +1091,14 @@ export default function PlayScreen({
 
         {/* center column */}
         <div className="relative flex w-full flex-1 flex-col items-center gap-6">
-          {finished && (
+          {/* With a tier result, that replaces this card: desktop shows it in
+              the sidebar, mobile as a sheet — this reappears on mobile only
+              once the sheet is dismissed, so there's always a Next word. */}
+          {finished && !(tierResult && resultSheetOpen) && (
             <div
               className={`w-full max-w-xl animate-fade-in-up rounded-[20px] border p-4 text-center shadow-sm ${
                 won ? "border-correct/40 bg-correct/10 shadow-correct/10" : "border-border bg-surface"
-              }`}
+              } ${tierResult ? "md:hidden" : ""}`}
             >
               <p className="text-lg font-bold">
                 {won ? (
@@ -1037,11 +1138,27 @@ export default function PlayScreen({
             interactive={!finished}
           />
 
+          {hintsOffNotice && <div className="w-full max-w-lg md:hidden">{hintsOffNotice}</div>}
+
           <Keyboard guesses={game.guesses} onKey={handleKey} disabled={finished || submitting} />
         </div>
 
         {/* right sidebar */}
         <aside className="hidden flex-col gap-4.5 md:flex">
+          {finished && tierResult && (
+            <div className="animate-fade-in-up">
+              <TierResultCard
+                variant="card"
+                game={game}
+                result={tierResult}
+                me={tierMe}
+                tiers={tiers}
+                onNext={handleNextWord}
+                onBoard={onOpenTierLeaderboard}
+              />
+            </div>
+          )}
+          {hintsOffNotice}
           {mode === "daily" ? (
             <div className="flex items-center justify-between gap-4 rounded-3xl border border-border bg-white/4.5 p-5">
               <span className="flex flex-col gap-0.75">
@@ -1053,7 +1170,10 @@ export default function PlayScreen({
             <div className="flex items-center justify-between gap-4 rounded-3xl border border-border bg-white/4.5 p-5">
               <span className="flex flex-col gap-0.75">
                 <span className="text-[12.5px] text-foreground/50">Unlimited practice</span>
-                <span className="text-[14.5px] font-semibold">No stats, no streak</span>
+                <span className="text-[14.5px] font-semibold">
+                  {/* With tiers on, finished rounds do count — toward the tier board. */}
+                  {tierMode && tierMe ? `Counts toward ${tierMe.tierName}` : "No stats, no streak"}
+                </span>
               </span>
               {!finished && (
                 <button
@@ -1078,6 +1198,30 @@ export default function PlayScreen({
       </div>
 
       {howToPlayOpen && <HowToPlayModal onClose={() => setHowToPlayOpen(false)} />}
+
+      {/* mobile: tier result as a bottom sheet over the dimmed board; tap
+          outside to dismiss (the regular result card then shows instead). */}
+      {finished && tierResult && resultSheetOpen && (
+        <div className="fixed inset-0 z-30 flex flex-col justify-end md:hidden">
+          <button
+            type="button"
+            aria-label="Close result"
+            onClick={() => setResultSheetOpen(false)}
+            className="absolute inset-0 animate-fade-in bg-[#09060b]/55"
+          />
+          <div className="relative animate-fade-in-up">
+            <TierResultCard
+              variant="sheet"
+              game={game}
+              result={tierResult}
+              me={tierMe}
+              tiers={tiers}
+              onNext={handleNextWord}
+              onBoard={onOpenTierLeaderboard}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

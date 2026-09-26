@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { useScreen, type Screen } from "@/lib/screen-context";
 import EditNameModal from "@/components/EditNameModal";
+import { TierChip } from "@/components/TierBadge";
+import { NotificationBell } from "@/components/Notifications";
+import { INFINITE_TIERS_ENABLED } from "@/lib/flags";
 
 const LOGO_TILES = [
   { char: "G", className: "bg-accent text-background" },
@@ -57,9 +60,14 @@ const NAV_LINKS: { label: string; screen: Screen; isActive: (s: Screen) => boole
   {
     label: "Leaderboard",
     screen: { name: "leaderboard" },
-    isActive: (s) => s.name === "leaderboard" && !s.groupId,
+    isActive: (s) =>
+      (s.name === "leaderboard" && !s.groupId) || s.name === "tier-leaderboard" || s.name === "how-tiers",
   },
-  { label: "History", screen: { name: "history" }, isActive: (s) => s.name === "history" },
+  {
+    label: "History",
+    screen: { name: "history" },
+    isActive: (s) => s.name === "history" || s.name === "tier-history",
+  },
 ];
 
 export default function Nav() {
@@ -136,7 +144,25 @@ export default function Nav() {
         <div className="ml-auto flex items-center gap-3 text-sm">
           {user ? (
             <>
+              {INFINITE_TIERS_ENABLED && (
+                <NotificationBell
+                  onNavigate={push}
+                  onOpenScreen={() => push({ name: "notifications" })}
+                />
+              )}
               <span className="hidden animate-fade-in items-center gap-3 sm:flex">
+                {/* Infinite tier badge — only once /auth/me reports a tier
+                    (after the player's first completed Infinite game). */}
+                {INFINITE_TIERS_ENABLED && user.infinite && (
+                  <Link
+                    href="/"
+                    onClick={() => push({ name: "infinite-hub" })}
+                    title="Your Infinite tier"
+                    className="rounded-full transition-opacity duration-150 hover:opacity-80"
+                  >
+                    <TierChip tier={user.infinite.tier} name={user.infinite.tierName} round />
+                  </Link>
+                )}
                 <button
                   type="button"
                   onClick={() => setEditNameOpen(true)}

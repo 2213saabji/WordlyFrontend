@@ -2,8 +2,16 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import Leaderboard from "@/components/Leaderboard";
+import TierLeaderboard from "@/components/TierLeaderboard";
+import TierPromotionAnnouncer from "@/components/TierPromotionModal";
 import Loader from "@/components/Loader";
 import HomeScreen from "@/components/screens/HomeScreen";
+import InfiniteHubScreen from "@/components/screens/InfiniteHubScreen";
+import HowTiersWorkScreen from "@/components/screens/HowTiersWorkScreen";
+import TierHistoryScreen from "@/components/screens/TierHistoryScreen";
+import DiamondStatusScreen from "@/components/screens/DiamondStatusScreen";
+import VerificationFlowScreen from "@/components/screens/VerificationFlowScreen";
+import { NotificationsScreen } from "@/components/Notifications";
 import PlayScreen from "@/components/screens/PlayScreen";
 import HistoryScreen from "@/components/screens/HistoryScreen";
 import GroupsScreen from "@/components/screens/GroupsScreen";
@@ -11,6 +19,7 @@ import LoginScreen from "@/components/screens/LoginScreen";
 import SignupScreen from "@/components/screens/SignupScreen";
 import ForgotPasswordScreen from "@/components/screens/ForgotPasswordScreen";
 import { useAuth } from "@/lib/auth-context";
+import { INFINITE_TIERS_ENABLED, MONEY_ENABLED } from "@/lib/flags";
 import { useScreen } from "@/lib/screen-context";
 import { parseReplayParam, type ReplayInvite } from "@/lib/share";
 
@@ -46,6 +55,12 @@ function AppShell() {
 
   return (
     <div className="flex flex-1 flex-col">
+      {INFINITE_TIERS_ENABLED && (
+        <TierPromotionAnnouncer
+          onOpenTierLeaderboard={(tier) => push({ name: "tier-leaderboard", tier })}
+          onPlay={() => push({ name: "play", mode: "infinite" })}
+        />
+      )}
       {invite && (
         <div className="mx-auto flex w-full max-w-lg animate-fade-in items-center gap-3 px-4 pt-4">
           <p className="flex-1 rounded-xl border border-accent/25 bg-accent/10 px-4 py-2.5 text-sm text-foreground/80">
@@ -68,11 +83,38 @@ function AppShell() {
         {screen.name === "home" && (
           <HomeScreen
             onPlay={() => push({ name: "play", mode: "daily" })}
-            onPlayInfinite={() => push({ name: "play", mode: "infinite" })}
+            onPlayInfinite={() =>
+              push(INFINITE_TIERS_ENABLED ? { name: "infinite-hub" } : { name: "play", mode: "infinite" })
+            }
             onHistory={() => push({ name: "history" })}
             onGroups={() => push({ name: "groups" })}
             onOpenLeaderboard={(groupId?: string) => push({ name: "leaderboard", groupId })}
           />
+        )}
+        {screen.name === "infinite-hub" && (
+          <InfiniteHubScreen
+            onBack={back}
+            onPlay={() => push({ name: "play", mode: "infinite" })}
+            onOpenTierLeaderboard={() => push({ name: "tier-leaderboard" })}
+            onOpenHowTiersWork={() => push({ name: "how-tiers" })}
+            onOpenDiamond={() => push({ name: "diamond" })}
+            onOpenTierHistory={() => push({ name: "tier-history" })}
+          />
+        )}
+        {screen.name === "how-tiers" && <HowTiersWorkScreen onBack={back} />}
+        {screen.name === "tier-history" && <TierHistoryScreen onBack={back} />}
+        {screen.name === "diamond" && (
+          <DiamondStatusScreen
+            onBack={back}
+            onPlay={() => push({ name: "play", mode: "infinite" })}
+            onVerify={MONEY_ENABLED ? (step) => push({ name: "verify", step }) : undefined}
+          />
+        )}
+        {screen.name === "notifications" && INFINITE_TIERS_ENABLED && (
+          <NotificationsScreen onBack={back} onNavigate={(target) => replace(target)} />
+        )}
+        {screen.name === "verify" && MONEY_ENABLED && (
+          <VerificationFlowScreen startStep={screen.step} onClose={back} />
         )}
         {screen.name === "play" && (
           <PlayScreen
@@ -80,6 +122,7 @@ function AppShell() {
             onBack={back}
             onOpenLeaderboard={(groupId?: string) => push({ name: "leaderboard", groupId })}
             onPlayInfinite={() => replace({ name: "play", mode: "infinite" })}
+            onOpenTierLeaderboard={() => push({ name: "tier-leaderboard" })}
           />
         )}
         {screen.name === "history" && <HistoryScreen onBack={back} />}
@@ -89,6 +132,14 @@ function AppShell() {
         {screen.name === "leaderboard" && (
           <Leaderboard
             groupId={screen.groupId}
+            onBack={back}
+            onSwitchScope={(groupId) => replace({ name: "leaderboard", groupId })}
+            onOpenInfinite={INFINITE_TIERS_ENABLED ? () => replace({ name: "tier-leaderboard" }) : undefined}
+          />
+        )}
+        {screen.name === "tier-leaderboard" && (
+          <TierLeaderboard
+            initialTier={screen.tier}
             onBack={back}
             onSwitchScope={(groupId) => replace({ name: "leaderboard", groupId })}
           />
