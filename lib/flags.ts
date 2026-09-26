@@ -8,7 +8,7 @@
  * Infinite hub, tier leaderboard, "How tiers work" screen, the "∞ Infinite"
  * leaderboard scope and the Nav tier chip are all unreachable. Turn on once
  * the backend's tier endpoints are live. */
-export const INFINITE_TIERS_ENABLED = process.env.NEXT_PUBLIC_INFINITE_TIERS_ENABLED === "true";
+export const INFINITE_TIERS_ENABLED = true
 
 /** Prize money for the Infinite tier leaderboard (PRD Phase 2) — gates every
  * money-related view and action (prize amounts, payouts, ...). Money lives
