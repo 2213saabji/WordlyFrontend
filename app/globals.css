@@ -29,6 +29,7 @@
   --color-danger: var(--color-danger);
   --font-sans: var(--font-sora);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-space-grotesk);
 
   --animate-fade-in-up: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
   /* cubic-bezier(0.16, 1, 0.3, 1) above is an ease-out-quint curve — nearly

@@ -28,9 +28,9 @@ const PAGE_SIZE = 20;
 // The next batch starts loading once the row this many positions from the
 // end of what's currently loaded scrolls into view, rather than waiting
 // for the user to actually hit the bottom.
-const LOAD_MORE_LOOKAHEAD = 10;
+export const LOAD_MORE_LOOKAHEAD = 10;
 
-type NormalizedEntry = {
+export type NormalizedEntry = {
   userId: string;
   username: string;
   rank: number;
@@ -52,7 +52,7 @@ type NormalizedData = {
   rawMe: NormalizedEntry | null | undefined;
 };
 
-const GROUPS_CACHE_KEY = "leaderboard:groups";
+export const GROUPS_CACHE_KEY = "leaderboard:groups";
 
 function firstPageCacheKey(groupId: string | undefined, period: Period): string {
   return `leaderboard:${groupId ?? "global"}:${period}`;
@@ -65,7 +65,7 @@ function readFirstPage(groupId: string | undefined, period: Period): NormalizedD
   return readCache<NormalizedData>(firstPageCacheKey(groupId, period), { sameDay: period === "daily" });
 }
 
-function initial(name: string) {
+export function initial(name: string) {
   return name.trim().charAt(0).toUpperCase() || "?";
 }
 
@@ -171,7 +171,7 @@ async function fetchPage(groupId: string | undefined, period: Period, page: numb
  * from the end" row is a different element each time), so this re-observes
  * on every attach rather than watching one fixed element for the page's
  * lifetime. */
-function useSentinelRef(onIntersect: () => void, enabled: boolean) {
+export function useSentinelRef(onIntersect: () => void, enabled: boolean) {
   const observerRef = useRef<IntersectionObserver | null>(null);
   const onIntersectRef = useRef(onIntersect);
   useEffect(() => {
@@ -199,7 +199,7 @@ function useSentinelRef(onIntersect: () => void, enabled: boolean) {
  * scroll"). Whichever of the two conditions is met first calls loadMore();
  * loadMore()'s own in-flight/no-more-pages guards make firing both
  * harmless. */
-function useNearBottomScroll(onNearBottom: () => void, enabled: boolean, thresholdRatio = 0.9) {
+export function useNearBottomScroll(onNearBottom: () => void, enabled: boolean, thresholdRatio = 0.9) {
   const onNearBottomRef = useRef(onNearBottom);
   useEffect(() => {
     onNearBottomRef.current = onNearBottom;
@@ -223,7 +223,7 @@ function useNearBottomScroll(onNearBottom: () => void, enabled: boolean, thresho
   }, [enabled, thresholdRatio]);
 }
 
-function ChevronDownIcon({ open }: { open: boolean }) {
+export function ChevronDownIcon({ open }: { open: boolean }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -239,16 +239,19 @@ function ChevronDownIcon({ open }: { open: boolean }) {
   );
 }
 
-function ScopeSwitcher({
+export function ScopeSwitcher({
   currentLabel,
   groups,
   onSelectGlobal,
   onSelectGroup,
+  onSelectInfinite,
 }: {
   currentLabel: string;
   groups: Group[] | null;
   onSelectGlobal: () => void;
   onSelectGroup: (id: string) => void;
+  /** Adds the Infinite tier leaderboard as a scope — omitted, no option. */
+  onSelectInfinite?: () => void;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -277,6 +280,18 @@ function ScopeSwitcher({
             >
               🌍 Global
             </button>
+            {onSelectInfinite && (
+              <button
+                type="button"
+                onClick={() => {
+                  onSelectInfinite();
+                  setOpen(false);
+                }}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-medium transition-colors duration-150 hover:bg-background"
+              >
+                ∞ Infinite
+              </button>
+            )}
             {groups && groups.length > 0 && <div className="border-t border-border" />}
             {(groups ?? []).map((g) => (
               <button
@@ -325,19 +340,21 @@ function PeriodToggle({
   );
 }
 
-function PodiumCard({
+export function PodiumCard({
   entry,
   rank,
   isMe,
   delayMs = 0,
+  firstLabel = "1st place",
 }: {
   entry: NormalizedEntry;
   rank: number;
   isMe: boolean;
   delayMs?: number;
+  firstLabel?: string;
 }) {
   const first = rank === 1;
-  const label = first ? "1st place" : rank === 2 ? "2nd" : "3rd";
+  const label = first ? firstLabel : rank === 2 ? "2nd" : "3rd";
 
   return (
     <div
@@ -394,10 +411,13 @@ export default function Leaderboard({
   groupId,
   onBack,
   onSwitchScope,
+  onOpenInfinite,
 }: {
   groupId?: string;
   onBack: () => void;
   onSwitchScope: (groupId?: string) => void;
+  /** Switches to the Infinite tier leaderboard from the scope dropdown. */
+  onOpenInfinite?: () => void;
 }) {
   const { user } = useAuth();
   const [period, setPeriod] = useState<Period>("daily");
@@ -520,6 +540,7 @@ export default function Leaderboard({
             groups={groups}
             onSelectGlobal={() => onSwitchScope(undefined)}
             onSelectGroup={(id) => onSwitchScope(id)}
+            onSelectInfinite={onOpenInfinite}
           />
         </div>
       </div>
