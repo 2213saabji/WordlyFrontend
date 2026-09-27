@@ -23,8 +23,9 @@ export const metadata: Metadata = pageMetadata(
 );
 
 // Tier rules mirror the backend's current config (GET /infinite/tiers:
-// 8 tiers, 3 misses in any 7 days, scoring 10 + 2 per unused guess + 20 per
-// qualifying day). Update this copy if those change.
+// 8 tiers; 3rd miss in a rolling window demotes — 30 days for Diamond and
+// Platinum, 21 Gold, 14 Silver, 7 Bronze–Iron; scoring 10 + 2 per unused
+// guess + 20 per qualifying day). Update this copy if those change.
 const TIER_FAQS: FaqItem[] = [
   {
     question: "Does Infinite mode affect my streak?",
@@ -44,7 +45,7 @@ const TIER_FAQS: FaqItem[] = [
   {
     question: "Can I drop down a tier?",
     answer:
-      "Yes. Missing a day resets your day count, and missing your targets on 3 days out of any 7 drops you one tier. Stone is the bottom tier, so you can't drop below it.",
+      "Yes. Each tier lets you miss up to 2 days in a rolling window: 30 days in Diamond and Platinum, 21 in Gold, 14 in Silver, and 7 in Bronze, Copper and Iron. A 3rd miss in that window drops you one tier, and any missed day also resets your day count. Stone is the bottom tier, so you can't drop below it.",
   },
   {
     question: "How are Infinite points scored?",

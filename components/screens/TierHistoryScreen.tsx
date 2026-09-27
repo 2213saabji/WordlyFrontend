@@ -6,7 +6,7 @@ import ScreenHeader from "@/components/ScreenHeader";
 import { getInfiniteMe, getInfiniteTierChanges, getInfiniteTiers, getRewards } from "@/lib/api";
 import { readCache, writeCache } from "@/lib/cache";
 import { MONEY_ENABLED } from "@/lib/flags";
-import { TIER_COLORS, formatInr, plural } from "@/lib/tiers";
+import { TIER_COLORS, demotionRuleFor, formatInr, plural } from "@/lib/tiers";
 import type {
   InfiniteMeResponse,
   InfiniteTiersResponse,
@@ -164,16 +164,18 @@ export default function TierHistoryScreen({ onBack }: { onBack: () => void }) {
           detail: fromDef ? `${fromDef.daysToStick} days in a row` : "",
           position,
         };
-      case "demotion":
+      case "demotion": {
+        const rule = tiers ? demotionRuleFor(tiers, c.fromTier) : null;
         return {
           from: c.fromTier,
           to: c.toTier,
           arrow: "↓",
           arrowColor: DOWN,
           title: `Moved down to ${name(c.toTier)}`,
-          detail: tiers ? `${tiers.demotion.misses} misses in ${tiers.demotion.windowDays}` : "",
+          detail: rule ? `${rule.misses} misses in ${rule.windowDays} days` : "",
           position,
         };
+      }
       default:
         // "seed" (first placement) / "admin" (set by support).
         return {

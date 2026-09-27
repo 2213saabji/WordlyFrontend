@@ -115,7 +115,7 @@ const TIER_STEPS = [
   },
   {
     heading: "Hold your place",
-    body: "A missed day resets your count, and missing 3 days out of any 7 drops you a tier. Hints are off from Copper up.",
+    body: "A missed day resets your count. A 3rd miss within your tier's window — 7 days in the lower tiers, up to 30 in Diamond — drops you a tier. Hints are off from Copper up.",
   },
 ];
 

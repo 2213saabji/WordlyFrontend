@@ -19,6 +19,7 @@ import LoginScreen from "@/components/screens/LoginScreen";
 import SignupScreen from "@/components/screens/SignupScreen";
 import ForgotPasswordScreen from "@/components/screens/ForgotPasswordScreen";
 import { useAuth } from "@/lib/auth-context";
+import { readPendingSignup } from "@/lib/pending-signup";
 import { INFINITE_TIERS_ENABLED, MONEY_ENABLED } from "@/lib/flags";
 import { useScreen } from "@/lib/screen-context";
 import { parseReplayParam, type ReplayInvite } from "@/lib/share";
@@ -156,6 +157,13 @@ export default function GameApp({ intro }: { intro: ReactNode }) {
   const { user, loading } = useAuth();
   const { screen, reset } = useScreen();
 
+  // A refresh mid-signup (waiting for the emailed code) resumes the
+  // enter-code step instead of dropping the player on the login screen.
+  useEffect(() => {
+    if (!loading && !user && readPendingSignup()) reset({ name: "signup" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, user]);
+
   if (loading) {
     // .auth-pending is hidden before first paint for a returning player with
     // a cached session (see the inline script in app/layout.tsx) — they go
@@ -174,7 +182,13 @@ export default function GameApp({ intro }: { intro: ReactNode }) {
     // never renders authenticated content, regardless of what screen.name
     // currently is.
     if (screen.name === "signup") {
-      return <SignupScreen onSuccess={() => reset({ name: "home" })} onLogin={() => reset({ name: "login" })} />;
+      return (
+        <SignupScreen
+          onSuccess={() => reset({ name: "home" })}
+          onLogin={() => reset({ name: "login" })}
+          onForgotPassword={() => reset({ name: "forgot-password" })}
+        />
+      );
     }
     if (screen.name === "forgot-password") {
       return <ForgotPasswordScreen onBack={() => reset({ name: "login" })} />;

@@ -26,13 +26,25 @@ export interface TierDefinition {
   daysToStick: number;
   /** Tier 1 only; 0 elsewhere. Money — gate behind MONEY_ENABLED. */
   rewardInr: number;
+  /** This tier's rule — `misses` in any rolling `windowDays` demotes. Use
+   * this, not the top-level default, for anything tier-specific (tiers 1–4
+   * have longer windows). Optional only for older backends. */
+  demotion?: DemotionRule;
+}
+
+export interface DemotionRule {
+  misses: number;
+  windowDays: number;
 }
 
 export interface InfiniteTiersResponse {
   version: number;
   tiers: TierDefinition[];
   scoring: { solveBase: number; perUnusedGuess: number; qualifyingDayBonus: number };
-  demotion: { misses: number; windowDays: number };
+  /** Default rule, now only for tiers above `stickWindowMaxTier` (5–7).
+   * Read per-tier rules via demotionRuleFor (lib/tiers.ts). */
+  demotion: DemotionRule & { stickWindowMaxTier?: number };
+  carryInPercent?: number;
   /** "HH:MM" in IST — the day boundary for everything in Infinite mode. */
   resetTimeIst: string;
 }
@@ -84,8 +96,13 @@ export interface InfiniteMeResponse {
   demotion: {
     missesInWindow: number;
     limit: number;
-    /** true at limit − 1 misses (one more miss demotes). */
+    /** Rolling window length for the player's current tier (7–30). */
+    windowDays?: number;
+    /** true at limit − 1 misses (one more miss demotes). Server-computed —
+     * don't recompute. */
     atRisk: boolean;
+    /** Completed days only, oldest first, up to windowDays entries. Shorter
+     * right after entering a tier: missing slots are "not counted yet". */
     window: TierWindowDay[];
   };
   today: InfiniteTodayProgress;
@@ -163,9 +180,8 @@ export interface TierChange {
   rankAtEntry: number | null;
   newTierSize: number;
   createdAt: string;
-  /** ASSUMED, not in the contract: the old tier's last-7 window at the
-   * moment of a demotion (it resets on the move, so nothing else has it).
-   * Shown on the demotion screen when present. */
+  /** The old tier's window at the moment of the move (up to 30 days for
+   * tiers 1–4). Empty for moves logged before the field existed. */
   window?: TierWindowDay[];
 }
 

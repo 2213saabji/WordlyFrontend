@@ -2,7 +2,7 @@
 // rewards come from the server (GET /infinite/tiers) — only presentation
 // lives here.
 
-import type { TierNumber } from "@/types";
+import type { DemotionRule, InfiniteTiersResponse, TierNumber } from "@/types";
 
 // From the Figma ("How tiers work" ladder).
 export const TIER_COLORS: Record<TierNumber, string> = {
@@ -19,6 +19,18 @@ export const TIER_COLORS: Record<TierNumber, string> = {
 // Not in GET /infinite/tiers yet (TierConfig.carryInPercent) — ask the
 // backend to expose it; until then this mirrors the contract's default.
 export const CARRY_IN_PERCENT = 20;
+
+/** A tier's demotion rule: its own `demotion` (tiers 1–4 have longer
+ * windows), else the top-level default. null for Tier 8 (can't drop). */
+export function demotionRuleFor(tiers: InfiniteTiersResponse, tier: number): DemotionRule | null {
+  if (tier >= 8) return null;
+  return tiers.tiers.find((t) => t.tier === tier)?.demotion ?? tiers.demotion;
+}
+
+/** "in the last 14 days" — never "this week", since windows run 7–30 days. */
+export function lastDays(windowDays: number): string {
+  return `in the last ${windowDays} days`;
+}
 
 export function formatInr(amount: number): string {
   return `₹${amount.toLocaleString("en-IN")}`;

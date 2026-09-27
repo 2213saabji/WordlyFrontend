@@ -7,7 +7,7 @@ import TierBadge, { TierChip } from "@/components/TierBadge";
 import { getInfiniteMe, getInfiniteTiers } from "@/lib/api";
 import { readCache, writeCache } from "@/lib/cache";
 import { MONEY_ENABLED } from "@/lib/flags";
-import { formatInr, plural } from "@/lib/tiers";
+import { demotionRuleFor, formatInr, lastDays, plural } from "@/lib/tiers";
 import type { InfiniteMeResponse, InfiniteTiersResponse, TierWindowDay } from "@/types";
 
 const ME_CACHE_KEY = "infinite:me";
@@ -20,7 +20,8 @@ const SOFT = "text-[#c9bfcc]";
 const CARD = "rounded-[22px] border border-white/8 bg-white/[0.045] md:rounded-3xl";
 
 /** Infinite mode's home: the player's tier, their "days in a row" counter
- * toward promotion, today's targets and the last 7 settled days. Money
+ * toward promotion, today's targets and the tier's demotion window (7–30
+ * settled days). Money
  * content (the Diamond reward line) only shows when MONEY_ENABLED is on. */
 export default function InfiniteHubScreen({
   onBack,
@@ -185,11 +186,15 @@ export default function InfiniteHubScreen({
     </>
   );
 
+  // The player's own tier window (30/21/14 for tiers 1–4, else 7).
+  const windowDays = me.demotion.windowDays ?? demotionRuleFor(tiers, me.tier)?.windowDays ?? 7;
   const missesLabel = (
-    <span className={`text-[12.5px] md:text-[13.5px] ${me.demotion.atRisk ? "text-danger" : SOFT}`}>
+    <span className={`whitespace-nowrap text-[12.5px] md:text-[13.5px] ${me.demotion.atRisk ? "text-danger" : SOFT}`}>
       {me.demotion.missesInWindow} of {me.demotion.limit} misses
     </span>
   );
+  // A 7-day strip fits inline; longer windows get their own full-width row.
+  const wideWindow = windowDays > 7;
 
   // One more miss demotes and today doesn't count yet — the hub becomes a
   // "qualify today" warning until it does (Tier 8 has no demotion).
@@ -198,6 +203,7 @@ export default function InfiniteHubScreen({
     return (
       <AtRiskView
         me={me}
+        windowDays={windowDays}
         lowerTierName={lowerTier?.name ?? `Tier ${me.tier + 1}`}
         resetTimeIst={tiers.resetTimeIst}
         rewardInr={topTier?.rewardInr ?? 0}
@@ -241,12 +247,15 @@ export default function InfiniteHubScreen({
             <span className={`text-xs ${MUTED}`}>{resetLabel}</span>
           </div>
           {todayRows}
-          <div className="flex items-center gap-2.5 border-t border-white/7 pt-3.5">
-            <span className={`text-[12.5px] ${MUTED}`}>Last 7 days</span>
-            <span className="ml-auto">
-              <WindowDots window={me.demotion.window} />
-            </span>
-            {missesLabel}
+          <div className="flex flex-col gap-2.5 border-t border-white/7 pt-3.5">
+            <div className="flex items-center gap-2.5">
+              <span className={`text-[12.5px] ${MUTED}`}>Last {windowDays} days</span>
+              <span className="ml-auto">
+                {!wideWindow && <WindowDots window={me.demotion.window} windowDays={windowDays} />}
+              </span>
+              {missesLabel}
+            </div>
+            {wideWindow && <WindowDots window={me.demotion.window} windowDays={windowDays} />}
           </div>
         </div>
 
@@ -272,10 +281,13 @@ export default function InfiniteHubScreen({
           <StickBar stickDays={me.counter.stickDays} daysToStick={me.counter.daysToStick} large />
           <span className={`text-sm ${MUTED}`}>{counterText}</span>
           {howItWorks}
-          <div className="flex items-center gap-3 border-t border-white/7 pt-[18px]">
-            <span className={`text-[13.5px] ${MUTED}`}>Last 7 days</span>
-            <WindowDots window={me.demotion.window} large />
-            <span className="ml-auto">{missesLabel}</span>
+          <div className="flex flex-col gap-3 border-t border-white/7 pt-[18px]">
+            <div className="flex items-center gap-3">
+              <span className={`text-[13.5px] ${MUTED}`}>Last {windowDays} days</span>
+              {!wideWindow && <WindowDots window={me.demotion.window} windowDays={windowDays} large />}
+              <span className="ml-auto">{missesLabel}</span>
+            </div>
+            {wideWindow && <WindowDots window={me.demotion.window} windowDays={windowDays} large />}
           </div>
         </div>
 
@@ -340,16 +352,21 @@ function ProgressRow({ label, value, target, unit = "" }: { label: string; value
   );
 }
 
-/** The last 7 settled days, oldest first; days not settled yet in this tier
- * (fewer than 7 since entering it) show as empty outlines. */
-function WindowDots({ window, large = false }: { window: TierWindowDay[]; large?: boolean }) {
-  const days = window.slice(-7);
-  const empty = 7 - days.length;
-  const size = large ? "size-[18px] rounded-md" : "size-3.5 rounded-[5px]";
-  return (
-    <span className={`flex ${large ? "gap-1.5" : "gap-[5px]"}`}>
+/** The tier's window of settled days, oldest first. Slots not filled yet
+ * (just entered the tier, or history still growing to a longer window) show
+ * as empty outlines — "not counted yet", never missed. 7 days render as
+ * inline dots; longer windows as a full-width segmented strip. */
+function WindowDots({ window, windowDays, large = false }: { window: TierWindowDay[]; windowDays: number; large?: boolean }) {
+  const days = window.slice(-windowDays);
+  const empty = Math.max(0, windowDays - days.length);
+  const wide = windowDays > 7;
+  const size = wide
+    ? large ? "h-3 rounded-[4px]" : "h-2.5 rounded-[3px]"
+    : large ? "size-[18px] rounded-md" : "size-3.5 rounded-[5px]";
+  const slots = (
+    <>
       {Array.from({ length: empty }, (_, i) => (
-        <span key={`e${i}`} className={`${size} border border-white/10`} />
+        <span key={`e${i}`} title="Not counted yet" className={`${size} border border-white/10`} />
       ))}
       {days.map((d) => (
         <span
@@ -358,8 +375,27 @@ function WindowDots({ window, large = false }: { window: TierWindowDay[]; large?
           className={`${size} ${d.qualified ? QUALIFIED_BG : "bg-white/14"}`}
         />
       ))}
+    </>
+  );
+  if (!wide) return <span className={`flex ${large ? "gap-1.5" : "gap-[5px]"}`}>{slots}</span>;
+  return (
+    <span
+      className={`grid ${large ? "gap-[5px]" : "gap-[3px]"}`}
+      style={{ gridTemplateColumns: `repeat(${windowDays}, minmax(0, 1fr))` }}
+    >
+      {slots}
     </span>
   );
+}
+
+/** When the oldest miss in the window stops counting: a miss on day D
+ * counts through D + windowDays − 1. null when there's no miss. */
+function oldestMissExpiry(window: TierWindowDay[], windowDays: number): string | null {
+  const miss = window.find((d) => !d.qualified);
+  if (!miss) return null;
+  const end = new Date(`${miss.day}T00:00:00Z`);
+  end.setUTCDate(end.getUTCDate() + windowDays - 1);
+  return end.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
 const MISSED_BG = "bg-[#b5543f]";
@@ -382,12 +418,13 @@ function useTimeLeft(resetsAt: string): string {
   return h > 0 ? `${h} h ${mins % 60} m left` : `${mins} m left`;
 }
 
-/** The hub's "at risk" state: the last 6 settled days plus today (dashed),
+/** The hub's "at risk" state: the window's settled days plus today (dashed),
  * what's still needed before the reset, and — since any miss also resets
  * the day counter — what today's miss would cost beyond the demotion. In
  * Tier 1 that counter is the reward cycle (₹ only with MONEY_ENABLED). */
 function AtRiskView({
   me,
+  windowDays,
   lowerTierName,
   resetTimeIst,
   rewardInr,
@@ -396,6 +433,7 @@ function AtRiskView({
   todayRows,
 }: {
   me: InfiniteMeResponse;
+  windowDays: number;
   lowerTierName: string;
   resetTimeIst: string;
   /** Tier 1's reward (TierConfig) — 0 means unpaid. */
@@ -405,29 +443,44 @@ function AtRiskView({
   todayRows: React.ReactNode;
 }) {
   const timeLeft = useTimeLeft(me.today.resetsAt);
-  const past = me.demotion.window.slice(-6);
-  const empty = 6 - past.length;
+  // Today is the window's last slot, so the strip shows windowDays − 1
+  // settled days before it.
+  const past = me.demotion.window.slice(-(windowDays - 1));
+  const empty = Math.max(0, windowDays - 1 - past.length);
   const nth = ORDINALS[me.demotion.limit] ?? `${me.demotion.limit}th`;
   const consequence = `A ${nth} miss moves you down to ${lowerTierName} at ${resetTimeIst} IST.`;
+  const missedLine = `You've missed ${plural(me.demotion.missesInWindow, "day")} ${lastDays(windowDays)}.`;
+  const expiry = oldestMissExpiry(me.demotion.window, windowDays);
+  const expiryLine = expiry ? `Your oldest miss stops counting after ${expiry}.` : null;
   const { stickDays, daysToStick } = me.counter;
   const top = me.tier === 1;
   const paidCycle = top && MONEY_ENABLED && rewardInr > 0;
 
+  // Up to 30 slots in one row: shrink gaps and corners as the window grows
+  // so it fits a phone without scrolling.
+  const dense = windowDays > 14;
+  const cell = (large: boolean) =>
+    dense
+      ? large ? "h-10 rounded-[5px]" : "h-[26px] rounded-[3px]"
+      : large ? "h-10 rounded-[10px]" : "h-[26px] rounded-[7px]";
+  const gap = (large: boolean) =>
+    windowDays > 7 ? (dense ? "gap-[3px]" : large ? "gap-1.5" : "gap-1") : large ? "gap-2" : "gap-1.5";
+
   const days = (large: boolean) => (
-    <span className={`flex ${large ? "gap-2" : "gap-1.5"}`}>
+    <span className={`flex ${gap(large)}`}>
       {Array.from({ length: empty }, (_, i) => (
-        <span key={`e${i}`} className={`flex-1 border border-white/10 ${large ? "h-10 rounded-[10px]" : "h-[26px] rounded-[7px]"}`} />
+        <span key={`e${i}`} title="Not counted yet" className={`min-w-0 flex-1 border border-white/10 ${cell(large)}`} />
       ))}
       {past.map((d) => (
         <span
           key={d.day}
           title={`${d.day} · ${d.qualified ? "qualified" : "missed"}`}
-          className={`flex-1 ${d.qualified ? QUALIFIED_BG : MISSED_BG} ${large ? "h-10 rounded-[10px]" : "h-[26px] rounded-[7px]"}`}
+          className={`min-w-0 flex-1 ${d.qualified ? QUALIFIED_BG : MISSED_BG} ${cell(large)}`}
         />
       ))}
       <span
         title="Today"
-        className={`flex-1 border-2 border-dashed border-accent ${large ? "h-10 rounded-[10px]" : "h-[26px] rounded-[7px]"}`}
+        className={`min-w-0 flex-1 border-2 border-dashed border-accent ${cell(large)}`}
       />
     </span>
   );
@@ -478,7 +531,8 @@ function AtRiskView({
             </span>
           </div>
           <span className="text-[13.5px] leading-[1.55]">
-            You&apos;ve missed {me.demotion.missesInWindow} of the last 7 days. {consequence}
+            {missedLine} {consequence}
+            {expiryLine && <span className={`mt-1 block ${SOFT}`}>{expiryLine}</span>}
           </span>
         </div>
 
@@ -512,9 +566,12 @@ function AtRiskView({
 
       <div className="hidden grid-cols-2 gap-5 md:grid">
         <div className="flex flex-col gap-[18px] rounded-3xl border border-accent/40 bg-accent/8 p-[30px]">
-          <span className="text-[17px] font-semibold">Last 7 days</span>
+          <span className="text-[17px] font-semibold">Last {windowDays} days</span>
           {days(true)}
-          <span className="text-[14.5px] leading-[1.55]">{consequence}</span>
+          <span className="text-[14.5px] leading-[1.55]">
+            {missedLine} {consequence}
+          </span>
+          {expiryLine && <span className={`text-sm leading-[1.55] ${SOFT}`}>{expiryLine}</span>}
           {showCycle && <span className="text-sm leading-[1.55] text-[#9fd4e6]">{cycleLine}</span>}
         </div>
         <div className={`flex flex-col gap-5 p-[30px] ${CARD}`}>

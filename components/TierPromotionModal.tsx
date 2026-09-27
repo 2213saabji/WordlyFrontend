@@ -5,7 +5,7 @@ import { getInfiniteMe, getInfiniteTierChanges, getInfiniteTiers } from "@/lib/a
 import { readCache, writeCache } from "@/lib/cache";
 import { MONEY_ENABLED } from "@/lib/flags";
 import { SITE_URL } from "@/lib/seo";
-import { TIER_COLORS, formatInr, plural } from "@/lib/tiers";
+import { TIER_COLORS, demotionRuleFor, formatInr, lastDays, plural } from "@/lib/tiers";
 import type { InfiniteMeResponse, InfiniteTiersResponse, TierChange, TierNumber } from "@/types";
 
 // Shared with the hub / tier leaderboard / play screen.
@@ -107,7 +107,9 @@ function PromotionScreen({
   const [copied, setCopied] = useState(false);
   const last = me.lastChange!;
   const demoted = last.reason === "demotion";
-  const missedWindow = demoted ? (change?.window?.slice(-7) ?? null) : null;
+  // The rule of the tier they dropped out of (windows run 7–30 days).
+  const oldRule = demotionRuleFor(tiers, last.fromTier) ?? tiers.demotion;
+  const missedWindow = demoted ? (change?.window?.slice(-oldRule.windowDays) ?? null) : null;
   const from = tiers.tiers.find((t) => t.tier === last.fromTier);
   const to = tiers.tiers.find((t) => t.tier === last.toTier);
   const top = tiers.tiers.find((t) => t.tier === 1);
@@ -206,9 +208,8 @@ function PromotionScreen({
   ) : (
     shareButton
   );
-  const misses = tiers.demotion;
   const intro = demoted
-    ? `${misses.misses} missed days in the last ${misses.windowDays} in ${fromName}. `
+    ? `${oldRule.misses} missed days ${lastDays(oldRule.windowDays)} in ${fromName}. `
     : from
       ? `${from.daysToStick} qualifying days in a row in ${fromName}. `
       : "";
@@ -263,14 +264,15 @@ function PromotionScreen({
           </p>
         </div>
 
-        {/* demotion: the old tier's last 7 days, when the backend sends them */}
+        {/* demotion: the old tier's window (up to 30 days), when the backend
+            sends it — gaps and corners shrink so 30 fit on a phone */}
         {missedWindow && missedWindow.length > 0 && (
-          <div className="mx-6 mt-[22px] flex gap-1.5 md:m-0">
+          <div className={`mx-6 mt-[22px] flex md:m-0 ${missedWindow.length > 14 ? "gap-[3px]" : missedWindow.length > 7 ? "gap-1" : "gap-1.5"}`}>
             {missedWindow.map((d) => (
               <span
                 key={d.day}
                 title={`${d.day} · ${d.qualified ? "qualified" : "missed"}`}
-                className={`h-[22px] flex-1 rounded-md md:h-5 ${d.qualified ? "bg-[#5f8f49]" : "bg-[#b5543f]"}`}
+                className={`h-[22px] min-w-0 flex-1 md:h-5 ${missedWindow.length > 14 ? "rounded-[3px]" : "rounded-md"} ${d.qualified ? "bg-[#5f8f49]" : "bg-[#b5543f]"}`}
               />
             ))}
           </div>
