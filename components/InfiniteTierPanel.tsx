@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { getInfiniteMe, getInfiniteTiers } from "@/lib/api";
-import { readCache, writeCache } from "@/lib/cache";
 import { MONEY_ENABLED } from "@/lib/flags";
+import { useSyncedResource } from "@/lib/use-synced";
 import { formatInr, plural } from "@/lib/tiers";
 import type {
   Game,
@@ -21,53 +21,30 @@ const SOFT = "text-[#c9bfcc]";
 const MUTED = "text-[#9a8aa2]";
 
 /** Tier state for an Infinite round: the player's tier status, the ladder
- * and today's progress. Active time is measured server-side from round
- * starts and guesses (no heartbeat), so `today` is only ever the server's
- * value — from the round-ending guess / new-round responses (setToday) or a
- * fresh GET /infinite/me (refreshMe, also run when the tab becomes visible
- * again). Never tick it locally: the server caps each gap at 2 min, so a
- * local clock would drift. Inert when `enabled` is false. */
+ * and today's progress. Both come from the synced cache (lib/use-synced.ts):
+ * only refetched when missing or when /sync reports them changed — which
+ * also covers returning to the tab, the IST-midnight reset and play on
+ * another device. Active time is measured server-side from round starts and
+ * guesses, so `today` is only ever the server's value — from the
+ * round-ending guess / new-round responses (setToday) or GET /infinite/me.
+ * Never tick it locally: the server caps each gap at 2 min, so a local
+ * clock would drift. Inert when `enabled` is false. */
 export function useInfiniteTier(enabled: boolean) {
-  const [me, setMe] = useState<InfiniteMeResponse | null>(() =>
-    enabled ? readCache<InfiniteMeResponse>(ME_CACHE_KEY) : null,
-  );
-  const [tiers, setTiers] = useState<InfiniteTiersResponse | null>(() =>
-    enabled ? readCache<InfiniteTiersResponse>(TIERS_CACHE_KEY) : null,
-  );
-  const [today, setToday] = useState<TodayProgress | null>(() => me?.today ?? null);
+  const meRes = useSyncedResource({ flag: "infinite", key: ME_CACHE_KEY, fetcher: getInfiniteMe, enabled });
+  const tiersRes = useSyncedResource({ flag: "tiers", key: TIERS_CACHE_KEY, fetcher: getInfiniteTiers, enabled });
+  const me: InfiniteMeResponse | null = meRes.data;
+  const tiers: InfiniteTiersResponse | null = tiersRes.data;
 
+  // An action's own `today` (guess / new round) wins until /infinite/me is
+  // refetched, which then carries the newer value.
+  const [override, setOverride] = useState<{ forMe: InfiniteMeResponse | null; value: TodayProgress } | null>(null);
+  const today = override && override.forMe === me ? override.value : (me?.today ?? null);
+  const setToday = useCallback((value: TodayProgress) => setOverride({ forMe: me, value }), [me]);
+
+  const { refetch } = meRes;
   const refreshMe = useCallback(() => {
-    if (!enabled) return;
-    getInfiniteMe()
-      .then((res) => {
-        writeCache(ME_CACHE_KEY, res);
-        setMe(res);
-        setToday(res.today);
-      })
-      .catch(() => {});
-  }, [enabled]);
-
-  useEffect(() => {
-    if (!enabled) return;
-    refreshMe();
-    getInfiniteTiers()
-      .then((res) => {
-        writeCache(TIERS_CACHE_KEY, res);
-        setTiers(res);
-      })
-      .catch(() => {});
-  }, [enabled, refreshMe]);
-
-  // Coming back to the tab (possibly after playing on another device, or
-  // after the midnight IST reset) re-reads the server's progress.
-  useEffect(() => {
-    if (!enabled) return;
-    const onVisible = () => {
-      if (document.visibilityState === "visible") refreshMe();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [enabled, refreshMe]);
+    if (enabled) void refetch();
+  }, [enabled, refetch]);
 
   // The lowest-numbered tier boundary where hints switch off (Copper, Tier 6).
   const hintsOffFrom = tiers

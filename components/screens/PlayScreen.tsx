@@ -27,7 +27,9 @@ import {
 import { INFINITE_TIERS_ENABLED } from "@/lib/flags";
 import { useAuth } from "@/lib/auth-context";
 import { readCache, writeCache } from "@/lib/cache";
-import { isKnownGuess } from "@/lib/word-check";
+import { invalidate } from "@/lib/sync";
+import { useSyncedLoader } from "@/lib/use-synced";
+import { isKnownGuess, preloadWordLists } from "@/lib/word-check";
 import { wordNumberForDate } from "@/lib/share";
 import type { PlayMode } from "@/lib/screen-context";
 import type { Game, GameDifficulty, Guess, LetterResult, User } from "@/types";
@@ -746,10 +748,37 @@ export default function PlayScreen({
     return () => clearTimeout(id);
   }, [hintLockedMsgOpen]);
 
+  // The word lists for the guess pre-check load on demand — start now so
+  // they're ready before the first guess.
   useEffect(() => {
-    const fetchCurrent = mode === "daily" ? getTodayGame : getInfiniteCurrent;
-    fetchCurrent()
+    preloadWordLists();
+  }, []);
+
+  // Today's daily game is synced (`today`): shown from cache and refetched
+  // only when /sync reports a change (a guess on another device, or a new
+  // daily word). The current Infinite round isn't covered by /sync, so it's
+  // fetched on every visit, as before.
+  useSyncedLoader({
+    flag: "today",
+    key: gameCacheKey("daily"),
+    enabled: mode === "daily",
+    sameDay: true,
+    load: async () => {
+      try {
+        const { game } = await getTodayGame();
+        setGame(game);
+        // Cached right away so the fresh mark and the cache agree.
+        writeCache(gameCacheKey("daily"), game);
+      } finally {
+        setLoading(false);
+      }
+    },
+  });
+  useEffect(() => {
+    if (mode !== "infinite") return;
+    getInfiniteCurrent()
       .then(({ game }) => setGame(game))
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, [mode]);
 
@@ -856,12 +885,16 @@ export default function PlayScreen({
         prevRankRef.current = tierBlock.rank;
         // Rank, day count and today's card as the server now has them.
         refreshMe();
+        // Tier boards now rank this round's score.
+        invalidate("infiniteBoard");
       } else if (infiniteRes?.today) {
         setToday(infiniteRes.today);
       }
       // Infinite rounds never touch stats/streaks — only refresh the daily
       // streak/wins display when a daily game actually finishes.
       if (mode === "daily" && game.status !== "in-progress") {
+        // The daily/weekly boards now include this result.
+        invalidate("daily", "weekly");
         refreshUser();
       }
     } catch (err) {

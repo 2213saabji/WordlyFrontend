@@ -21,9 +21,13 @@ import {
   setToken,
 } from "@/lib/api";
 import { clearCache, readCache, writeCache } from "@/lib/cache";
+import { invalidate, isFresh, markFresh, onStale, runSync, setSyncUser } from "@/lib/sync";
 import type { AuthResponse, SignupPendingResponse, User } from "@/types";
 
 const USER_CACHE_KEY = "user";
+// Longest the app waits on the startup /auth/refresh before showing the
+// sign-in screen (the refresh keeps going in the background).
+const REFRESH_WAIT_MS = 4_000;
 
 interface AuthContextValue {
   user: User | null;
@@ -63,13 +67,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Re-fetches the current user without touching the session itself — used
   // after actions that change stats (finishing a game, etc), not for login.
   const refreshUser = useCallback(async () => {
+    const startedAt = Date.now();
     try {
       const { user } = await api.getMe();
       setUser(user);
+      markFresh("me", USER_CACHE_KEY, startedAt);
     } catch {
       setUser(null);
     }
   }, []);
+
+  // /sync (lib/sync.ts): the token belongs to the signed-in account, and
+  // signing in (or app start with a session) always syncs. A layout effect
+  // so it starts before the first screen's own requests (plain effects).
+  const userId = user?.id ?? null;
+  useLayoutEffect(() => {
+    setSyncUser(userId);
+    if (userId) void runSync({ force: true });
+  }, [userId]);
+
+  // `me` changed (rename, stats, groups, tier badge — maybe on another
+  // device): refetch the user. A failure here keeps the session and the
+  // stale mark, unlike refreshUser's.
+  useEffect(() => {
+    return onStale((flags) => {
+      if (!flags.has("me") || !userId || isFresh("me", USER_CACHE_KEY)) return;
+      const startedAt = Date.now();
+      api
+        .getMe()
+        .then(({ user }) => {
+          setUser(user);
+          markFresh("me", USER_CACHE_KEY, startedAt);
+        })
+        .catch(() => {});
+    });
+  }, [userId]);
 
   // Layout effect, not a plain effect: the server can't see localStorage, so
   // the first render is always `loading` — this swaps in the cached user
@@ -82,6 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // deviceId for a fresh access token, no password prompt. Started
         // before anything awaits, so screens' own requests queue behind it
         // (see performRequest in lib/api.ts).
+        const refreshStartedAt = Date.now();
         const refreshing = api.refreshSession();
         // Show the last-known user immediately and revalidate below.
         const cached = readCache<User>(USER_CACHE_KEY);
@@ -89,9 +122,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(cached);
           setLoading(false);
         }
+        // No cached user to show: don't hold everyone on "Loading…" for a
+        // slow refresh (a backend cold start can take 10–20 s). After a few
+        // seconds show the sign-in screen; if the refresh then succeeds, the
+        // user is swapped in below.
+        const giveUp = cached ? undefined : window.setTimeout(() => setLoading(false), REFRESH_WAIT_MS);
         const result = await refreshing;
+        window.clearTimeout(giveUp);
         if (result) {
           setUser(result.user);
+          // /auth/refresh returns the same user as /auth/me.
+          markFresh("me", USER_CACHE_KEY, refreshStartedAt);
           setLoading(false);
           return;
         }
@@ -127,6 +168,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const data = await api.login({ email, password });
     setToken(data.token);
+    // Only now is the deviceId stored (see getDeviceId).
+    setDeviceId(data.deviceId || getDeviceId());
     setUser(data.user);
     // Best-effort, never blocks the login that already succeeded — see
     // silentlyEnrollPasskey below.
@@ -172,6 +215,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const updateUsername = useCallback(async (username: string) => {
     const { user } = await api.updateUsername(username);
     setUser(user);
+    // The new name shows on every board and group list.
+    invalidate("daily", "weekly", "infiniteBoard", "mine");
   }, []);
 
   const loginWithGoogle = useCallback(async (idToken: string) => {

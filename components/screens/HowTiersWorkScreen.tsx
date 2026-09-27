@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Loader from "@/components/Loader";
 import ScreenHeader from "@/components/ScreenHeader";
 import TierBadge from "@/components/TierBadge";
 import { getInfiniteTiers } from "@/lib/api";
-import { readCache, writeCache } from "@/lib/cache";
+import { readCache } from "@/lib/cache";
 import { MONEY_ENABLED } from "@/lib/flags";
 import { CARRY_IN_PERCENT, demotionRuleFor, formatInr, plural } from "@/lib/tiers";
+import { useSyncedResource } from "@/lib/use-synced";
 import type { InfiniteMeResponse, InfiniteTiersResponse, TierDefinition } from "@/types";
 
 // Shared with the hub and tier leaderboard, so any of them seeds this one.
@@ -22,21 +23,13 @@ const DIAMOND_TEXT = "text-[#9fd4e6]";
  * rules. With MONEY_ENABLED off, Diamond's reward reads as a profile star
  * instead of ₹. */
 export default function HowTiersWorkScreen({ onBack }: { onBack: () => void }) {
-  const [tiers, setTiers] = useState<InfiniteTiersResponse | null>(() =>
-    readCache<InfiniteTiersResponse>(TIERS_CACHE_KEY),
-  );
-  const [failed, setFailed] = useState(false);
+  // Synced (lib/use-synced.ts): the ladder is only refetched when the team
+  // edits the tier config.
+  const tiersRes = useSyncedResource({ flag: "tiers", key: TIERS_CACHE_KEY, fetcher: getInfiniteTiers });
+  const tiers: InfiniteTiersResponse | null = tiersRes.data;
+  const failed = tiersRes.failed;
   // Only used to mark "· you" — whatever the hub last saw is good enough.
   const [myTier] = useState(() => readCache<InfiniteMeResponse>(ME_CACHE_KEY)?.tier);
-
-  useEffect(() => {
-    getInfiniteTiers()
-      .then((res) => {
-        setTiers(res);
-        writeCache(TIERS_CACHE_KEY, res);
-      })
-      .catch(() => setFailed(true));
-  }, []);
 
   const intro =
     "Meet your tier's daily targets for enough days in a row to move up. Your day count restarts at 0 in every new tier.";

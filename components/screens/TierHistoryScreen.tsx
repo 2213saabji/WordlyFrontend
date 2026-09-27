@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Loader from "@/components/Loader";
 import ScreenHeader from "@/components/ScreenHeader";
 import { getInfiniteMe, getInfiniteTierChanges, getInfiniteTiers, getRewards } from "@/lib/api";
-import { readCache, writeCache } from "@/lib/cache";
 import { MONEY_ENABLED } from "@/lib/flags";
 import { TIER_COLORS, demotionRuleFor, formatInr, plural } from "@/lib/tiers";
+import { useSyncedResource } from "@/lib/use-synced";
 import type {
   InfiniteMeResponse,
   InfiniteTiersResponse,
@@ -45,56 +45,48 @@ function monthName(day: string): string {
 /** Every tier move (GET /infinite/tier-changes, newest first) merged with
  * completed Diamond cycles (from the payout log) into one timeline. */
 export default function TierHistoryScreen({ onBack }: { onBack: () => void }) {
-  const [me, setMe] = useState<InfiniteMeResponse | null>(() => readCache<InfiniteMeResponse>(ME_CACHE_KEY));
-  const [tiers, setTiers] = useState<InfiniteTiersResponse | null>(() =>
-    readCache<InfiniteTiersResponse>(TIERS_CACHE_KEY),
-  );
-  const [history, setHistory] = useState<TierChangesResponse | null>(() =>
-    readCache<TierChangesResponse>(HISTORY_CACHE_KEY),
-  );
-  const [rewards, setRewards] = useState<RewardStatus | null>(() => readCache<RewardStatus>(REWARDS_CACHE_KEY));
+  // Synced (lib/use-synced.ts): cached, refetched only when /sync says so.
+  // Only the first page of moves is synced; "Load more" pages are fetched
+  // on demand and dropped when the first page changes.
+  const historyRes = useSyncedResource({
+    flag: "tierChanges",
+    key: HISTORY_CACHE_KEY,
+    fetcher: () => getInfiniteTierChanges({ page: 1, limit: PAGE_SIZE }),
+  });
+  const me: InfiniteMeResponse | null = useSyncedResource({
+    flag: "infinite",
+    key: ME_CACHE_KEY,
+    fetcher: getInfiniteMe,
+  }).data;
+  const tiers: InfiniteTiersResponse | null = useSyncedResource({
+    flag: "tiers",
+    key: TIERS_CACHE_KEY,
+    fetcher: getInfiniteTiers,
+  }).data;
+  // Completed cycles aren't in the tier-change log — they come from the
+  // payout log (same source as the Diamond screen). Optional.
+  const rewards: RewardStatus | null = useSyncedResource({
+    flag: "rewards",
+    key: REWARDS_CACHE_KEY,
+    fetcher: getRewards,
+  }).data;
+  const failed = historyRes.failed;
+  const firstPage: TierChangesResponse | null = historyRes.data;
+  const [more, setMore] = useState<{ base: TierChangesResponse; next: TierChangesResponse } | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    getInfiniteTierChanges({ page: 1, limit: PAGE_SIZE })
-      .then((res) => {
-        writeCache(HISTORY_CACHE_KEY, res);
-        setHistory(res);
-      })
-      .catch(() => setFailed(true));
-    getInfiniteMe()
-      .then((res) => {
-        writeCache(ME_CACHE_KEY, res);
-        setMe(res);
-      })
-      .catch(() => {});
-    getInfiniteTiers()
-      .then((res) => {
-        writeCache(TIERS_CACHE_KEY, res);
-        setTiers(res);
-      })
-      .catch(() => {});
-    // Completed cycles aren't in the tier-change log — they come from the
-    // payout log (same source as the Diamond screen). Optional.
-    getRewards()
-      .then((res) => {
-        writeCache(REWARDS_CACHE_KEY, res);
-        setRewards(res);
-      })
-      .catch(() => {});
-  }, []);
+  const history: TierChangesResponse | null =
+    firstPage && more?.base === firstPage ? more.next : firstPage;
 
   const canLoadMore = !!history && history.pagination.page < history.pagination.totalPages;
 
   function loadMore() {
-    if (!history || loadingMore || !canLoadMore) return;
+    if (!history || !firstPage || loadingMore || !canLoadMore) return;
+    const base = firstPage;
+    const loaded = history;
     setLoadingMore(true);
-    getInfiniteTierChanges({ page: history.pagination.page + 1, limit: PAGE_SIZE })
+    getInfiniteTierChanges({ page: loaded.pagination.page + 1, limit: PAGE_SIZE })
       .then((next) =>
-        setHistory((prev) =>
-          prev ? { changes: [...prev.changes, ...next.changes], pagination: next.pagination } : next,
-        ),
+        setMore({ base, next: { changes: [...loaded.changes, ...next.changes], pagination: next.pagination } }),
       )
       .catch(() => {})
       .finally(() => setLoadingMore(false));

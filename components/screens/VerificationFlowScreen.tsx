@@ -15,6 +15,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { readCache, writeCache } from "@/lib/cache";
 import { formatInr } from "@/lib/tiers";
+import { useSyncedResource } from "@/lib/use-synced";
 import type { InfiniteTiersResponse, VerificationStatusResponse, VerificationStep } from "@/types";
 
 // MONEY — only reachable with MONEY_ENABLED (see GameApp).
@@ -102,8 +103,13 @@ export default function VerificationFlowScreen({
   const [status, setStatus] = useState<VerificationStatusResponse | null>(() =>
     readCache<VerificationStatusResponse>(VERIFICATION_CACHE_KEY),
   );
-  const [tiers] = useState(() => readCache<InfiniteTiersResponse>(TIERS_CACHE_KEY));
-  const [reward, setReward] = useState<{ amount: number; days: number } | null>(() => topReward(tiers));
+  // Synced: only refetched when /sync reports the tier config changed.
+  const tiers: InfiniteTiersResponse | null = useSyncedResource({
+    flag: "tiers",
+    key: TIERS_CACHE_KEY,
+    fetcher: getInfiniteTiers,
+  }).data;
+  const reward = topReward(tiers);
   const [step, setStep] = useState<Step | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -147,12 +153,7 @@ export default function VerificationFlowScreen({
   }
 
   useEffect(() => {
-    getInfiniteTiers()
-      .then((res) => {
-        writeCache(TIERS_CACHE_KEY, res);
-        setReward(topReward(res));
-      })
-      .catch(() => {});
+    // Not covered by /sync — fetched on every visit.
     getVerificationStatus()
       .then((fetched) => {
         const res = applyStatus(fetched);

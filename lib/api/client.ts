@@ -53,27 +53,34 @@ export function getStoredDeviceId(): string | null {
   return window.localStorage.getItem(DEVICE_ID_KEY);
 }
 
-/** Returns the stored deviceId, generating and persisting a fresh UUID v4 if
- * none exists yet. Only call this where a deviceId is actually about to be
- * used to establish a session (login/signup) — see getStoredDeviceId(). */
+// A freshly generated id is held in memory until a sign-in succeeds (the
+// auth flows then persist the server's deviceId via setDeviceId). Persisting
+// it up front meant a failed login attempt left a deviceId behind, so every
+// later visit tried a silent /auth/refresh for a device the server never
+// knew — and sat on "Loading…" through a backend cold start to learn that.
+let pendingDeviceId: string | null = null;
+
+/** Returns the stored deviceId, or a fresh UUID v4 for a sign-in that's
+ * about to happen (kept in memory, not stored, until it succeeds). Only call
+ * this where a deviceId is actually about to be used to establish a session
+ * (login/signup) — see getStoredDeviceId(). */
 export function getDeviceId(): string {
   if (typeof window === "undefined") return "";
   const existing = getStoredDeviceId();
   if (existing) return existing;
-  const id = crypto.randomUUID();
-  window.localStorage.setItem(DEVICE_ID_KEY, id);
-  return id;
+  if (!pendingDeviceId) pendingDeviceId = crypto.randomUUID();
+  return pendingDeviceId;
 }
 
 export function clearDeviceId(): void {
   if (typeof window !== "undefined") window.localStorage.removeItem(DEVICE_ID_KEY);
 }
 
-/** Overwrites the stored deviceId with one the server hands back — used only
- * by passkey recovery, which re-establishes a device's identity server-side
- * after storage was cleared. Unlike getDeviceId(), this never generates one
- * itself. */
+/** Stores the deviceId the server hands back once a sign-in succeeds (login,
+ * signup verification, Google, passkey recovery). Unlike getDeviceId(), this
+ * never generates one itself. */
 export function setDeviceId(id: string): void {
+  pendingDeviceId = null;
   if (typeof window !== "undefined") window.localStorage.setItem(DEVICE_ID_KEY, id);
 }
 

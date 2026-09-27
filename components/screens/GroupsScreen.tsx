@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import Loader from "@/components/Loader";
 import ScreenHeader from "@/components/ScreenHeader";
 import {
@@ -13,6 +13,8 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { readCache, writeCache } from "@/lib/cache";
+import { invalidate } from "@/lib/sync";
+import { useSyncedLoader } from "@/lib/use-synced";
 import type { Group, Pagination } from "@/types";
 
 const GROUPS_CACHE_KEY = "groups:first-page";
@@ -182,15 +184,21 @@ export default function GroupsScreen({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
-  useEffect(() => {
-    getMyGroups({ page: 1, limit: 20 }).then(({ groups, pagination }) => {
+  // The first page is synced: shown from cache, reloaded only when missing
+  // or when /sync reports `mine` changed (e.g. another member renamed a
+  // group). Load-more pages are fetched on demand.
+  useSyncedLoader({
+    flag: "mine",
+    key: GROUPS_CACHE_KEY,
+    load: async () => {
+      const { groups, pagination } = await getMyGroups({ page: 1, limit: 20 });
       writeCache(GROUPS_CACHE_KEY, { groups, pagination });
       setGroups(groups);
       setPage(pagination.page);
       setTotalPages(pagination.totalPages);
       setTotal(pagination.total);
-    });
-  }, []);
+    },
+  });
 
   const canLoadMore = page < totalPages;
 
@@ -209,31 +217,46 @@ export default function GroupsScreen({
     }
   }
 
-  useEffect(() => {
-    const multiMemberGroups = (groups ?? []).filter((g) => g.members.length > 1);
-    if (multiMemberGroups.length === 0) return;
+  // Your weekly rank per group, one leaderboard call per group. Each group
+  // is looked up once per visit to this screen: creating, joining or
+  // leaving a group (or loading more) only fetches groups not looked up
+  // yet, instead of re-fetching every group's board. Solo groups have no
+  // rank to show, so they're skipped. (Group boards aren't covered by
+  // /sync, so a new visit looks them up again.)
+  const rankedThisVisit = useRef(new Set<string>());
+  // A plain string, so re-renders with the same groups don't re-run it.
+  const multiMemberIds = (groups ?? [])
+    .filter((g) => g.members.length > 1)
+    .map((g) => g._id)
+    .join(",");
 
-    let cancelled = false;
+  useEffect(() => {
+    if (!multiMemberIds || !user?.id) return;
+    const ids = multiMemberIds.split(",").filter((id) => !rankedThisVisit.current.has(id));
+    if (ids.length === 0) return;
+    for (const id of ids) rankedThisVisit.current.add(id);
+    const me = user.id;
     Promise.all(
-      multiMemberGroups.map((g) =>
+      ids.map((id) =>
         // Just looking up one person's rank here, not paging through a
         // list — weekly has no `me` field, so request the server's max
-        // page size (100) to make finding them in one shot as reliable as
-        // it was before pagination existed.
-        getGroupWeeklyLeaderboard(g._id, { limit: 100 })
-          .then((res) => [g._id, res.leaderboard.find((e) => e.userId === user?.id)?.rank] as const)
-          .catch(() => [g._id, undefined] as const),
+        // page size (100) to find them in one shot.
+        getGroupWeeklyLeaderboard(id, { limit: 100 })
+          .then((res) => [id, res.leaderboard.find((e) => e.userId === me)?.rank] as const)
+          .catch(() => {
+            // Let a later change retry this group.
+            rankedThisVisit.current.delete(id);
+            return [id, undefined] as const;
+          }),
       ),
     ).then((pairs) => {
-      if (cancelled) return;
-      const next = Object.fromEntries(pairs);
-      setRanks(next);
-      writeCache(RANKS_CACHE_KEY, next);
+      setRanks((prev) => {
+        const next = { ...prev, ...Object.fromEntries(pairs) };
+        writeCache(RANKS_CACHE_KEY, next);
+        return next;
+      });
     });
-    return () => {
-      cancelled = true;
-    };
-  }, [groups, user?.id]);
+  }, [multiMemberIds, user?.id]);
 
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
@@ -241,6 +264,8 @@ export default function GroupsScreen({
     setSubmitting(true);
     try {
       const { group } = await createGroup(groupName);
+      // Other screens' cached group lists (and the user) are now out of date.
+      invalidate("mine", "me");
       setGroups((prev) => [group, ...(prev ?? [])]);
       setTotal((t) => t + 1);
       setGroupName("");
@@ -257,6 +282,7 @@ export default function GroupsScreen({
     setSubmitting(true);
     try {
       const group = await joinGroup(joinCode);
+      invalidate("mine", "me");
       const alreadyJoined = (groups ?? []).some((g) => g._id === group._id);
       setGroups((prev) => [group, ...(prev ?? []).filter((g) => g._id !== group._id)]);
       if (!alreadyJoined) setTotal((t) => t + 1);
@@ -272,6 +298,7 @@ export default function GroupsScreen({
     setError(null);
     try {
       await leaveGroup(id);
+      invalidate("mine", "me");
       setGroups((prev) => (prev ?? []).filter((g) => g._id !== id));
       setTotal((t) => Math.max(0, t - 1));
     } catch (err) {

@@ -4,8 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Loader from "@/components/Loader";
 import ScreenHeader from "@/components/ScreenHeader";
 import { getInfiniteTiers, getNotifications, markNotificationsRead } from "@/lib/api";
-import { readCache, writeCache } from "@/lib/cache";
 import { MONEY_ENABLED } from "@/lib/flags";
+import { useSyncedResource } from "@/lib/use-synced";
 import type { Screen } from "@/lib/screen-context";
 import { demotionRuleFor, formatInr, lastDays } from "@/lib/tiers";
 import {
@@ -24,41 +24,34 @@ const MUTED = "text-[#6f6376]";
 const SOFT = "text-[#c9bfcc]";
 const DIAMOND = "#9fd4e6";
 
+async function fetchVisibleNotifications(): Promise<AppNotification[]> {
+  const { notifications } = await getNotifications();
+  return MONEY_ENABLED ? notifications : notifications.filter((n) => !MONEY_NOTIFICATION_TYPES.includes(n.type));
+}
+
 /** The feed plus read-state actions. Money-only types are dropped when
- * MONEY_ENABLED is off; refreshes on mount and whenever the tab regains
- * focus, which is enough for events that happen at most daily. */
+ * MONEY_ENABLED is off. Refetched only when /sync reports `notifications`
+ * changed (a new one, or read on another device) — including when the tab
+ * regains focus, which GameApp syncs on. */
 export function useNotifications() {
-  const [items, setItems] = useState<AppNotification[] | null>(() =>
-    readCache<AppNotification[]>(NOTIFICATIONS_CACHE_KEY),
+  const { data, setData, failed, refetch } = useSyncedResource({
+    flag: "notifications",
+    key: NOTIFICATIONS_CACHE_KEY,
+    fetcher: fetchVisibleNotifications,
+  });
+  // Nothing cached and the fetch failed: show an empty feed, not a loader.
+  const items = data ?? (failed ? [] : null);
+  const refresh = useCallback(() => void refetch(), [refetch]);
+
+  const markRead = useCallback(
+    (ids: string[]) => {
+      if (ids.length === 0 || !data) return;
+      // Optimistic — a failed call just leaves them unread next refresh.
+      setData(data.map((n) => (ids.includes(n.id) ? { ...n, read: true } : n)));
+      markNotificationsRead(ids).catch(() => {});
+    },
+    [data, setData],
   );
-
-  const refresh = useCallback(() => {
-    getNotifications()
-      .then(({ notifications }) => {
-        const visible = MONEY_ENABLED
-          ? notifications
-          : notifications.filter((n) => !MONEY_NOTIFICATION_TYPES.includes(n.type));
-        writeCache(NOTIFICATIONS_CACHE_KEY, visible);
-        setItems(visible);
-      })
-      .catch(() => setItems((prev) => prev ?? []));
-  }, []);
-
-  useEffect(() => {
-    refresh();
-    const onVisible = () => {
-      if (document.visibilityState === "visible") refresh();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [refresh]);
-
-  const markRead = useCallback((ids: string[]) => {
-    if (ids.length === 0) return;
-    // Optimistic — a failed call just leaves them unread next refresh.
-    setItems((prev) => prev?.map((n) => (ids.includes(n.id) ? { ...n, read: true } : n)) ?? prev);
-    markNotificationsRead(ids).catch(() => {});
-  }, []);
 
   const unread = (items ?? []).filter((n) => !n.read);
   const markAllRead = useCallback(() => markRead(unread.map((n) => n.id)), [markRead, unread]);
@@ -67,16 +60,7 @@ export function useNotifications() {
 }
 
 function useTiers(): InfiniteTiersResponse | null {
-  const [tiers, setTiers] = useState(() => readCache<InfiniteTiersResponse>(TIERS_CACHE_KEY));
-  useEffect(() => {
-    getInfiniteTiers()
-      .then((res) => {
-        writeCache(TIERS_CACHE_KEY, res);
-        setTiers(res);
-      })
-      .catch(() => {});
-  }, []);
-  return tiers;
+  return useSyncedResource({ flag: "tiers", key: TIERS_CACHE_KEY, fetcher: getInfiniteTiers }).data;
 }
 
 // ---------------------------------------------------------------------------

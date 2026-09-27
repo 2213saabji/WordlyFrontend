@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Loader from "@/components/Loader";
 import ScreenHeader from "@/components/ScreenHeader";
 import TierBadge from "@/components/TierBadge";
@@ -28,6 +28,7 @@ import { useAuth } from "@/lib/auth-context";
 import { readCache, writeCache } from "@/lib/cache";
 import { MONEY_ENABLED } from "@/lib/flags";
 import { formatInr } from "@/lib/tiers";
+import { useSyncedLoader, useSyncedResource } from "@/lib/use-synced";
 import type {
   Group,
   InfiniteLeaderboardEntry,
@@ -77,36 +78,29 @@ export default function TierLeaderboard({
   const [board, setBoard] = useState<InfiniteLeaderboardResponse | null>(() =>
     readCache<InfiniteLeaderboardResponse>(cacheKeyFor(startTier)),
   );
-  const [tiers, setTiers] = useState<InfiniteTiersResponse | null>(() =>
-    readCache<InfiniteTiersResponse>(TIERS_CACHE_KEY),
-  );
-  const [me, setMe] = useState<InfiniteMeResponse | null>(() => readCache<InfiniteMeResponse>(ME_CACHE_KEY));
-  const [groups, setGroups] = useState<Group[] | null>(() => readCache<Group[]>(GROUPS_CACHE_KEY));
+  // Synced when signed in (lib/use-synced.ts): cached, refetched only when
+  // /sync reports a change. Signed out (public page) there's no sync, so
+  // they're fetched on every visit, as before.
+  const tiers: InfiniteTiersResponse | null = useSyncedResource({
+    flag: "tiers",
+    key: TIERS_CACHE_KEY,
+    fetcher: isPublic ? getPublicInfiniteTiers : getInfiniteTiers,
+  }).data;
+  const me: InfiniteMeResponse | null = useSyncedResource({
+    flag: "infinite",
+    key: ME_CACHE_KEY,
+    fetcher: getInfiniteMe,
+    enabled: !isPublic,
+  }).data;
+  const groupsRes = useSyncedResource({
+    flag: "mine",
+    key: GROUPS_CACHE_KEY,
+    fetcher: async () => (await getMyGroups({ limit: 100 })).groups,
+    enabled: !isPublic,
+  });
+  const groups: Group[] | null = groupsRes.data ?? (groupsRes.failed ? [] : null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    (isPublic ? getPublicInfiniteTiers() : getInfiniteTiers())
-      .then((res) => {
-        setTiers(res);
-        writeCache(TIERS_CACHE_KEY, res);
-      })
-      .catch(() => {});
-    if (isPublic) return;
-    getInfiniteMe()
-      .then((res) => {
-        setMe(res);
-        writeCache(ME_CACHE_KEY, res);
-      })
-      .catch(() => {});
-    getMyGroups({ limit: 100 })
-      .then(({ groups }) => {
-        setGroups(groups);
-        writeCache(GROUPS_CACHE_KEY, groups);
-      })
-      .catch(() => setGroups((prev) => prev ?? []));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   function fetchBoard(t: TierNumber | undefined, page: number) {
     return isPublic
@@ -114,23 +108,35 @@ export default function TierLeaderboard({
       : getInfiniteLeaderboard({ tier: t, page, limit: PAGE_SIZE });
   }
 
+  // Ignore a first page that lands after the player switched tier.
+  const tierRef = useRef(tier);
   useEffect(() => {
-    let cancelled = false;
-    fetchBoard(tier, 1)
-      .then((res) => {
-        writeCache(cacheKeyFor(tier), res);
-        if (tier === undefined) writeCache(cacheKeyFor(res.tier), res);
-        if (cancelled) return;
-        setBoard(res);
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err instanceof ApiRequestError ? err.message : "Something went wrong");
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    tierRef.current = tier;
   }, [tier]);
+
+  const loadFirstPage = () => {
+    const forTier = tier;
+    return fetchBoard(forTier, 1).then(
+      (res) => {
+        writeCache(cacheKeyFor(forTier), res);
+        if (forTier === undefined) writeCache(cacheKeyFor(res.tier), res);
+        if (tierRef.current === forTier) setBoard(res);
+      },
+      (err: unknown) => {
+        if (tierRef.current === forTier) setError(err instanceof ApiRequestError ? err.message : "Something went wrong");
+        throw err;
+      },
+    );
+  };
+
+  // Signed in: the board is synced (`infiniteBoard`, every tier) — at most
+  // about one refresh a minute.
+  useSyncedLoader({ flag: "infiniteBoard", key: cacheKeyFor(tier), load: loadFirstPage, enabled: !isPublic });
+  // Public page: fetched on every visit / tier switch.
+  useEffect(() => {
+    if (isPublic) loadFirstPage().catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tier, isPublic]);
 
   function selectTier(next: TierNumber) {
     if (next === (tier ?? board?.tier)) return;

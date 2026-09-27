@@ -8,6 +8,7 @@ import { getInfiniteMe, getInfiniteTiers, getRewards, getVerificationStatus } fr
 import { readCache, writeCache } from "@/lib/cache";
 import { MONEY_ENABLED } from "@/lib/flags";
 import { formatInr } from "@/lib/tiers";
+import { useSyncedResource } from "@/lib/use-synced";
 import type {
   InfiniteMeResponse,
   InfiniteTiersResponse,
@@ -59,37 +60,27 @@ export default function DiamondStatusScreen({
   /** Opens the verification flow at a step — omitted until those screens exist. */
   onVerify?: (step: VerificationStep) => void;
 }) {
-  const [me, setMe] = useState<InfiniteMeResponse | null>(() => readCache<InfiniteMeResponse>(ME_CACHE_KEY));
-  const [tiers, setTiers] = useState<InfiniteTiersResponse | null>(() =>
-    readCache<InfiniteTiersResponse>(TIERS_CACHE_KEY),
-  );
-  const [rewards, setRewards] = useState<RewardStatus | null>(() => readCache<RewardStatus>(REWARDS_CACHE_KEY));
+  // Synced (lib/use-synced.ts): cached, refetched only when /sync says so.
+  const meRes = useSyncedResource({ flag: "infinite", key: ME_CACHE_KEY, fetcher: getInfiniteMe });
+  const me: InfiniteMeResponse | null = meRes.data;
+  const failed = meRes.failed;
+  const tiers: InfiniteTiersResponse | null = useSyncedResource({
+    flag: "tiers",
+    key: TIERS_CACHE_KEY,
+    fetcher: getInfiniteTiers,
+  }).data;
+  // Completed cycles come from the payout log in both modes.
+  const rewards: RewardStatus | null = useSyncedResource({
+    flag: "rewards",
+    key: REWARDS_CACHE_KEY,
+    fetcher: getRewards,
+  }).data;
+  // Verification status isn't covered by /sync — fetched on every visit.
   const [verification, setVerification] = useState<VerificationStatusResponse | null>(() =>
     MONEY_ENABLED ? readCache<VerificationStatusResponse>(VERIFICATION_CACHE_KEY) : null,
   );
-  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    getInfiniteMe()
-      .then((res) => {
-        writeCache(ME_CACHE_KEY, res);
-        setMe(res);
-      })
-      .catch(() => setFailed(true));
-    getInfiniteTiers()
-      .then((res) => {
-        writeCache(TIERS_CACHE_KEY, res);
-        setTiers(res);
-      })
-      .catch(() => {});
-    // Completed cycles come from the payout log in both modes (ASSUMED —
-    // the contract has no money-free source for them; see the report).
-    getRewards()
-      .then((res) => {
-        writeCache(REWARDS_CACHE_KEY, res);
-        setRewards(res);
-      })
-      .catch(() => {});
     if (MONEY_ENABLED) {
       getVerificationStatus()
         .then((res) => {

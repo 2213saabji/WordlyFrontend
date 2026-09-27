@@ -6,11 +6,14 @@ import { readCache, writeCache } from "@/lib/cache";
 import { MONEY_ENABLED } from "@/lib/flags";
 import { SITE_URL } from "@/lib/seo";
 import { TIER_COLORS, demotionRuleFor, formatInr, lastDays, plural } from "@/lib/tiers";
+import { useSyncedResource } from "@/lib/use-synced";
 import type { InfiniteMeResponse, InfiniteTiersResponse, TierChange, TierNumber } from "@/types";
 
 // Shared with the hub / tier leaderboard / play screen.
 const ME_CACHE_KEY = "infinite:me";
 const TIERS_CACHE_KEY = "infinite:tiers";
+// The newest tier-change log entry, for the score carry-in row.
+const LATEST_CHANGE_CACHE_KEY = "infinite:tier-changes:latest";
 // "<reason>:<day>:<toTier>" of the last tier change already announced on
 // this device.
 const SEEN_KEY = "infinite:seen-tier-change";
@@ -43,53 +46,56 @@ export default function TierPromotionAnnouncer({
   /** The demotion screen's "Play now". */
   onPlay: () => void;
 }) {
-  const [announcement, setAnnouncement] = useState<Announcement | null>(null);
+  // Synced (lib/use-synced.ts): shared with the other tier screens, and
+  // refetched when /sync reports a change — so an overnight move also shows
+  // up mid-session, not only on app load.
+  const me = useSyncedResource({ flag: "infinite", key: ME_CACHE_KEY, fetcher: getInfiniteMe }).data;
+  const tiers = useSyncedResource({ flag: "tiers", key: TIERS_CACHE_KEY, fetcher: getInfiniteTiers }).data;
+  const latest = useSyncedResource({
+    flag: "tierChanges",
+    key: LATEST_CHANGE_CACHE_KEY,
+    fetcher: () => getInfiniteTierChanges({ page: 1, limit: 1 }),
+  }).data;
+  // What this device had already announced when the app loaded, plus
+  // anything dismissed since.
+  const [seenAtStart] = useState(() => readCache<string>(SEEN_KEY));
+  const [dismissed, setDismissed] = useState<string | null>(null);
 
+  const last = me?.lastChange;
+  const key = last ? `${last.reason}:${last.day}:${last.toTier}` : null;
+  const show =
+    !!me &&
+    !!tiers &&
+    !!last &&
+    !!key &&
+    (last.reason === "promotion" || last.reason === "demotion") &&
+    key !== seenAtStart &&
+    key !== dismissed &&
+    daysBetween(last.day, me.today.day) <= MAX_AGE_DAYS;
+
+  // Announced exactly once per device.
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const me = await getInfiniteMe();
-        writeCache(ME_CACHE_KEY, me);
-        const last = me.lastChange;
-        if (!last || (last.reason !== "promotion" && last.reason !== "demotion")) return;
-        const key = `${last.reason}:${last.day}:${last.toTier}`;
-        if (readCache<string>(SEEN_KEY) === key) return;
-        if (daysBetween(last.day, me.today.day) > MAX_AGE_DAYS) return;
+    if (show && key) writeCache(SEEN_KEY, key);
+  }, [show, key]);
 
-        const [tiers, changes] = await Promise.all([
-          getInfiniteTiers(),
-          getInfiniteTierChanges({ page: 1, limit: 1 }).catch(() => null),
-        ]);
-        writeCache(TIERS_CACHE_KEY, tiers);
-        const change = changes?.changes[0];
-        if (cancelled) return;
-        writeCache(SEEN_KEY, key);
-        setAnnouncement({
-          me,
-          tiers,
-          change: change && change.toTier === last.toTier && change.reason === last.reason ? change : null,
-        });
-      } catch {
-        // No announcement is the right failure mode.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (!announcement) return null;
+  if (!show || !me || !tiers || !last) return null;
+  const change = latest?.changes[0];
+  const announcement: Announcement = {
+    me,
+    tiers,
+    change: change && change.toTier === last.toTier && change.reason === last.reason ? change : null,
+  };
+  const close = () => setDismissed(key);
   return (
     <PromotionScreen
       {...announcement}
-      onClose={() => setAnnouncement(null)}
+      onClose={close}
       onSeeLeaderboard={(tier) => {
-        setAnnouncement(null);
+        close();
         onOpenTierLeaderboard(tier);
       }}
       onPlay={() => {
-        setAnnouncement(null);
+        close();
         onPlay();
       }}
     />

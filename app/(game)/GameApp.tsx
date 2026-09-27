@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useState, type ReactNode } from "react";
 import Leaderboard from "@/components/Leaderboard";
 import TierLeaderboard from "@/components/TierLeaderboard";
 import TierPromotionAnnouncer from "@/components/TierPromotionModal";
@@ -23,6 +23,7 @@ import { readPendingSignup } from "@/lib/pending-signup";
 import { INFINITE_TIERS_ENABLED, MONEY_ENABLED } from "@/lib/flags";
 import { useScreen } from "@/lib/screen-context";
 import { parseReplayParam, type ReplayInvite } from "@/lib/share";
+import { runSync } from "@/lib/sync";
 
 function AppShell() {
   const { screen, push, back, replace } = useScreen();
@@ -53,6 +54,20 @@ function AppShell() {
   const [initialScreenKey] = useState(screenKey);
   const [hasNavigated, setHasNavigated] = useState(false);
   if (!hasNavigated && screenKey !== initialScreenKey) setHasNavigated(true);
+
+  // /sync on every screen change (throttled to 15 s in runSync) — a layout
+  // effect so it starts before the new screen's own requests — and when the
+  // tab becomes visible again. App start / sign-in sync lives in AuthProvider.
+  useLayoutEffect(() => {
+    void runSync();
+  }, [screenKey]);
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void runSync();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
 
   return (
     <div className="flex flex-1 flex-col">

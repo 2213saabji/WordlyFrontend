@@ -5,8 +5,8 @@ import Loader from "@/components/Loader";
 import ScreenHeader from "@/components/ScreenHeader";
 import TierBadge, { TierChip } from "@/components/TierBadge";
 import { getInfiniteMe, getInfiniteTiers } from "@/lib/api";
-import { readCache, writeCache } from "@/lib/cache";
 import { MONEY_ENABLED } from "@/lib/flags";
+import { useSyncedResource } from "@/lib/use-synced";
 import { demotionRuleFor, formatInr, lastDays, plural } from "@/lib/tiers";
 import type { InfiniteMeResponse, InfiniteTiersResponse, TierWindowDay } from "@/types";
 
@@ -40,30 +40,13 @@ export default function InfiniteHubScreen({
   onOpenDiamond?: () => void;
   onOpenTierHistory?: () => void;
 }) {
-  // Seeded from the last visit (lib/cache.ts); the effect revalidates.
-  const [me, setMe] = useState<InfiniteMeResponse | null>(() => readCache<InfiniteMeResponse>(ME_CACHE_KEY));
-  const [tiers, setTiers] = useState<InfiniteTiersResponse | null>(() =>
-    readCache<InfiniteTiersResponse>(TIERS_CACHE_KEY),
-  );
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([getInfiniteMe(), getInfiniteTiers()])
-      .then(([me, tiers]) => {
-        writeCache(ME_CACHE_KEY, me);
-        writeCache(TIERS_CACHE_KEY, tiers);
-        if (cancelled) return;
-        setMe(me);
-        setTiers(tiers);
-      })
-      .catch(() => {
-        if (!cancelled) setFailed(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // Cached from the last visit; each is only refetched when /sync marks it
+  // changed (lib/use-synced.ts).
+  const meRes = useSyncedResource({ flag: "infinite", key: ME_CACHE_KEY, fetcher: getInfiniteMe });
+  const tiersRes = useSyncedResource({ flag: "tiers", key: TIERS_CACHE_KEY, fetcher: getInfiniteTiers });
+  const me: InfiniteMeResponse | null = meRes.data;
+  const tiers: InfiniteTiersResponse | null = tiersRes.data;
+  const failed = meRes.failed || tiersRes.failed;
 
   const buttons = (
     <>

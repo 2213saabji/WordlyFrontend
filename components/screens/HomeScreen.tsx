@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { getMyGroups, getGlobalWeeklyLeaderboard, ApiRequestError } from "@/lib/api";
-import { readCache, writeCache } from "@/lib/cache";
+import { getMyGroups, getGlobalWeeklyLeaderboard } from "@/lib/api";
+import { useSyncedResource } from "@/lib/use-synced";
 import type { Group, WeeklyLeaderboardEntry } from "@/types";
 
 const GROUPS_CACHE_KEY = "home:groups";
@@ -144,41 +144,28 @@ export default function HomeScreen({
   onOpenLeaderboard: (groupId?: string) => void;
 }) {
   const { user } = useAuth();
-  // Seeded from the last visit's data (lib/cache.ts) so a reload renders
-  // straight away; the effects below revalidate it.
-  const [cachedGroups] = useState(() => readCache<{ groups: Group[]; total: number }>(GROUPS_CACHE_KEY));
-  const [groups, setGroups] = useState<Group[] | null>(cachedGroups?.groups ?? null);
-  const [groupsTotal, setGroupsTotal] = useState(cachedGroups?.total ?? 0);
-  const [weekly, setWeekly] = useState<WeeklyLeaderboardEntry[] | null>(() =>
-    readCache<WeeklyLeaderboardEntry[]>(WEEKLY_CACHE_KEY),
-  );
-
-  useEffect(() => {
+  // Cached from the last visit and only refetched when /sync reports a
+  // change (lib/use-synced.ts).
+  const groupsRes = useSyncedResource({
+    flag: "mine",
+    key: GROUPS_CACHE_KEY,
     // Only the top 4 are ever shown here (see the .slice(0, 4) below), but
     // `pagination.total` still reports the true count across all of the
     // user's groups regardless of the requested limit — used for the "N
     // active" label below.
-    getMyGroups({ limit: 4 })
-      .then(({ groups, pagination }) => {
-        setGroups(groups);
-        setGroupsTotal(pagination.total);
-        writeCache(GROUPS_CACHE_KEY, { groups, total: pagination.total });
-      })
-      .catch(() => setGroups((prev) => prev ?? []));
-  }, []);
-
-  useEffect(() => {
-    // Only the top 4 are ever shown here (see the .slice(0, 4) below), so
-    // request just that instead of the default page of 20.
-    getGlobalWeeklyLeaderboard({ limit: 4 })
-      .then((res) => {
-        setWeekly(res.leaderboard);
-        writeCache(WEEKLY_CACHE_KEY, res.leaderboard);
-      })
-      .catch((err) => {
-        if (!(err instanceof ApiRequestError)) throw err;
-      });
-  }, []);
+    fetcher: async () => {
+      const { groups, pagination } = await getMyGroups({ limit: 4 });
+      return { groups, total: pagination.total };
+    },
+  });
+  const groups: Group[] | null = groupsRes.data?.groups ?? (groupsRes.failed ? [] : null);
+  const groupsTotal = groupsRes.data?.total ?? 0;
+  const weekly: WeeklyLeaderboardEntry[] | null = useSyncedResource({
+    flag: "weekly",
+    key: WEEKLY_CACHE_KEY,
+    // Only the top 4 are shown, so request just that.
+    fetcher: async () => (await getGlobalWeeklyLeaderboard({ limit: 4 })).leaderboard,
+  }).data;
 
   const winRate =
     user && user.stats.gamesPlayed > 0

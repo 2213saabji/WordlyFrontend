@@ -11,6 +11,7 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { readCache, writeCache } from "@/lib/cache";
+import { useSyncedLoader, useSyncedResource } from "@/lib/use-synced";
 import Loader from "@/components/Loader";
 import ScreenHeader from "@/components/ScreenHeader";
 import type { DailyLeaderboardEntry, Group, WeeklyLeaderboardEntry } from "@/types";
@@ -421,9 +422,17 @@ export default function Leaderboard({
 }) {
   const { user } = useAuth();
   const [period, setPeriod] = useState<Period>("daily");
-  const [groups, setGroups] = useState<Group[] | null>(() => readCache<Group[]>(GROUPS_CACHE_KEY));
+  // Populates the scope-switcher dropdown, not a paginated list — request
+  // the server's max page size so every group the user belongs to shows up
+  // in one shot. Synced: only refetched when /sync reports `mine` changed.
+  const groupsRes = useSyncedResource({
+    flag: "mine",
+    key: GROUPS_CACHE_KEY,
+    fetcher: async () => (await getMyGroups({ limit: 100 })).groups,
+  });
+  const groups: Group[] | null = groupsRes.data ?? (groupsRes.failed ? [] : null);
   // The first page is seeded from the last visit (lib/cache.ts) so a reload
-  // renders straight away; the effect below revalidates it.
+  // renders straight away.
   const [data, setData] = useState<NormalizedData | null>(() => readFirstPage(groupId, period));
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -434,27 +443,16 @@ export default function Leaderboard({
     setData(readFirstPage(groupId, next));
   }
 
+  // Ignore a first page that lands after the player switched board.
+  const boardRef = useRef(`${groupId}|${period}`);
   useEffect(() => {
-    // Populates the scope-switcher dropdown, not a paginated list — request
-    // the server's max page size so every group the user belongs to shows
-    // up in one shot.
-    getMyGroups({ limit: 100 })
-      .then(({ groups }) => {
-        setGroups(groups);
-        writeCache(GROUPS_CACHE_KEY, groups);
-      })
-      .catch(() => setGroups((prev) => prev ?? []));
-  }, []);
+    boardRef.current = `${groupId}|${period}`;
+  }, [groupId, period]);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      setError(null);
-      setLoadingMore(false);
-      try {
-        const page = await fetchPage(groupId, period, 1);
-        if (cancelled) return;
+  const loadFirstPage = useCallback(() => {
+    const board = `${groupId}|${period}`;
+    return fetchPage(groupId, period, 1).then(
+      (page) => {
         const next: NormalizedData = {
           subtitle: page.subtitle,
           columnHeaders: page.columnHeaders,
@@ -463,18 +461,32 @@ export default function Leaderboard({
           totalPages: page.totalPages,
           rawMe: page.rawMe,
         };
-        setData(next);
         writeCache(firstPageCacheKey(groupId, period), next);
-      } catch (err) {
-        if (!cancelled) setError(err instanceof ApiRequestError ? err.message : "Something went wrong");
-      }
-    }
-
-    load();
-    return () => {
-      cancelled = true;
-    };
+        if (boardRef.current !== board) return;
+        setData(next);
+        setError(null);
+        setLoadingMore(false);
+      },
+      (err: unknown) => {
+        if (boardRef.current === board) setError(err instanceof ApiRequestError ? err.message : "Something went wrong");
+        throw err;
+      },
+    );
   }, [groupId, period]);
+
+  // Global boards are synced (`daily` / `weekly`): shown from cache and
+  // refetched only when /sync says so — at most about once a minute.
+  useSyncedLoader({
+    flag: period,
+    key: firstPageCacheKey(undefined, period),
+    load: loadFirstPage,
+    enabled: !groupId,
+    sameDay: period === "daily",
+  });
+  // Group boards aren't covered by /sync — fetched on every visit, as before.
+  useEffect(() => {
+    if (groupId) loadFirstPage().catch(() => {});
+  }, [groupId, loadFirstPage]);
 
   const canLoadMore = !!data && data.page < data.totalPages;
 

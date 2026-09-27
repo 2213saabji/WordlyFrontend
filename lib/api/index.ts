@@ -40,3 +40,4 @@ export * from "./notifications";
 export * from "./verification";
 export * from "./rewards";
 export * from "./contact";
+export * from "./sync";
