@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Sora, Geist_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
+import { INFINITE_TIERS_ENABLED } from "@/lib/flags";
 import { JsonLd, SITE_NAME, SITE_URL } from "@/lib/seo";
 
 const sora = Sora({
@@ -21,8 +22,9 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 const TITLE ="GuessWord — Free Daily Word Guessing Game";
-const DESCRIPTION =
-  "Guess the secret five-letter word in six tries. Play a new puzzle every day, practice with unlimited rounds in Infinite mode, and compete with friends on group and global leaderboards — free, no download required.";
+const DESCRIPTION = INFINITE_TIERS_ENABLED
+  ? "Guess the secret five-letter word in six tries. Play a new puzzle every day, climb eight Infinite tiers from Stone to Diamond, and compete with friends on group and global leaderboards — free, no download required."
+  : "Guess the secret five-letter word in six tries. Play a new puzzle every day, practice with unlimited rounds in Infinite mode, and compete with friends on group and global leaderboards — free, no download required.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -44,6 +46,7 @@ export const metadata: Metadata = {
     "free word game",
     "word puzzle",
     "vocabulary game",
+    ...(INFINITE_TIERS_ENABLED ? ["unlimited word game", "word game leaderboard", "word game tiers"] : []),
   ],
   category: "games",
   formatDetection: {

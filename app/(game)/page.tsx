@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { INFINITE_TIERS_ENABLED } from "@/lib/flags";
 import GameApp from "./GameApp";
 
 const HIGHLIGHTS = [
@@ -6,10 +7,15 @@ const HIGHLIGHTS = [
     heading: "Daily puzzle",
     body: "One five-letter word for everyone, new every day at midnight UTC. Solve it to build your streak.",
   },
-  {
-    heading: "Infinite mode",
-    body: "Unlimited practice rounds with a fresh word each time — it never affects your streak or stats.",
-  },
+  INFINITE_TIERS_ENABLED
+    ? {
+        heading: "Infinite tiers",
+        body: "Unlimited rounds that earn points on a tiered leaderboard. Hit your daily targets to climb eight tiers, from Stone to Diamond.",
+      }
+    : {
+        heading: "Infinite mode",
+        body: "Unlimited practice rounds with a fresh word each time — it never affects your streak or stats.",
+      },
   {
     heading: "Play with friends",
     body: "Create a group, share the invite code, and compete on daily and weekly leaderboards.",
@@ -57,11 +63,19 @@ function Intro() {
         New here? Read{" "}
         <Link href="/how-to-play" className="text-accent underline hover:no-underline">
           how to play
-        </Link>{" "}
-        or browse the{" "}
+        </Link>
+        {INFINITE_TIERS_ENABLED ? ", browse the " : " or browse the "}
         <Link href="/faq" className="text-accent underline hover:no-underline">
           FAQ
         </Link>
+        {INFINITE_TIERS_ENABLED && (
+          <>
+            , or see who&apos;s on top of the{" "}
+            <Link href="/leaderboard/infinite" className="text-accent underline hover:no-underline">
+              Infinite leaderboard
+            </Link>
+          </>
+        )}
         .
       </p>
     </section>

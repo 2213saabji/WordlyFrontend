@@ -1,16 +1,62 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import FaqAccordion, { type FaqItem } from "@/components/FaqAccordion";
+import { INFINITE_TIERS_ENABLED } from "@/lib/flags";
 import { JsonLd, breadcrumbJsonLd, pageMetadata } from "@/lib/seo";
 
 const PATH = "/faq";
 
-export const metadata: Metadata = pageMetadata({
-  title: "FAQ — Daily Word, Streaks, Groups & Hints",
-  description:
-    "Answers to common GuessWord questions: when the daily word changes, how streaks and leaderboards work, Infinite mode, hints, groups, and playing on mobile.",
-  path: PATH,
-});
+export const metadata: Metadata = pageMetadata(
+  INFINITE_TIERS_ENABLED
+    ? {
+        title: "FAQ — Daily Word, Streaks, Infinite Tiers & Hints",
+        description:
+          "Answers to common GuessWord questions: when the daily word changes, how streaks work, how Infinite tiers and the Infinite leaderboard work, hints, groups, and playing on mobile.",
+        path: PATH,
+      }
+    : {
+        title: "FAQ — Daily Word, Streaks, Groups & Hints",
+        description:
+          "Answers to common GuessWord questions: when the daily word changes, how streaks and leaderboards work, Infinite mode, hints, groups, and playing on mobile.",
+        path: PATH,
+      },
+);
+
+// Tier rules mirror the backend's current config (GET /infinite/tiers:
+// 8 tiers, 3 misses in any 7 days, scoring 10 + 2 per unused guess + 20 per
+// qualifying day). Update this copy if those change.
+const TIER_FAQS: FaqItem[] = [
+  {
+    question: "Does Infinite mode affect my streak?",
+    answer:
+      "No — your daily streak only counts the daily word. Infinite rounds earn points on the Infinite leaderboard instead.",
+  },
+  {
+    question: "What are Infinite tiers?",
+    answer:
+      "Infinite mode has eight tiers: Stone, Iron, Copper, Bronze, Silver, Gold, Platinum and Diamond. Everyone starts in Stone after their first completed Infinite round, and each tier has its own leaderboard.",
+  },
+  {
+    question: "How do I move up a tier?",
+    answer:
+      "Each tier sets two daily targets: minutes played and rounds completed. Meet both and the day counts. Count enough days in a row for your tier and you move up at midnight IST.",
+  },
+  {
+    question: "Can I drop down a tier?",
+    answer:
+      "Yes. Missing a day resets your day count, and missing your targets on 3 days out of any 7 drops you one tier. Stone is the bottom tier, so you can't drop below it.",
+  },
+  {
+    question: "How are Infinite points scored?",
+    answer:
+      "A solved word earns 10 points plus 2 for every guess you didn't need, and each day you meet your targets adds a 20-point bonus. Tier leaderboards rank by points, then by days counted in the tier.",
+  },
+  {
+    question: "Where can I see the Infinite leaderboard?",
+    answer:
+      "Anyone can view it at guessword.games/leaderboard/infinite, no account needed. Sign in to see your own rank and tier.",
+  },
+];
 
 const FAQS: FaqItem[] = [
   {
@@ -22,10 +68,14 @@ const FAQS: FaqItem[] = [
     answer:
       "Solve the daily word and your streak goes up by one. Miss a day without solving it and your streak resets to zero — your best streak is saved separately, so you always know your record.",
   },
-  {
-    question: "Does Infinite mode affect my streak?",
-    answer: "No — Infinite mode is just for practice. It never touches your stats, streak, or any leaderboard.",
-  },
+  ...(INFINITE_TIERS_ENABLED
+    ? TIER_FAQS
+    : [
+        {
+          question: "Does Infinite mode affect my streak?",
+          answer: "No — Infinite mode is just for practice. It never touches your stats, streak, or any leaderboard.",
+        },
+      ]),
   {
     question: "How do I join a group?",
     answer: "Open Groups and enter a friend's invite code, or create your own group to get a code to share.",
@@ -55,8 +105,9 @@ const FAQS: FaqItem[] = [
   },
   {
     question: "Are hints available?",
-    answer:
-      "Yes — after four guesses without solving the word, a hint becomes available with a short clue. It never reveals the word itself.",
+    answer: INFINITE_TIERS_ENABLED
+      ? "Yes — after four guesses without solving the word, a hint becomes available with a short clue. It never reveals the word itself. In Infinite mode, hints are only available in the Stone and Iron tiers."
+      : "Yes — after four guesses without solving the word, a hint becomes available with a short clue. It never reveals the word itself.",
   },
 ];
 
