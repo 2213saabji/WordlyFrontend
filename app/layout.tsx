@@ -21,6 +21,9 @@ const spaceGrotesk = Space_Grotesk({
   weight: "700",
 });
 
+// Public by design — it's in every page's HTML and in /ads.txt.
+const ADSENSE_CLIENT = "ca-pub-8265077911145583";
+
 const TITLE ="GuessWord — Free Daily Word Guessing Game";
 const DESCRIPTION = INFINITE_TIERS_ENABLED
   ? "Guess the secret five-letter word in six tries. Play a new puzzle every day, climb eight Infinite tiers from Stone to Diamond, and compete with friends on group and global leaderboards — free, no download required."
@@ -163,6 +166,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           dangerouslySetInnerHTML={{
             __html: `(function(){try{if(localStorage.getItem("guessword_device_id")&&localStorage.getItem("guessword_cache:user"))document.documentElement.setAttribute("data-cached-session","")}catch(e){}})()`,
           }}
+        />
+        {/* Google AdSense — site verification and ads. The root layout wraps
+            every URL, and the game's screens all live on "/", so this one
+            tag covers every page. Publisher ID matches public/ads.txt. */}
+        <script
+          async
+          src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}`}
+          crossOrigin="anonymous"
         />
       </head>
       <body className="min-h-full flex flex-col">
