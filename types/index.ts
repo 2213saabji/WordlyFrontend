@@ -36,6 +36,16 @@ export interface AuthResponse {
   user: User;
 }
 
+/** 202 from POST /auth/signup and 200 from /auth/signup/resend — no account
+ * or token yet; the player verifies with the emailed code or link. */
+export interface SignupPendingResponse {
+  message: string;
+  /** Lowercased by the server — use this, not what was typed. */
+  email: string;
+  expiresInSeconds: number;
+  resendAfterSeconds: number;
+}
+
 /** 1 = correct spot, -1 = wrong spot, 0 = not in word */
 export type LetterResult = 1 | -1 | 0;
 
@@ -163,6 +173,14 @@ export interface GroupWeeklyLeaderboardResponse {
 /** Machine-readable `code` on error bodies — branch on this, never on
  * `message` text. */
 export type ApiErrorCode =
+  // signup email verification
+  | "EMAIL_TAKEN"
+  | "SIGNUP_RATE_LIMITED"
+  | "SIGNUP_CODE_INVALID"
+  | "SIGNUP_CODE_ATTEMPTS"
+  | "SIGNUP_INVALID"
+  | "SIGNUP_NOT_FOUND"
+  | "SIGNUP_LINK_INVALID"
   | "HINTS_DISABLED_FOR_TIER"
   | "TIER1_REQUIRED"
   | "PHONE_INVALID"
@@ -182,7 +200,7 @@ export type ApiErrorCode =
 export interface ApiErrorBody {
   message: string;
   code?: ApiErrorCode;
-  /** Sent with OTP_RATE_LIMITED and EMAIL_RATE_LIMITED. */
+  /** Sent with OTP_RATE_LIMITED, EMAIL_RATE_LIMITED and SIGNUP_RATE_LIMITED. */
   retryAfterSeconds?: number;
   game?: Game;
 }

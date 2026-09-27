@@ -7,7 +7,7 @@ import { getInfiniteTiers, getNotifications, markNotificationsRead } from "@/lib
 import { readCache, writeCache } from "@/lib/cache";
 import { MONEY_ENABLED } from "@/lib/flags";
 import type { Screen } from "@/lib/screen-context";
-import { formatInr } from "@/lib/tiers";
+import { demotionRuleFor, formatInr, lastDays } from "@/lib/tiers";
 import {
   MONEY_NOTIFICATION_TYPES,
   type AppNotification,
@@ -140,13 +140,14 @@ function describe(n: AppNotification, tiers: InfiniteTiersResponse | null): Row 
     case "demotion": {
       const to = d.toTier as TierNumber | undefined;
       const size = num(d.newTierSize);
-      const misses = tiers?.demotion;
+      // The rule of the tier they dropped out of (windows run 7–30 days).
+      const rule = tiers ? demotionRuleFor(tiers, num(d.fromTier) ?? 8) : null;
       return {
         icon: "↓",
         iconBg: "#b5543f",
         title: `Moved down to ${tierName(to)}`,
         body: [
-          misses ? `${misses.misses} missed days in ${misses.windowDays}.` : null,
+          rule ? `${rule.misses} missed days ${lastDays(rule.windowDays)}.` : null,
           d.rankAtEntry != null ? `You're #${d.rankAtEntry}${size ? ` of ${size}` : ""}.` : null,
         ]
           .filter(Boolean)
@@ -155,12 +156,18 @@ function describe(n: AppNotification, tiers: InfiniteTiersResponse | null): Row 
       };
     }
     case "demotion_risk": {
-      const misses = num(d.missesInWindow) ?? (tiers ? tiers.demotion.misses - 1 : 2);
+      const tier = num(d.tier);
+      const rule = tiers && tier ? demotionRuleFor(tiers, tier) : null;
+      const misses = num(d.missesInWindow) ?? (rule ? rule.misses - 1 : 2);
+      const windowDays = num(d.windowDays) ?? rule?.windowDays;
+      const lower = tier ? tierName(tier + 1) : "";
       return {
         icon: "!",
         iconBg: "#f2a05c",
-        title: `${misses} misses this week`,
-        body: `Qualify today to stay in ${tierName(num(d.tier)) || "your tier"}.`,
+        title: `${misses} missed days${windowDays ? ` ${lastDays(windowDays)}` : ""}`,
+        body: lower
+          ? `One more miss and you'll drop to ${lower}. Qualify today to stay in ${tierName(tier)}.`
+          : "Qualify today to stay in your tier.",
         target: { name: "infinite-hub" },
       };
     }

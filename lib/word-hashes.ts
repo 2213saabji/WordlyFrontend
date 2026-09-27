@@ -3,7 +3,7 @@
 // Hashed word lists used to pre-validate a guess entirely client-side,
 // before ever calling the backend guess API. The plaintext word lists live
 // only on the backend; this file never contains a real word, only
-// sha256(`${NEXT_PUBLIC_WORD_HASH_SALT}:${word}`) for each one.
+// sha256(`${WORD_HASH_SALT}:${word}`) for each one.
 //
 // Mirrors the backend's own three lists 1:1 (see gameController.js's
 // validateGuessInput) — checking is done by unioning these at runtime in

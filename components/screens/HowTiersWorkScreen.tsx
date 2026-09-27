@@ -7,7 +7,7 @@ import TierBadge from "@/components/TierBadge";
 import { getInfiniteTiers } from "@/lib/api";
 import { readCache, writeCache } from "@/lib/cache";
 import { MONEY_ENABLED } from "@/lib/flags";
-import { CARRY_IN_PERCENT, formatInr, plural } from "@/lib/tiers";
+import { CARRY_IN_PERCENT, demotionRuleFor, formatInr, plural } from "@/lib/tiers";
 import type { InfiniteMeResponse, InfiniteTiersResponse, TierDefinition } from "@/types";
 
 // Shared with the hub and tier leaderboard, so any of them seeds this one.
@@ -57,13 +57,23 @@ export default function HowTiersWorkScreen({ onBack }: { onBack: () => void }) {
   const ladder = [...tiers.tiers].sort((a, b) => a.tier - b.tier);
   const top = ladder.find((t) => t.tier === 1);
   const paid = MONEY_ENABLED && !!top && top.rewardInr > 0;
+  const carry = tiers.carryInPercent ?? CARRY_IN_PERCENT;
+
+  // Windows differ per tier (30/21/14 days for tiers 1–4, 7 below), so the
+  // rule is spelled out for the player's own tier and listed per row.
+  const myRule = myTier ? demotionRuleFor(tiers, myTier) : null;
+  const myName = ladder.find((t) => t.tier === myTier)?.name;
+  const lowerName = myTier ? ladder.find((t) => t.tier === myTier + 1)?.name : undefined;
+  const demotionLine =
+    myRule && myName
+      ? `In ${myName}, you can miss up to ${plural(myRule.misses - 1, "day")} in any ${myRule.windowDays}-day stretch; a ${ordinal(myRule.misses)} miss moves you down${lowerName ? ` to ${lowerName}` : ""}.`
+      : `Each tier allows a few missed days in a rolling window (shown per tier); one miss past that and you drop one tier. ${ladder.at(-1)?.name ?? "The bottom tier"} can't drop.`;
 
   const rules = (
     <>
-      <span>
-        Miss your targets on {tiers.demotion.misses} days in any {tiers.demotion.windowDays} and you drop one tier.
-      </span>
-      <span>Moving up or down keeps {CARRY_IN_PERCENT}% of your points and resets your day count to 0.</span>
+      <span>{demotionLine}</span>
+      <span>A missed day also resets your day count, and misses stop counting once they leave the window.</span>
+      <span>Moving up or down keeps {carry}% of your points and starts you with a clean slate: day count and misses at 0.</span>
       <span className="hidden md:inline">The day resets at {tiers.resetTimeIst} IST.</span>
       {top && (
         <span className={DIAMOND_TEXT}>
@@ -98,6 +108,7 @@ export default function HowTiersWorkScreen({ onBack }: { onBack: () => void }) {
                     {isMine && " · you"}
                   </span>
                   <span className={`text-[11.5px] ${MUTED}`}>{targetsLine(t)}</span>
+                  <span className={`text-[11.5px] ${MUTED}`}>{dropLine(tiers, t.tier)}</span>
                 </span>
                 <span className="ml-auto flex flex-col gap-0.5 text-right">
                   <span className={`text-[13px] font-semibold ${t.tier === 1 ? DIAMOND_TEXT : ""}`}>
@@ -127,20 +138,21 @@ export default function HowTiersWorkScreen({ onBack }: { onBack: () => void }) {
       <div className="hidden grid-cols-[minmax(0,1fr)_380px] items-start gap-5 md:grid">
         <div className="overflow-hidden rounded-3xl border border-white/8 bg-white/[0.043]">
           <div
-            className={`grid grid-cols-[minmax(0,1fr)_130px_130px_110px_150px] gap-4 border-b border-white/8 px-7 py-4 text-xs font-semibold uppercase tracking-[0.14em] ${MUTED}`}
+            className={`grid ${LADDER_COLS} gap-4 border-b border-white/8 px-7 py-4 text-xs font-semibold uppercase tracking-[0.14em] ${MUTED}`}
           >
             <span>Tier</span>
             <span>Time / day</span>
             <span>Games / day</span>
             <span>Hints</span>
             <span>Days in a row</span>
+            <span>Drops after</span>
           </div>
           {ladder.map((t) => {
             const isMine = t.tier === myTier;
             return (
               <div
                 key={t.tier}
-                className={`grid grid-cols-[minmax(0,1fr)_130px_130px_110px_150px] items-center gap-4 border-b border-white/7 px-7 py-3.5 text-[15px] last:border-b-0 ${
+                className={`grid ${LADDER_COLS} items-center gap-4 border-b border-white/7 px-7 py-3.5 text-[15px] last:border-b-0 ${
                   isMine ? "bg-accent/8" : ""
                 }`}
               >
@@ -158,6 +170,7 @@ export default function HowTiersWorkScreen({ onBack }: { onBack: () => void }) {
                   {t.daysToStick}
                   {t.tier === 1 && (paid ? ` · ${formatInr(t.rewardInr)}` : " · ★")}
                 </span>
+                <span className={SOFT}>{dropCell(tiers, t.tier)}</span>
               </div>
             );
           })}
@@ -169,6 +182,25 @@ export default function HowTiersWorkScreen({ onBack }: { onBack: () => void }) {
       </div>
     </div>
   );
+}
+
+const LADDER_COLS = "grid-cols-[minmax(0,1fr)_110px_110px_80px_130px_140px]";
+
+function ordinal(n: number): string {
+  const suffix = n % 100 >= 11 && n % 100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10] ?? "th";
+  return `${n}${suffix}`;
+}
+
+/** Mobile ladder row: "Drops after 3 misses in 14 days". */
+function dropLine(tiers: InfiniteTiersResponse, tier: number): string {
+  const rule = demotionRuleFor(tiers, tier);
+  return rule ? `Drops after ${rule.misses} misses in ${rule.windowDays} days` : "Can't drop";
+}
+
+/** Desktop ladder cell: "3 in 14 days". */
+function dropCell(tiers: InfiniteTiersResponse, tier: number): string {
+  const rule = demotionRuleFor(tiers, tier);
+  return rule ? `${rule.misses} in ${rule.windowDays} days` : "—";
 }
 
 /** "60 min · 20 games · no hints"; Stone has no time target: "1 game · hints on". */

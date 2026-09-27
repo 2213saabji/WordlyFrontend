@@ -2,17 +2,45 @@
 // reset. The silent-login call (refreshSession) lives in ./client since
 // every authed request depends on it.
 
-import type { AuthResponse, User } from "@/types";
+import type { AuthResponse, SignupPendingResponse, User } from "@/types";
 import { apiFetch, getDeviceId } from "./client";
 
+// Signup is two steps: POST /auth/signup only emails a 6-digit code and a
+// /verify-signup/<token> link (both 15 min). The account is created — and
+// this device logged in — by verifySignupCode or verifySignupLink.
+
+/** 202, no token. 409 EMAIL_TAKEN, 429 SIGNUP_RATE_LIMITED, 502 EMAIL_SEND_FAILED. */
 export function signup(payload: {
   username: string;
   email: string;
   password: string;
-}): Promise<AuthResponse> {
-  return apiFetch("/auth/signup", {
+}): Promise<SignupPendingResponse> {
+  return apiFetch("/auth/signup", { method: "POST", body: payload, skipAuth: true });
+}
+
+/** New code + link; the old ones stop working. 404 SIGNUP_NOT_FOUND (expired
+ * after 24 h or already completed), 429, 502 (pending signup discarded). */
+export function resendSignup(email: string): Promise<SignupPendingResponse> {
+  return apiFetch("/auth/signup/resend", { method: "POST", body: { email }, skipAuth: true });
+}
+
+/** `code` must stay a string — codes can start with 0. 400
+ * SIGNUP_CODE_INVALID / SIGNUP_CODE_ATTEMPTS / SIGNUP_INVALID, 409 EMAIL_TAKEN. */
+export function verifySignupCode(email: string, code: string): Promise<AuthResponse> {
+  return apiFetch("/auth/signup/verify-otp", {
     method: "POST",
-    body: { ...payload, deviceId: getDeviceId() },
+    body: { email, code, deviceId: getDeviceId() },
+    skipAuth: true,
+  });
+}
+
+/** The emailed link — single use, so call it exactly once. The device that
+ * opens it is the one logged in. 400 SIGNUP_LINK_INVALID / SIGNUP_INVALID,
+ * 409 EMAIL_TAKEN. */
+export function verifySignupLink(token: string): Promise<AuthResponse> {
+  return apiFetch(`/auth/signup/verify/${encodeURIComponent(token)}`, {
+    method: "POST",
+    body: { deviceId: getDeviceId() },
     skipAuth: true,
   });
 }

@@ -21,7 +21,7 @@ import {
   setToken,
 } from "@/lib/api";
 import { clearCache, readCache, writeCache } from "@/lib/cache";
-import type { User } from "@/types";
+import type { AuthResponse, SignupPendingResponse, User } from "@/types";
 
 const USER_CACHE_KEY = "user";
 
@@ -29,7 +29,14 @@ interface AuthContextValue {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  signup: (username: string, email: string, password: string) => Promise<void>;
+  /** Step 1 of signup: emails a code + link, creates nothing and logs no
+   * one in. Resolves with the (lowercased) email to verify. */
+  signup: (username: string, email: string, password: string) => Promise<SignupPendingResponse>;
+  /** Step 2 of signup (code typed in the app): creates the account and logs
+   * this device in, exactly like login. */
+  verifySignupCode: (email: string, code: string) => Promise<void>;
+  /** Step 2 of signup (emailed link, /verify-signup/:token). Single use. */
+  verifySignupLink: (token: string) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
   /** Applies the server's returned user object directly (it trims whitespace
@@ -127,13 +134,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signup = useCallback(
-    async (username: string, email: string, password: string) => {
-      const data = await api.signup({ username, email, password });
-      setToken(data.token);
-      setUser(data.user);
-      void silentlyEnrollPasskey();
-    },
+    (username: string, email: string, password: string) => api.signup({ username, email, password }),
     [],
+  );
+
+  // A verified signup returns the same token + deviceId + user as login.
+  // The deviceId is stored too: the link may be opened on a device that has
+  // never been here.
+  const startSession = useCallback((data: AuthResponse) => {
+    setToken(data.token);
+    setDeviceId(data.deviceId);
+    setUser(data.user);
+    void silentlyEnrollPasskey();
+  }, []);
+
+  const verifySignupCode = useCallback(
+    async (email: string, code: string) => startSession(await api.verifySignupCode(email, code)),
+    [startSession],
+  );
+
+  const verifySignupLink = useCallback(
+    async (token: string) => startSession(await api.verifySignupLink(token)),
+    [startSession],
   );
 
   const logout = useCallback(() => {
@@ -179,6 +201,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         login,
         signup,
+        verifySignupCode,
+        verifySignupLink,
         logout,
         refreshUser,
         updateUsername,
