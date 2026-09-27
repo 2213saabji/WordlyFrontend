@@ -74,9 +74,7 @@ export interface Game {
   timeTakenMs?: number | null;
 
   // --- Infinite tier leaderboard fields (infinite rounds only) ---
-  // ASSUMED field name — the heartbeat needs the round's id as `gameId`, but
-  // the contract doesn't say which field of the game payload carries it.
-  // Confirm with the backend. Both spellings are read (see useInfiniteTier).
+  /** The round id (backend sends `id`; `_id` kept for older payloads). */
   id?: string;
   _id?: string;
   /** false in Tiers 1–6 — hide the hint control entirely. */

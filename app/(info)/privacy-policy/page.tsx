@@ -18,7 +18,7 @@ const SECTIONS: LegalSection[] = [
     number: "01",
     heading: "What we collect",
     body: INFINITE_TIERS_ENABLED
-      ? "Your email address and password (stored hashed) — or your Google account's email and name if you sign in with Google instead — plus the display name you choose, your game results, and the groups you create or join. We also store a random device ID in your browser, and, while you play Infinite mode, how long the game screen is open and in use, the rounds you complete, your points and your tier."
+      ? "Your email address and password (stored hashed) — or your Google account's email and name if you sign in with Google instead — plus the display name you choose, your game results, and the groups you create or join. We also store a random device ID in your browser, and, for Infinite mode, when you start each word and make each guess (used to work out your time played), the rounds you complete, your points and your tier."
       : "Your email address and password (stored hashed) — or your Google account's email and name if you sign in with Google instead — plus the display name you choose, your game results, and the groups you create or join.",
   },
   {

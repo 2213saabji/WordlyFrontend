@@ -713,10 +713,11 @@ export default function PlayScreen({
   const [hintLockedMsgOpen, setHintLockedMsgOpen] = useState(false);
   const fullCountdown = useFullCountdownToNextUtcMidnight();
 
-  // Infinite tier leaderboard: tier status, today's progress and the
-  // active-time heartbeat. Inert for Daily or with the feature flag off.
+  // Infinite tier leaderboard: tier status and today's progress. Active time
+  // is counted server-side from round starts and guesses — no heartbeat.
+  // Inert for Daily or with the feature flag off.
   const tierMode = INFINITE_TIERS_ENABLED && mode === "infinite";
-  const { me: tierMe, tiers, today, setToday, hintsOffFrom } = useInfiniteTier(tierMode, game);
+  const { me: tierMe, tiers, today, setToday, refreshMe, hintsOffFrom } = useInfiniteTier(tierMode);
   // The tier summary for the round that just ended (from its final guess
   // response) — shown as a bottom sheet on mobile, a sidebar card on desktop.
   const [tierResult, setTierResult] = useState<TierRoundResult | null>(null);
@@ -799,8 +800,10 @@ export default function PlayScreen({
     // Also doubles as "skip this round" while one is still in progress —
     // /infinite/new abandons whatever's active and hands back a fresh round.
     try {
-      const { game } = await startNewInfiniteRound();
+      const { game, today: next } = await startNewInfiniteRound();
       setGame(game);
+      // Starting a round credits the time since the last guess.
+      if (next) setToday(next);
       setCurrentGuess("");
       setError(null);
       setHintRevealed(false);
@@ -812,7 +815,7 @@ export default function PlayScreen({
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Something went wrong");
     }
-  }, []);
+  }, [setToday]);
 
   const handleSubmitGuess = useCallback(async () => {
     if (submitting) return;
@@ -842,13 +845,19 @@ export default function PlayScreen({
       setGame(game);
       setCurrentGuess("");
       // The guess that ends an Infinite round carries the updated tier
-      // progress — no need to wait for the next heartbeat.
-      const tierBlock = mode === "infinite" ? (res as Awaited<ReturnType<typeof submitInfiniteGuess>>).tier : undefined;
+      // progress; mid-round guesses carry `today` only once the backend
+      // adds it — until then "Active time" updates once per round.
+      const infiniteRes = mode === "infinite" ? (res as Awaited<ReturnType<typeof submitInfiniteGuess>>) : undefined;
+      const tierBlock = infiniteRes?.tier;
       if (tierBlock) {
         setToday(tierBlock.today);
         setTierResult({ block: tierBlock, prevRank: prevRankRef.current ?? null });
         setResultSheetOpen(true);
         prevRankRef.current = tierBlock.rank;
+        // Rank, day count and today's card as the server now has them.
+        refreshMe();
+      } else if (infiniteRes?.today) {
+        setToday(infiniteRes.today);
       }
       // Infinite rounds never touch stats/streaks — only refresh the daily
       // streak/wins display when a daily game actually finishes.
@@ -867,7 +876,7 @@ export default function PlayScreen({
     } finally {
       setSubmitting(false);
     }
-  }, [mode, currentGuess, submitting, refreshUser, setToday]);
+  }, [mode, currentGuess, submitting, refreshUser, setToday, refreshMe]);
 
   const handleKey = useCallback(
     (key: string) => {

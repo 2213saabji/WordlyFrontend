@@ -130,19 +130,6 @@ export interface InfiniteGuessTierBlock {
   today: TodayProgress;
 }
 
-export interface HeartbeatRequest {
-  gameId: string;
-  visible: boolean;
-  lastInputAgoMs: number;
-  deviceId: string;
-}
-
-export interface HeartbeatResponse {
-  /** 0 for rate-limited/ineligible beats — never an error. */
-  creditedMs: number;
-  today: TodayProgress;
-}
-
 export interface InfiniteLeaderboardEntry {
   rank: number;
   userId: string;

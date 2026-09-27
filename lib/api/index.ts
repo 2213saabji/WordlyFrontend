@@ -6,7 +6,7 @@
 //   passkeys        WebAuthn enrollment and recovery login
 //   daily-game      Daily mode (UTC day, stats/streaks)
 //   infinite-game   Infinite mode rounds and the hint endpoint
-//   infinite-tiers  Infinite tier leaderboard: tiers, status, heartbeat, board
+//   infinite-tiers  Infinite tier leaderboard: tiers, status, board
 //   groups          create/join/leave, my groups
 //   leaderboards    Daily-mode global and group leaderboards
 //   notifications   tier and payout notifications

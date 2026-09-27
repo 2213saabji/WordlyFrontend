@@ -1,11 +1,11 @@
 // Infinite tier leaderboard — Phase 1: the 8-tier ladder, the player's tier
-// status and today's progress, active-time heartbeats, the per-tier ranked
-// board and tier-change history. Money fields in these responses (rewardInr,
-// reward) are only rendered when MONEY_ENABLED is on (lib/flags.ts).
+// status and today's progress, the per-tier ranked board and tier-change
+// history. Money fields in these responses (rewardInr, reward) are only
+// rendered when MONEY_ENABLED is on (lib/flags.ts). Active time needs no call
+// of its own: the server measures it from round starts and guesses
+// (POST /infinite/activity/heartbeat is legacy, for old app versions only).
 
 import type {
-  HeartbeatRequest,
-  HeartbeatResponse,
   InfiniteLeaderboardResponse,
   InfiniteMeResponse,
   InfiniteTiersResponse,
@@ -24,14 +24,6 @@ export function getInfiniteTiers(): Promise<InfiniteTiersResponse> {
  * defaults with rank: null before their first completed Infinite game. */
 export function getInfiniteMe(): Promise<InfiniteMeResponse> {
   return apiFetch("/infinite/me");
-}
-
-/** Send every ~15 s while an Infinite game is visible and the player has
- * given input in the last 60 s. The server credits time per user (extra
- * tabs can't double-count) and rate-limits to 1 per 10 s — excess beats
- * come back 200 with creditedMs: 0, never an error. */
-export function sendInfiniteHeartbeat(payload: HeartbeatRequest): Promise<HeartbeatResponse> {
-  return apiFetch("/infinite/activity/heartbeat", { method: "POST", body: payload });
 }
 
 /** `tier` defaults server-side to the caller's own. `me` is always included

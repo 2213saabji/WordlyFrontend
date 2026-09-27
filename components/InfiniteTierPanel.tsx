@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { getInfiniteMe, getInfiniteTiers, getStoredDeviceId, sendInfiniteHeartbeat } from "@/lib/api";
+import { useCallback, useEffect, useState } from "react";
+import { getInfiniteMe, getInfiniteTiers } from "@/lib/api";
 import { readCache, writeCache } from "@/lib/cache";
 import { MONEY_ENABLED } from "@/lib/flags";
 import { formatInr, plural } from "@/lib/tiers";
@@ -17,18 +17,17 @@ import type {
 const ME_CACHE_KEY = "infinite:me";
 const TIERS_CACHE_KEY = "infinite:tiers";
 
-const HEARTBEAT_MS = 15_000;
-// Matches the backend's idle rule — beats past this would earn 0 anyway.
-const IDLE_AFTER_MS = 60_000;
-
 const SOFT = "text-[#c9bfcc]";
 const MUTED = "text-[#9a8aa2]";
 
-/** Tier state for an Infinite round: the player's tier status, the ladder,
- * today's live progress, and the active-time heartbeat (every 15 s while the
- * tab is visible and the player has given input in the last 60 s). Inert
- * when `enabled` is false. */
-export function useInfiniteTier(enabled: boolean, game: Game | null) {
+/** Tier state for an Infinite round: the player's tier status, the ladder
+ * and today's progress. Active time is measured server-side from round
+ * starts and guesses (no heartbeat), so `today` is only ever the server's
+ * value — from the round-ending guess / new-round responses (setToday) or a
+ * fresh GET /infinite/me (refreshMe, also run when the tab becomes visible
+ * again). Never tick it locally: the server caps each gap at 2 min, so a
+ * local clock would drift. Inert when `enabled` is false. */
+export function useInfiniteTier(enabled: boolean) {
   const [me, setMe] = useState<InfiniteMeResponse | null>(() =>
     enabled ? readCache<InfiniteMeResponse>(ME_CACHE_KEY) : null,
   );
@@ -37,7 +36,7 @@ export function useInfiniteTier(enabled: boolean, game: Game | null) {
   );
   const [today, setToday] = useState<TodayProgress | null>(() => me?.today ?? null);
 
-  useEffect(() => {
+  const refreshMe = useCallback(() => {
     if (!enabled) return;
     getInfiniteMe()
       .then((res) => {
@@ -46,59 +45,36 @@ export function useInfiniteTier(enabled: boolean, game: Game | null) {
         setToday(res.today);
       })
       .catch(() => {});
+  }, [enabled]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    refreshMe();
     getInfiniteTiers()
       .then((res) => {
         writeCache(TIERS_CACHE_KEY, res);
         setTiers(res);
       })
       .catch(() => {});
-  }, [enabled]);
+  }, [enabled, refreshMe]);
 
-  // --- heartbeat ---
-  const lastInputRef = useRef(0);
-  const gameIdRef = useRef<string | undefined>(undefined);
-  useEffect(() => {
-    gameIdRef.current = game?.id ?? game?._id;
-  }, [game]);
-
+  // Coming back to the tab (possibly after playing on another device, or
+  // after the midnight IST reset) re-reads the server's progress.
   useEffect(() => {
     if (!enabled) return;
-    lastInputRef.current = Date.now();
-    const markInput = () => {
-      lastInputRef.current = Date.now();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refreshMe();
     };
-    window.addEventListener("keydown", markInput);
-    window.addEventListener("pointerdown", markInput);
-
-    const id = window.setInterval(() => {
-      const gameId = gameIdRef.current;
-      const lastInputAgoMs = Date.now() - lastInputRef.current;
-      // The server re-checks all of this; skipping here just saves requests
-      // that would be credited 0.
-      if (!gameId || document.visibilityState !== "visible" || lastInputAgoMs > IDLE_AFTER_MS) return;
-      sendInfiniteHeartbeat({
-        gameId,
-        visible: true,
-        lastInputAgoMs,
-        deviceId: getStoredDeviceId() ?? "",
-      })
-        .then((res) => setToday(res.today))
-        .catch(() => {});
-    }, HEARTBEAT_MS);
-
-    return () => {
-      window.clearInterval(id);
-      window.removeEventListener("keydown", markInput);
-      window.removeEventListener("pointerdown", markInput);
-    };
-  }, [enabled]);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [enabled, refreshMe]);
 
   // The lowest-numbered tier boundary where hints switch off (Copper, Tier 6).
   const hintsOffFrom = tiers
     ? [...tiers.tiers].filter((t) => !t.hintsEnabled).sort((a, b) => b.tier - a.tier)[0]
     : undefined;
 
-  return { me, tiers, today, setToday, hintsOffFrom };
+  return { me, tiers, today, setToday, refreshMe, hintsOffFrom };
 }
 
 function Bar({ value, target, thin = false }: { value: number; target: number; thin?: boolean }) {
