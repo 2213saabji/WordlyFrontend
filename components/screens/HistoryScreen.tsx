@@ -96,7 +96,7 @@ export default function HistoryScreen({ onBack }: { onBack: () => void }) {
           <div
             key={`${game.date}-${i}`}
             style={{ animationDelay: `${i * 50}ms` }}
-            className={`flex animate-fade-in-up items-center justify-between gap-4 rounded-xl border border-l-4 border-border bg-surface p-3 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${statusBorder(game.status)}`}
+            className={`flex animate-fade-in-up items-center justify-between gap-4 rounded-xl border border-l-3 border-border bg-surface p-3 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${statusBorder(game.status)}`}
           >
             <div>
               <p className="text-sm font-medium">{game.date}</p>
