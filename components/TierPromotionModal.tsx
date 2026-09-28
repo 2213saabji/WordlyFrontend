@@ -41,10 +41,14 @@ interface Announcement {
 export default function TierPromotionAnnouncer({
   onOpenTierLeaderboard,
   onPlay,
+  onVerify,
 }: {
   onOpenTierLeaderboard: (tier: TierNumber) => void;
   /** The demotion screen's "Play now". */
   onPlay: () => void;
+  /** MONEY: reaching Diamond makes "Verify mobile number" the main button,
+   * opening the verification flow at the mobile step. Omit to hide it. */
+  onVerify?: () => void;
 }) {
   // Synced (lib/use-synced.ts): shared with the other tier screens, and
   // refetched when /sync reports a change — so an overnight move also shows
@@ -98,6 +102,14 @@ export default function TierPromotionAnnouncer({
         close();
         onPlay();
       }}
+      onVerify={
+        onVerify
+          ? () => {
+              close();
+              onVerify();
+            }
+          : undefined
+      }
     />
   );
 }
@@ -109,7 +121,13 @@ function PromotionScreen({
   onClose,
   onSeeLeaderboard,
   onPlay,
-}: Announcement & { onClose: () => void; onSeeLeaderboard: (tier: TierNumber) => void; onPlay: () => void }) {
+  onVerify,
+}: Announcement & {
+  onClose: () => void;
+  onSeeLeaderboard: (tier: TierNumber) => void;
+  onPlay: () => void;
+  onVerify?: () => void;
+}) {
   const [copied, setCopied] = useState(false);
   const last = me.lastChange!;
   const demoted = last.reason === "demotion";
@@ -184,31 +202,35 @@ function PromotionScreen({
     </>,
   ]);
 
+  const PRIMARY =
+    "rounded-2xl bg-accent p-4 text-[15.5px] font-bold text-background transition-all duration-150 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-accent/25 active:translate-y-0 active:scale-[0.98] md:rounded-[15px] md:px-7 md:py-[15px] md:text-[15px]";
+  const SECONDARY =
+    "rounded-2xl border border-white/12 bg-white/7 p-[15px] text-[14.5px] font-semibold transition-colors hover:border-accent/40 md:rounded-[15px] md:px-6 md:text-[15px]";
+  // Reaching Diamond: verifying the mobile number is the next step, so it
+  // leads; the leaderboard becomes the second button.
+  const verifyFirst = reachedTop && !demoted && !!onVerify;
   const leaderboardButton = (
-    <button
-      type="button"
-      onClick={() => onSeeLeaderboard(last.toTier)}
-      className="rounded-2xl bg-accent p-4 text-[15.5px] font-bold text-background transition-all duration-150 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-accent/25 active:translate-y-0 active:scale-[0.98] md:rounded-[15px] md:px-7 md:py-[15px] md:text-[15px]"
-    >
+    <button type="button" onClick={() => onSeeLeaderboard(last.toTier)} className={verifyFirst ? SECONDARY : PRIMARY}>
       See {toName} leaderboard
     </button>
   );
+  const primaryButton = verifyFirst ? (
+    <button type="button" onClick={onVerify} className={PRIMARY}>
+      Verify mobile number
+    </button>
+  ) : (
+    leaderboardButton
+  );
   const shareButton = (
-    <button
-      type="button"
-      onClick={share}
-      className="rounded-2xl border border-white/12 bg-white/7 p-[15px] text-[14.5px] font-semibold transition-colors hover:border-accent/40 md:rounded-[15px] md:px-6 md:text-[15px]"
-    >
+    <button type="button" onClick={share} className={SECONDARY}>
       {copied ? "Copied!" : "Share"}
     </button>
   );
   // Demotion swaps Share for Play now — same styling.
-  const secondaryButton = demoted ? (
-    <button
-      type="button"
-      onClick={onPlay}
-      className="rounded-2xl border border-white/12 bg-white/7 p-[15px] text-[14.5px] font-semibold transition-colors hover:border-accent/40 md:rounded-[15px] md:px-6 md:text-[15px]"
-    >
+  const secondaryButton = verifyFirst ? (
+    leaderboardButton
+  ) : demoted ? (
+    <button type="button" onClick={onPlay} className={SECONDARY}>
       Play now
     </button>
   ) : (
@@ -246,7 +268,9 @@ function PromotionScreen({
 
         <div className="flex flex-col items-center gap-4 px-[30px] pt-10 text-center md:p-0">
           <span className={`text-xs font-semibold uppercase tracking-[0.16em] ${MUTED}`}>
-            Moved {demoted ? "down" : "up"} overnight
+            {/* A promotion earned with today's last word is settled on the
+                spot (its day is today); everything else happened at the reset */}
+            Moved {demoted ? "down" : "up"} {last.day === me.today.day ? "today" : "overnight"}
           </span>
           <div className="flex items-center gap-[18px]">
             <span className="opacity-45">
@@ -302,14 +326,14 @@ function PromotionScreen({
           <span className="mx-6 mt-4 text-center text-[13px] text-[#9fd4e6] md:m-0 md:text-[13.5px]">{footer}</span>
         )}
 
-        {/* mobile: stacked, leaderboard first; desktop: right-aligned, secondary first */}
+        {/* mobile: stacked, primary first; desktop: right-aligned, secondary first */}
         <div className="mt-auto flex flex-col gap-2.5 px-6 pb-[26px] pt-[22px] md:hidden">
-          {leaderboardButton}
+          {primaryButton}
           {secondaryButton}
         </div>
         <div className="hidden justify-end gap-3 md:flex">
           {secondaryButton}
-          {leaderboardButton}
+          {primaryButton}
         </div>
       </div>
     </div>

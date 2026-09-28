@@ -75,6 +75,7 @@ function AppShell() {
         <TierPromotionAnnouncer
           onOpenTierLeaderboard={(tier) => push({ name: "tier-leaderboard", tier })}
           onPlay={() => push({ name: "play", mode: "infinite" })}
+          onVerify={MONEY_ENABLED ? () => push({ name: "verify", step: "mobile" }) : undefined}
         />
       )}
       {invite && (

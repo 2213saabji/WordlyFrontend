@@ -127,6 +127,9 @@ export interface InfiniteGuessTierBlock {
   score: number;
   rank: number;
   tierSize: number;
+  /** Set when this round completed the tier's counter and the player moved
+   * up on the spot (score and rank above are already the new tier's). */
+  promotion?: { fromTier: TierNumber; toTier: TierNumber } | null;
   today: TodayProgress;
 }
 
