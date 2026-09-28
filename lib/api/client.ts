@@ -7,7 +7,7 @@ import type { ApiErrorBody, User } from "@/types";
 import { clearCache } from "@/lib/cache";
 
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "https://wordly-backend-nu.vercel.app/api";
+  process.env.NEXT_PUBLIC_API_URL ?? "https://api.guessword.games/api";
 
 const DEVICE_ID_KEY = "guessword_device_id";
 /** Pre-device-session access token key, from before this flow shipped. Read
