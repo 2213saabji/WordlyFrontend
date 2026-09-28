@@ -27,7 +27,7 @@ import {
 import { INFINITE_TIERS_ENABLED } from "@/lib/flags";
 import { useAuth } from "@/lib/auth-context";
 import { readCache, writeCache } from "@/lib/cache";
-import { invalidate } from "@/lib/sync";
+import { invalidate, runSync } from "@/lib/sync";
 import { useSyncedLoader } from "@/lib/use-synced";
 import { isKnownGuess, preloadWordLists } from "@/lib/word-check";
 import HubBackLink from "@/components/HubBackLink";
@@ -884,13 +884,18 @@ export default function PlayScreen({
       const tierBlock = infiniteRes?.tier;
       if (tierBlock) {
         setToday(tierBlock.today);
-        setTierResult({ block: tierBlock, prevRank: prevRankRef.current ?? null });
+        // After a promotion the rank is in the new tier: no "moved from #n".
+        setTierResult({ block: tierBlock, prevRank: tierBlock.promotion ? null : (prevRankRef.current ?? null) });
         setResultSheetOpen(true);
         prevRankRef.current = tierBlock.rank;
         // Rank, day count and today's card as the server now has them.
         refreshMe();
         // Tier boards now rank this round's score.
         invalidate("infiniteBoard");
+        // This round moved the player up on the spot: sync now (skipping
+        // the 15 s throttle) so the promotion screen — and on reaching
+        // Diamond, the verification prompt — shows right away.
+        if (tierBlock.promotion) void runSync({ force: true });
       } else if (infiniteRes?.today) {
         setToday(infiniteRes.today);
       }

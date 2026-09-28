@@ -45,8 +45,16 @@ export interface VerificationItem {
   masked: string | null;
 }
 
+/** How an outstanding mobile code was sent. WhatsApp reports delivery
+ * (Meta's webhook, within seconds); SMS has none. */
+export interface MobileDelivery {
+  status: "accepted" | "sent" | "delivered" | "read" | "failed";
+  /** With `failed`: the number has no WhatsApp, or it just failed. */
+  reason?: "not_on_whatsapp" | "failed";
+}
+
 export interface VerificationStatusResponse {
-  mobile: VerificationItem;
+  mobile: VerificationItem & { channel?: "whatsapp" | "sms" | null; delivery?: MobileDelivery | null };
   email: VerificationItem & { method: "link" | "google" | null };
   bank: VerificationItem & { ifsc: string | null; nameMatch: boolean | null };
   /** A detail is already linked to another account. The step still shows

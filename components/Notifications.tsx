@@ -193,8 +193,9 @@ function describe(n: AppNotification, tiers: InfiniteTiersResponse | null): Row 
       return {
         icon: "1",
         iconBg: DIAMOND,
-        title: `You reached ${topName}`,
+        title: `You reached ${topName}: verify your mobile`,
         body: `Verify your mobile, email and bank to receive ${reward ?? "your reward"}.`,
+        // Opens where the player left off (mobile first on a fresh start).
         target: { name: "verify" },
       };
     default:

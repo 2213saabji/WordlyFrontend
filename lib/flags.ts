@@ -14,4 +14,4 @@ export const INFINITE_TIERS_ENABLED = true
  * money-related view and action (prize amounts, payouts, ...). Money lives
  * inside the tier feature, so it's always off while INFINITE_TIERS_ENABLED
  * is off. */
-export const MONEY_ENABLED = false
+export const MONEY_ENABLED = true

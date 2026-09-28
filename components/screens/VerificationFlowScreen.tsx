@@ -16,7 +16,7 @@ import { useAuth } from "@/lib/auth-context";
 import { readCache, writeCache } from "@/lib/cache";
 import { formatInr } from "@/lib/tiers";
 import { useSyncedResource } from "@/lib/use-synced";
-import type { InfiniteTiersResponse, VerificationStatusResponse, VerificationStep } from "@/types";
+import type { InfiniteTiersResponse, MobileDelivery, VerificationStatusResponse, VerificationStep } from "@/types";
 
 // MONEY — only reachable with MONEY_ENABLED (see GameApp).
 
@@ -67,6 +67,9 @@ function errorMessage(err: unknown): string {
       return "We couldn't send the code. Try again.";
     case "SMS_PROVIDER_NOT_CONFIGURED":
       return "Mobile verification is coming soon. Your cycle days keep counting in the meantime.";
+    case "WHATSAPP_RECIPIENT_NOT_ALLOWED":
+      // Only before go-live, while the WhatsApp account is in test mode.
+      return "We can't send a code to this number yet — WhatsApp verification is still being set up. Please try again later.";
     case "EMAIL_RATE_LIMITED":
       return `A link was just sent. ${later}`;
     case "EMAIL_SEND_FAILED":
@@ -88,7 +91,7 @@ function formatWait(seconds: number): string {
   return seconds < 60 ? `${seconds}s` : `${Math.ceil(seconds / 60)} min`;
 }
 
-/** The Tier 1 payout verification flow: mobile (SMS code) → email (link) →
+/** The Tier 1 payout verification flow: mobile (WhatsApp or SMS code) → email (link) →
  * bank (penny drop). Resumable — it opens at `startStep` or the first
  * incomplete step, and each step re-reads GET /verification/status before
  * moving on. Full-screen on mobile, a dialog on desktop. */
@@ -117,10 +120,14 @@ export default function VerificationFlowScreen({
   // mobile
   const [countryCode, setCountryCode] = useState(DEFAULT_COUNTRY_CODE);
   const [phone, setPhone] = useState("");
+  const phoneInputRef = useRef<HTMLInputElement>(null);
   const [code, setCode] = useState("");
   const [resendIn, setResendIn] = useState(0);
-  // POST /verification/mobile/otp answers 503 until the SMS provider is live.
+  // POST /verification/mobile/otp answers 503 until a WhatsApp or SMS
+  // provider is configured.
   const [smsUnavailable, setSmsUnavailable] = useState(false);
+  // When the last code was sent — drives the delivery re-check below.
+  const [codeSentAt, setCodeSentAt] = useState<number | null>(null);
   // email
   const [emailSent, setEmailSent] = useState(false);
   // bank
@@ -169,6 +176,23 @@ export default function VerificationFlowScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // WhatsApp reports delivery a few seconds after sending (Meta's webhook).
+  // Re-read the status twice to show "Delivered ✓✓" or a not-on-WhatsApp
+  // hint — a couple of reads, not polling.
+  useEffect(() => {
+    if (!codeSentAt || step !== "mobile-code") return;
+    const reread = () => {
+      getVerificationStatus()
+        .then((res) => {
+          writeCache(VERIFICATION_CACHE_KEY, res);
+          setStatus(res);
+        })
+        .catch(() => {});
+    };
+    const ids = [window.setTimeout(reread, 3000), window.setTimeout(reread, 8000)];
+    return () => ids.forEach((id) => window.clearTimeout(id));
+  }, [codeSentAt, step]);
+
   // Resend countdown.
   useEffect(() => {
     if (resendIn <= 0) return;
@@ -177,19 +201,55 @@ export default function VerificationFlowScreen({
   }, [resendIn]);
 
   const e164 = `${countryCode}${phone}`;
+  const ccDigits = countryCode.replace(/\D/g, "");
   // E.164: at most 15 digits including the country code.
-  const phoneValid = /^\+[1-9]\d{0,3}$/.test(countryCode) && phone.length >= 4 && e164.length <= 16;
+  const maxNational = Math.max(4, 15 - ccDigits.length);
+  // India's mobile numbers are always 10 digits; elsewhere only E.164's bounds.
+  const phoneValid =
+    /^\+[1-9]\d{0,3}$/.test(countryCode) && (ccDigits === "91" ? phone.length === 10 : phone.length >= 6);
+
+  /** Accepts a typed, pasted or autofilled number in any common shape:
+   * "98765 43210", "098765-43210", "+91 98765 43210", "919876543210". */
+  function onPhoneInput(raw: string) {
+    let digits = raw.replace(/\D/g, "");
+    const international = raw.trim().startsWith("+") || raw.trim().startsWith("00");
+    if (raw.trim().startsWith("00")) digits = digits.slice(2);
+    // A number that already carries this country code: drop it, so it
+    // isn't added twice.
+    if (international || digits.length > maxNational || (ccDigits === "91" && digits.length === 12)) {
+      if (digits.startsWith(ccDigits)) digits = digits.slice(ccDigits.length);
+    }
+    // The domestic trunk prefix isn't part of the international number.
+    if (digits.startsWith("0")) digits = digits.replace(/^0+/, "");
+    setPhone(digits.slice(0, maxNational));
+  }
+
+  /** Country codes are 1–3 digits. Anything typed past that in the code
+   * box is the number itself (easy to do: the box looks like the start of
+   * the number) — it moves into the number field, which takes focus. */
+  function onCountryInput(raw: string) {
+    const digits = raw.replace(/\D/g, "");
+    if (digits.length <= 3) {
+      setCountryCode(`+${digits}`);
+      return;
+    }
+    const keep = ccDigits && digits.startsWith(ccDigits) ? ccDigits : digits.slice(0, 3);
+    setCountryCode(`+${keep}`);
+    setPhone((prev) => (prev + digits.slice(keep.length)).slice(0, Math.max(4, 15 - keep.length)));
+    phoneInputRef.current?.focus();
+  }
 
   async function requestCode() {
     setBusy(true);
     setError(null);
     try {
       const res = applyStatus(await sendMobileOtp(e164));
-      // "This number is already verified" — no SMS was sent.
+      // "This number is already verified" — no code was sent.
       if (res.mobile.status === "verified") return goToNext(res);
       setCode("");
       setResendIn(RESEND_SECONDS);
       setStep("mobile-code");
+      setCodeSentAt(Date.now());
     } catch (err) {
       fail(err);
     } finally {
@@ -276,7 +336,7 @@ export default function VerificationFlowScreen({
             details. Each can be linked to only one GuessWord account.
           </p>
           <div className="flex flex-col rounded-[20px] border border-white/8 bg-white/[0.045] md:rounded-[18px] md:border-0 md:bg-white/4">
-            <IntroRow n={1} title="Mobile number" sub="6-digit code by SMS" done={status?.mobile.status === "verified"} />
+            <IntroRow n={1} title="Mobile number" sub="6-digit code on WhatsApp or SMS" done={status?.mobile.status === "verified"} />
             <IntroRow n={2} title="Email" sub="Link sent to your account email" done={status?.email.status === "verified"} />
             <IntroRow n={3} title="Bank account" sub="We send ₹1 to check the name matches" done={status?.bank.status === "verified"} last />
           </div>
@@ -300,26 +360,40 @@ export default function VerificationFlowScreen({
           }}
           className="flex flex-col gap-[7px]"
         >
-          <span className={`text-[12.5px] md:text-[13px] ${MUTED}`}>We&apos;ll text a 6-digit code to this number.</span>
-          <div className="flex gap-2">
-            <input
-              aria-label="Country code"
-              inputMode="tel"
-              autoComplete="tel-country-code"
-              value={countryCode}
-              onChange={(e) => setCountryCode(`+${e.target.value.replace(/\D/g, "").slice(0, 4)}`)}
-              className={`${INPUT} w-21 flex-none text-center`}
-            />
-            <input
-              autoFocus
-              inputMode="numeric"
-              autoComplete="tel-national"
-              placeholder="98765 43210"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 14))}
-              className={`${INPUT} tracking-[0.06em]`}
-            />
+          <span className={`text-[12.5px] md:text-[13px] ${MUTED}`}>
+            We&apos;ll send a 6-digit code to this number on WhatsApp.
+          </span>
+          <div className="flex w-full min-w-0 gap-2">
+            <label className="flex w-20 flex-none flex-col gap-1">
+              <span className={`text-[11.5px] ${MUTED}`}>Code</span>
+              <input
+                inputMode="tel"
+                autoComplete="tel-country-code"
+                value={countryCode}
+                onChange={(e) => onCountryInput(e.target.value)}
+                className={`${INPUT} px-2 text-center`}
+              />
+            </label>
+            {/* min-w-0 + flex-1: takes the rest of the row and never gets
+                squeezed past it, so the whole number stays visible. */}
+            <label className="flex min-w-0 flex-1 flex-col gap-1">
+              <span className={`text-[11.5px] ${MUTED}`}>Mobile number</span>
+              <input
+                ref={phoneInputRef}
+                autoFocus
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                placeholder={ccDigits === "91" ? "98765 43210" : "Mobile number"}
+                value={formatNational(phone, ccDigits)}
+                onChange={(e) => onPhoneInput(e.target.value)}
+                className={`${INPUT} tracking-[0.04em]`}
+              />
+            </label>
           </div>
+          {ccDigits === "91" && phone.length > 0 && phone.length !== 10 && (
+            <span className={`text-[12px] ${MUTED}`}>Indian mobile numbers have 10 digits ({phone.length} so far).</span>
+          )}
         </form>
       );
       footnote = "One GuessWord account per number.";
@@ -329,16 +403,20 @@ export default function VerificationFlowScreen({
       secondary = { label: "Back", onClick: () => setStep("intro") };
       break;
 
-    case "mobile-code":
+    case "mobile-code": {
+      const channel = status?.mobile.channel;
+      const delivery = status?.mobile.delivery;
       title = "Enter the code";
       body = (
         <>
           <p className={`text-sm md:text-[14.5px] ${SOFT}`}>
-            Sent to {countryCode} {phone}.{" "}
+            Sent to {countryCode} {formatNational(phone, ccDigits)}
+            {channel === "whatsapp" ? " on WhatsApp" : channel === "sms" ? " by SMS" : ""}.{" "}
             <button type="button" onClick={() => setStep("mobile-number")} className="text-accent hover:underline">
               Change
             </button>
           </p>
+          {channel === "whatsapp" && delivery && <DeliveryLine delivery={delivery} />}
           <OtpInput value={code} onChange={setCode} onComplete={submitCode} />
           <div className="flex items-center justify-between">
             {resendIn > 0 ? (
@@ -355,6 +433,7 @@ export default function VerificationFlowScreen({
       );
       primary = { label: busy ? "Checking…" : "Verify", onClick: () => submitCode(), disabled: busy || code.length !== 6 };
       break;
+    }
 
     case "email":
       title = emailSent ? "Check your email" : "Confirm your email";
@@ -586,6 +665,34 @@ function IntroRow({ n, title, sub, done, last = false }: { n: number; title: str
       </span>
     </div>
   );
+}
+
+/** Readable grouping while typing: "98765 43210" for India, 3-3-4 or plain
+ * groups of 4 elsewhere. Display only — the state stays digits. */
+function formatNational(digits: string, ccDigits: string): string {
+  if (ccDigits === "91") return digits.replace(/^(\d{5})(\d)/, "$1 $2");
+  if (ccDigits === "1") return digits.replace(/^(\d{3})(\d{0,3})(\d{0,4}).*/, (_, a, b, c) => [a, b, c].filter(Boolean).join(" "));
+  return digits.replace(/(\d{4})(?=\d)/g, "$1 ");
+}
+
+/** WhatsApp delivery, from GET /verification/status (Meta's webhook). */
+function DeliveryLine({ delivery }: { delivery: MobileDelivery }) {
+  if (delivery.status === "failed") {
+    return (
+      <p className="text-[13px] leading-normal text-danger">
+        {delivery.reason === "not_on_whatsapp"
+          ? "This number isn't on WhatsApp. Check the number, then send a new code."
+          : "We couldn't deliver the code. Send a new one."}
+      </p>
+    );
+  }
+  const label =
+    delivery.status === "read" || delivery.status === "delivered"
+      ? "Code sent on WhatsApp ✓✓"
+      : delivery.status === "sent"
+        ? "Code sent on WhatsApp ✓"
+        : "Sending on WhatsApp…";
+  return <p className={`text-[13px] ${MUTED}`}>{label}</p>;
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
