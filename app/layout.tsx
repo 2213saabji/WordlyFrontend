@@ -176,7 +176,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           crossOrigin="anonymous"
         />
       </head>
-      <body className="min-h-full flex flex-col">
+      {/* Third-party scripts (AdSense, its consent message) and browser
+          extensions add attributes to <body> before React hydrates. This only
+          ignores <body>'s own attributes — its children are still checked. */}
+      <body className="min-h-full flex flex-col" suppressHydrationWarning>
         <JsonLd data={structuredData} />
         {children}
       </body>

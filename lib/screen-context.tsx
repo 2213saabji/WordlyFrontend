@@ -32,6 +32,10 @@ interface ScreenContextValue {
   back: () => void;
   reset: (screen?: Screen) => void;
   replace: (screen: Screen) => void;
+  /** Goes back to the most recent `screen` in the stack (by name), or — if
+   * it isn't there — replaces the current screen with it. Never stacks a
+   * duplicate, so its own Back still leads where it did. */
+  backTo: (screen: Screen) => void;
 }
 
 const ScreenContext = createContext<ScreenContextValue | null>(null);
@@ -46,6 +50,11 @@ export function ScreenProvider({ children }: { children: ReactNode }) {
       back: () => setStack((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev)),
       reset: (screen = { name: "home" }) => setStack([screen]),
       replace: (screen) => setStack((prev) => [...prev.slice(0, -1), screen]),
+      backTo: (screen) =>
+        setStack((prev) => {
+          const at = prev.slice(0, -1).map((s) => s.name).lastIndexOf(screen.name);
+          return at >= 0 ? prev.slice(0, at + 1) : [...prev.slice(0, -1), screen];
+        }),
     }),
     [stack],
   );

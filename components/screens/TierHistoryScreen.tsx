@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Loader from "@/components/Loader";
+import HubBackLink from "@/components/HubBackLink";
 import ScreenHeader from "@/components/ScreenHeader";
 import { getInfiniteMe, getInfiniteTierChanges, getInfiniteTiers, getRewards } from "@/lib/api";
 import { MONEY_ENABLED } from "@/lib/flags";
@@ -250,6 +251,7 @@ export default function TierHistoryScreen({ onBack }: { onBack: () => void }) {
 
       {/* ---------- desktop ---------- */}
       <div className="hidden flex-col gap-3 md:flex">
+        <HubBackLink onClick={onBack} className="mb-2" />
         <span className={`text-[12.5px] font-semibold uppercase tracking-[0.18em] ${MUTED}`}>
           Infinite{me ? ` · ${me.tierName} now` : ""}
           {highest ? ` · highest ${name(highest)}` : ""}

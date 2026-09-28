@@ -26,7 +26,7 @@ import { parseReplayParam, type ReplayInvite } from "@/lib/share";
 import { runSync } from "@/lib/sync";
 
 function AppShell() {
-  const { screen, push, back, replace } = useScreen();
+  const { screen, push, back, replace, backTo } = useScreen();
   const [invite, setInvite] = useState<ReplayInvite | null>(() =>
     typeof window === "undefined" ? null : parseReplayParam(window.location.search),
   );
@@ -117,8 +117,9 @@ function AppShell() {
             onOpenTierHistory={() => push({ name: "tier-history" })}
           />
         )}
-        {screen.name === "how-tiers" && <HowTiersWorkScreen onBack={back} />}
-        {screen.name === "tier-history" && <TierHistoryScreen onBack={back} />}
+        {/* Both lead back to the hub, wherever they were opened from. */}
+        {screen.name === "how-tiers" && <HowTiersWorkScreen onBack={() => backTo({ name: "infinite-hub" })} />}
+        {screen.name === "tier-history" && <TierHistoryScreen onBack={() => backTo({ name: "infinite-hub" })} />}
         {screen.name === "diamond" && (
           <DiamondStatusScreen
             onBack={back}
@@ -139,6 +140,7 @@ function AppShell() {
             onOpenLeaderboard={(groupId?: string) => push({ name: "leaderboard", groupId })}
             onPlayInfinite={() => replace({ name: "play", mode: "infinite" })}
             onOpenTierLeaderboard={() => push({ name: "tier-leaderboard" })}
+            onOpenInfiniteHub={INFINITE_TIERS_ENABLED ? () => backTo({ name: "infinite-hub" }) : undefined}
           />
         )}
         {screen.name === "history" && <HistoryScreen onBack={back} />}

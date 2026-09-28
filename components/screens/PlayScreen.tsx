@@ -30,6 +30,7 @@ import { readCache, writeCache } from "@/lib/cache";
 import { invalidate } from "@/lib/sync";
 import { useSyncedLoader } from "@/lib/use-synced";
 import { isKnownGuess, preloadWordLists } from "@/lib/word-check";
+import HubBackLink from "@/components/HubBackLink";
 import { wordNumberForDate } from "@/lib/share";
 import type { PlayMode } from "@/lib/screen-context";
 import type { Game, GameDifficulty, Guess, LetterResult, User } from "@/types";
@@ -689,6 +690,7 @@ export default function PlayScreen({
   onOpenLeaderboard,
   onPlayInfinite,
   onOpenTierLeaderboard,
+  onOpenInfiniteHub,
 }: {
   mode: PlayMode;
   onBack: () => void;
@@ -696,6 +698,8 @@ export default function PlayScreen({
   onPlayInfinite: () => void;
   /** The tier result's "Board" / "Leaderboard" button. */
   onOpenTierLeaderboard?: () => void;
+  /** Infinite with tiers on: Back leads to the Infinite hub. */
+  onOpenInfiniteHub?: () => void;
 }) {
   const { user, refreshUser } = useAuth();
   // Seeded from the last-seen board (lib/cache.ts) so a reload renders it
@@ -998,6 +1002,13 @@ export default function PlayScreen({
 
   // "word 7": today's completed rounds, plus the one being played.
   const wordOfDay = tierMode && today ? today.gamesCompleted + (finished ? 0 : 1) : null;
+  // Infinite with tiers: Back always leads to the hub (the tier status,
+  // today's targets), wherever the round was opened from.
+  const toHub = tierMode ? onOpenInfiniteHub : undefined;
+  const handleBack = toHub ?? onBack;
+  // The finished-round card's leaderboard link (the tier result card has
+  // its own) — the board refetches, so it shows the updated rank/points.
+  const boardLink = tierMode ? onOpenTierLeaderboard : undefined;
   const hintsOffNotice = hintsOff && (
     <HintsOffNotice fromName={hintsOffFrom?.name} fromTier={hintsOffFrom?.tier} />
   );
@@ -1008,8 +1019,8 @@ export default function PlayScreen({
       <div className="flex items-center gap-3.5 md:hidden">
         <button
           type="button"
-          onClick={onBack}
-          aria-label="Back"
+          onClick={handleBack}
+          aria-label={toHub ? "Back to Infinite hub" : "Back"}
           className="flex h-8.5 w-8.5 flex-none items-center justify-center rounded-xl bg-white/7 text-foreground transition-colors hover:bg-white/12"
         >
           <BackIcon />
@@ -1078,6 +1089,7 @@ export default function PlayScreen({
       <div className="mt-6 grid flex-1 items-start gap-8 md:mt-0 md:grid-cols-[260px_minmax(0,1fr)_300px] md:gap-12">
         {/* left sidebar */}
         <aside className="hidden flex-col gap-6.5 md:flex">
+          {toHub && <HubBackLink onClick={toHub} className="-mb-2" />}
           <div className="flex flex-col gap-2">
             <span className="text-[12.5px] font-semibold uppercase tracking-[0.18em] text-foreground/50">
               {mode === "daily" ? formatDateEyebrow(game.date) : wordOfDay ? `Infinite · word ${wordOfDay}` : "Infinite mode"}
@@ -1156,13 +1168,24 @@ export default function PlayScreen({
                   The word was <span className="font-semibold uppercase">{game.word}</span>
                 </p>
               )}
-              <button
-                type="button"
-                onClick={handleNextWord}
-                className="mt-3 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-background shadow-sm shadow-accent/30 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 active:scale-[0.98]"
-              >
-                Next word
-              </button>
+              <div className="mt-3 flex flex-wrap justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleNextWord}
+                  className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-background shadow-sm shadow-accent/30 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 active:scale-[0.98]"
+                >
+                  Next word
+                </button>
+                {boardLink && (
+                  <button
+                    type="button"
+                    onClick={boardLink}
+                    className="rounded-lg border border-white/12 bg-white/7 px-4 py-2 text-sm font-semibold transition-colors hover:border-accent/40"
+                  >
+                    {tierMe ? `${tierMe.tierName} leaderboard` : "Leaderboard"}
+                  </button>
+                )}
+              </div>
             </div>
           )}
 

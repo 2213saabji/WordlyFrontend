@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import Loader from "@/components/Loader";
+import HubBackLink from "@/components/HubBackLink";
 import ScreenHeader from "@/components/ScreenHeader";
 import TierBadge from "@/components/TierBadge";
 import { getInfiniteTiers } from "@/lib/api";
@@ -57,15 +58,32 @@ export default function HowTiersWorkScreen({ onBack }: { onBack: () => void }) {
   const myRule = myTier ? demotionRuleFor(tiers, myTier) : null;
   const myName = ladder.find((t) => t.tier === myTier)?.name;
   const lowerName = myTier ? ladder.find((t) => t.tier === myTier + 1)?.name : undefined;
-  const demotionLine =
-    myRule && myName
-      ? `In ${myName}, you can miss up to ${plural(myRule.misses - 1, "day")} in any ${myRule.windowDays}-day stretch; a ${ordinal(myRule.misses)} miss moves you down${lowerName ? ` to ${lowerName}` : ""}.`
-      : `Each tier allows a few missed days in a rolling window (shown per tier); one miss past that and you drop one tier. ${ladder.at(-1)?.name ?? "The bottom tier"} can't drop.`;
+  // No known tier: point at the per-tier limits in the ladder ("Drops
+  // after" column on desktop, the line under each tier on mobile), with a
+  // real example from the config.
+  const bottomName = ladder.at(-1)?.name ?? "The bottom tier";
+  const example = dropCell(tiers, ladder.find((t) => t.tier === 4) ? 4 : 1);
+  const demotionLine: ReactNode =
+    myRule && myName ? (
+      `In ${myName}, you can miss up to ${plural(myRule.misses - 1, "day")} in any ${myRule.windowDays}-day stretch; a ${ordinal(myRule.misses)} miss moves you down${lowerName ? ` to ${lowerName}` : ""}.`
+    ) : (
+      <>
+        Miss your daily targets too often and you drop one tier.{" "}
+        <span className="md:hidden">Each tier&apos;s limit is shown under it</span>
+        <span className="hidden md:inline">
+          The <strong className="font-semibold text-foreground">Drops after</strong> column shows each tier&apos;s limit
+        </span>
+        {example !== "—" ? `, for example "${example}"` : ""}. {bottomName} can&apos;t drop.
+      </>
+    );
 
   const rules = (
     <>
       <span>{demotionLine}</span>
-      <span>A missed day also resets your day count, and misses stop counting once they leave the window.</span>
+      <span>
+        A missed day also resets your day count, and each miss stops counting once it&apos;s older than your
+        tier&apos;s window.
+      </span>
       <span>Moving up or down keeps {carry}% of your points and starts you with a clean slate: day count and misses at 0.</span>
       <span className="hidden md:inline">The day resets at {tiers.resetTimeIst} IST.</span>
       {top && (
@@ -123,6 +141,7 @@ export default function HowTiersWorkScreen({ onBack }: { onBack: () => void }) {
 
       {/* ---------- desktop ---------- */}
       <div className="hidden max-w-180 flex-col gap-3 md:flex">
+        <HubBackLink onClick={onBack} className="mb-2" />
         <span className={`text-[12.5px] font-semibold uppercase tracking-[0.18em] ${MUTED}`}>Infinite</span>
         <h1 className="text-[52px] font-light leading-[1.05] tracking-[-0.03em]">How tiers work</h1>
         <span className={`text-[15px] leading-[1.6] ${SOFT}`}>{intro}</span>
