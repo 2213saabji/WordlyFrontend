@@ -4,15 +4,13 @@ import { useState } from "react";
 import Loader from "@/components/Loader";
 import HubBackLink from "@/components/HubBackLink";
 import ScreenHeader from "@/components/ScreenHeader";
-import { getInfiniteMe, getInfiniteTierChanges, getInfiniteTiers, getRewards } from "@/lib/api";
-import { MONEY_ENABLED } from "@/lib/flags";
-import { TIER_COLORS, demotionRuleFor, formatInr, plural } from "@/lib/tiers";
+import { getInfiniteMe, getInfiniteTierChanges, getInfiniteTiers } from "@/lib/api";
+import { TIER_COLORS, demotionRuleFor, plural } from "@/lib/tiers";
 import { useSyncedResource } from "@/lib/use-synced";
 import type {
+  CompletedCycle,
   InfiniteMeResponse,
   InfiniteTiersResponse,
-  Payout,
-  RewardStatus,
   TierChange,
   TierChangesResponse,
   TierNumber,
@@ -21,7 +19,6 @@ import type {
 // Shared with the other tier screens.
 const ME_CACHE_KEY = "infinite:me";
 const TIERS_CACHE_KEY = "infinite:tiers";
-const REWARDS_CACHE_KEY = "infinite:rewards";
 const HISTORY_CACHE_KEY = "infinite:tier-history";
 const PAGE_SIZE = 20;
 
@@ -34,7 +31,7 @@ const DIAMOND = "#9fd4e6";
 
 type Entry =
   | { kind: "change"; day: string; change: TierChange }
-  | { kind: "cycle"; day: string; payout: Payout };
+  | { kind: "cycle"; day: string; cycle: CompletedCycle };
 
 function shortDate(day: string): string {
   return new Date(`${day}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
@@ -44,7 +41,7 @@ function monthName(day: string): string {
 }
 
 /** Every tier move (GET /infinite/tier-changes, newest first) merged with
- * completed Diamond cycles (from the payout log) into one timeline. */
+ * completed Diamond cycles (/infinite/me completedCycles) into one timeline. */
 export default function TierHistoryScreen({ onBack }: { onBack: () => void }) {
   // Synced (lib/use-synced.ts): cached, refetched only when /sync says so.
   // Only the first page of moves is synced; "Load more" pages are fetched
@@ -63,13 +60,6 @@ export default function TierHistoryScreen({ onBack }: { onBack: () => void }) {
     flag: "tiers",
     key: TIERS_CACHE_KEY,
     fetcher: getInfiniteTiers,
-  }).data;
-  // Completed cycles aren't in the tier-change log — they come from the
-  // payout log (same source as the Diamond screen). Optional.
-  const rewards: RewardStatus | null = useSyncedResource({
-    flag: "rewards",
-    key: REWARDS_CACHE_KEY,
-    fetcher: getRewards,
   }).data;
   const failed = historyRes.failed;
   const firstPage: TierChangesResponse | null = historyRes.data;
@@ -108,15 +98,16 @@ export default function TierHistoryScreen({ onBack }: { onBack: () => void }) {
 
   const name = (t: TierNumber) => tiers?.tiers.find((x) => x.tier === t)?.name ?? `Tier ${t}`;
   const topName = name(1);
-  const reward = tiers?.tiers.find((t) => t.tier === 1)?.rewardInr ?? 0;
-  const paid = MONEY_ENABLED && reward > 0;
 
   // Only cycles within the loaded range of moves, so paging stays in order.
   const oldestLoaded = history.changes.at(-1)?.day;
-  const cycles = (rewards?.payouts ?? []).filter((p) => canLoadMore === false || !oldestLoaded || p.eligibleDay >= oldestLoaded);
+  // Completed cycles aren't in the tier-change log — they come from
+  // /infinite/me (same source as the Diamond screen; absent from a cached
+  // response older than v0.2).
+  const cycles = (me?.completedCycles ?? []).filter((p) => canLoadMore === false || !oldestLoaded || p.day >= oldestLoaded);
   const entries: Entry[] = [
     ...history.changes.map((c) => ({ kind: "change" as const, day: c.day, change: c })),
-    ...cycles.map((p) => ({ kind: "cycle" as const, day: p.eligibleDay, payout: p })),
+    ...cycles.map((p) => ({ kind: "cycle" as const, day: p.day, cycle: p })),
   ].sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : 0));
 
   // Summary: current tier, best tier ever reached, move count + since when.
@@ -139,7 +130,7 @@ export default function TierHistoryScreen({ onBack }: { onBack: () => void }) {
         arrow: "★",
         arrowColor: DIAMOND,
         title: `${topName} cycle complete`,
-        detail: `${paid ? `${formatInr(e.payout.amountInr || reward)} earned` : `${topName} star`} · cycle ${e.payout.cycle}`,
+        detail: `${topName} star · cycle ${e.cycle.cycle}`,
         position: "—",
       };
     }

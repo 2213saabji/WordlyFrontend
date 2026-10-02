@@ -8,12 +8,13 @@
 - Green tile: the letter is in the word and in the right spot.
 - Amber tile: the letter is in the word but in a different spot.
 - Gray tile: the letter is not in the word.
-- After four guesses without solving, a hint with a short clue becomes available. It never reveals the word.
+- After four guesses without solving, a hint with a short clue becomes available. It never reveals the word. In Infinite mode hints are free in the Stone and Iron tiers and cost 1,000 coins from Copper up.
+- Players earn 10 coins for every solved word (Daily or Infinite) and can buy more (3,000 coins for ₹10). Coins have no cash value.
 
 ## Modes
 
 - Daily: one word for everyone, changing at midnight UTC. Solving it extends the player's streak.
-- Infinite: unlimited practice rounds. Never affects streaks, stats, or leaderboards.
+- Infinite: unlimited rounds that earn points on eight tier leaderboards, from Stone to Diamond. Meeting daily targets moves players up; missed days move them down. Never affects Daily streaks or stats.
 - Groups: friends join with an eight-character invite code and rank on daily and weekly leaderboards.
 
 ## Pages

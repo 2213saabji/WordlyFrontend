@@ -26,8 +26,6 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { readCache, writeCache } from "@/lib/cache";
-import { MONEY_ENABLED } from "@/lib/flags";
-import { formatInr } from "@/lib/tiers";
 import { useSyncedLoader, useSyncedResource } from "@/lib/use-synced";
 import type {
   Group,
@@ -44,7 +42,6 @@ const PAGE_SIZE = 20;
 const ME_CACHE_KEY = "infinite:me";
 const TIERS_CACHE_KEY = "infinite:tiers";
 const MUTED = "text-[#9a8aa2]";
-const DIAMOND_TEXT = "text-[#9fd4e6]";
 
 function boardCacheKey(tier: TierNumber | undefined): string {
   return `infinite:board:${tier ?? "mine"}`;
@@ -53,8 +50,7 @@ function boardCacheKey(tier: TierNumber | undefined): string {
 const fmt = (n: number) => n.toLocaleString("en-IN");
 
 /** The Infinite tier leaderboard: one ranked board per tier (1–8), defaulting
- * to the caller's own, with their row pinned when it's below what's loaded.
- * The Diamond reward line only shows when MONEY_ENABLED is on. */
+ * to the caller's own, with their row pinned when it's below what's loaded. */
 export default function TierLeaderboard({
   initialTier,
   onBack,
@@ -171,7 +167,6 @@ export default function TierLeaderboard({
 
   const viewedTier = board?.tier ?? tier;
   const def = tiers?.tiers.find((t) => t.tier === viewedTier);
-  const topTier = tiers?.tiers.find((t) => t.tier === 1);
   const daysToStick = def?.daysToStick;
   const tierName = board?.tierName ?? def?.name ?? "";
   const totalPlayers = board?.pagination.total ?? 0;
@@ -212,11 +207,6 @@ export default function TierLeaderboard({
   );
   const tierSelect = viewedTier && tiers && (
     <TierSelect tiers={tiers.tiers} value={viewedTier} myTier={me?.tier} onChange={selectTier} />
-  );
-  const rewardLine = MONEY_ENABLED && topTier && topTier.rewardInr > 0 && (
-    <span className={`text-xs md:text-[13.5px] ${DIAMOND_TEXT}`}>
-      {topTier.name} (Tier 1) earns {formatInr(topTier.rewardInr)} every {topTier.daysToStick} days in a row.
-    </span>
   );
 
   const dayCount = (e: { stickDays: number }) => (daysToStick ? `${e.stickDays} of ${daysToStick} days` : `${e.stickDays} days`);
@@ -373,8 +363,6 @@ export default function TierLeaderboard({
       )}
 
       {board && cta}
-
-      {rewardLine}
 
       {/* mobile footer */}
       {board && (

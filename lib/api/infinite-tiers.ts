@@ -1,7 +1,6 @@
 // Infinite tier leaderboard — Phase 1: the 8-tier ladder, the player's tier
 // status and today's progress, the per-tier ranked board and tier-change
-// history. Money fields in these responses (rewardInr, reward) are only
-// rendered when MONEY_ENABLED is on (lib/flags.ts). Active time needs no call
+// history and the points feed. Active time needs no call
 // of its own: the server measures it from round starts and guesses
 // (POST /infinite/activity/heartbeat is legacy, for old app versions only).
 
@@ -9,13 +8,14 @@ import type {
   InfiniteLeaderboardResponse,
   InfiniteMeResponse,
   InfiniteTiersResponse,
+  ScoreEventsResponse,
   TierChangesResponse,
   TierNumber,
 } from "@/types";
 import { apiFetch, pageQuery, type PageOptions } from "./client";
 
 /** The tier ladder from the server's TierConfig (names, targets, days to
- * stick, reward). Thresholds change without a release — never hardcode. */
+ * stick, hint cost, decay, demotion penalty). Thresholds change without a release — never hardcode. */
 export function getInfiniteTiers(): Promise<InfiniteTiersResponse> {
   return apiFetch("/infinite/tiers");
 }
@@ -56,4 +56,15 @@ export function getPublicInfiniteLeaderboard(
 /** The caller's promotions/demotions, newest first. */
 export function getInfiniteTierChanges(options: PageOptions = {}): Promise<TierChangesResponse> {
   return apiFetch(`/infinite/tier-changes?${pageQuery(options)}`);
+}
+
+/** Every tier-points change (games, day bonus, decay, carry-in, demotion
+ * penalty), newest first, paged by `nextCursor`. Days up to yesterday are
+ * settled before listing. Recorded from the v0.2 release on (no backfill). */
+export function getScoreEvents(
+  { cursor, limit = 20 }: { cursor?: string | null; limit?: number } = {},
+): Promise<ScoreEventsResponse> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (cursor) params.set("cursor", cursor);
+  return apiFetch(`/infinite/score-events?${params}`);
 }

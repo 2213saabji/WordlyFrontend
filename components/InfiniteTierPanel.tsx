@@ -2,10 +2,11 @@
 
 import { useCallback, useState } from "react";
 import { getInfiniteMe, getInfiniteTiers } from "@/lib/api";
-import { MONEY_ENABLED } from "@/lib/flags";
 import { useSyncedResource } from "@/lib/use-synced";
-import { formatInr, plural } from "@/lib/tiers";
+import { CoinIcon } from "@/components/CoinChip";
+import { formatCoins, hintCostOf, plural } from "@/lib/tiers";
 import type {
+  CoinsAwarded,
   Game,
   InfiniteGuessTierBlock,
   InfiniteMeResponse,
@@ -46,12 +47,14 @@ export function useInfiniteTier(enabled: boolean) {
     if (enabled) void refetch();
   }, [enabled, refetch]);
 
-  // The lowest-numbered tier boundary where hints switch off (Copper, Tier 6).
-  const hintsOffFrom = tiers
-    ? [...tiers.tiers].filter((t) => !t.hintsEnabled).sort((a, b) => b.tier - a.tier)[0]
-    : undefined;
+  // The tier boundaries where hints switch off (hintCost null) and where
+  // they start costing coins ("Copper and up").
+  const lowest = (pick: (cost: number | null) => boolean) =>
+    tiers ? [...tiers.tiers].filter((t) => pick(hintCostOf(t))).sort((a, b) => b.tier - a.tier)[0] : undefined;
+  const hintsOffFrom = lowest((cost) => cost === null);
+  const paidHintsFrom = lowest((cost) => cost !== null && cost > 0);
 
-  return { me, tiers, today, setToday, refreshMe, hintsOffFrom };
+  return { me, tiers, today, setToday, refreshMe, hintsOffFrom, paidHintsFrom };
 }
 
 function Bar({ value, target, thin = false }: { value: number; target: number; thin?: boolean }) {
@@ -157,12 +160,13 @@ export interface TierRoundResult {
   block: InfiniteGuessTierBlock;
   /** Rank before this round, for the ↑/↓ delta; null if unranked. */
   prevRank: number | null;
+  /** The guess response's `coins` block (+10 for a solve). */
+  coins?: CoinsAwarded;
 }
 
 /** End-of-round tier summary: points earned (+ day bonus), whether today now
  * qualifies, rank / score / games, and the distance to Diamond. Mobile
- * renders it as a bottom sheet, desktop as a sidebar card. The reward line
- * only mentions ₹ when MONEY_ENABLED is on. */
+ * renders it as a bottom sheet, desktop as a sidebar card. */
 export function TierResultCard({
   game,
   result,
@@ -180,7 +184,7 @@ export function TierResultCard({
   onBoard?: () => void;
   variant: "sheet" | "card";
 }) {
-  const { block, prevRank } = result;
+  const { block, prevRank, coins } = result;
   const { today } = block;
   const won = game.status === "won";
   const total = block.pointsAwarded + block.qualifyingBonusAwarded;
@@ -254,6 +258,21 @@ export function TierResultCard({
         )
       )}
 
+      {/* Hidden for a loss, or a round already credited (awarded 0). */}
+      {coins && coins.awarded > 0 && (
+        <div
+          className={`flex items-center gap-3 rounded-2xl border border-[#e3b75a]/35 bg-[#e3b75a]/10 px-4 ${card ? "py-[13px]" : "py-3"}`}
+        >
+          <CoinIcon className="size-5" />
+          <span className={card ? "text-sm" : "text-[13.5px]"}>
+            <strong className="text-[#e3b75a]">+{formatCoins(coins.awarded)}</strong> for the solve
+          </span>
+          <span className={`ml-auto whitespace-nowrap ${card ? "text-[13px]" : "text-[12.5px]"} ${MUTED}`}>
+            {coins.balance.toLocaleString("en-IN")} total
+          </span>
+        </div>
+      )}
+
       <div className={`grid grid-cols-3 ${card ? "gap-2.5" : "gap-2"}`}>
         <Stat label="Rank" card={card}>
           #{block.rank}
@@ -275,8 +294,7 @@ export function TierResultCard({
 
       {tier !== undefined && tier > 1 && top && (
         <span className={`${card ? "text-[13px]" : "text-[12.5px]"} ${MUTED}`}>
-          {plural(tier - 1, "tier")} to {top.name}
-          {MONEY_ENABLED && top.rewardInr > 0 ? ` and its ${formatInr(top.rewardInr)} monthly reward.` : "."}
+          {plural(tier - 1, "tier")} to {top.name}.
         </span>
       )}
 

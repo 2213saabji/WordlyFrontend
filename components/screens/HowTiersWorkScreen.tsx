@@ -7,8 +7,7 @@ import ScreenHeader from "@/components/ScreenHeader";
 import TierBadge from "@/components/TierBadge";
 import { getInfiniteTiers } from "@/lib/api";
 import { readCache } from "@/lib/cache";
-import { MONEY_ENABLED } from "@/lib/flags";
-import { CARRY_IN_PERCENT, demotionRuleFor, formatInr, plural } from "@/lib/tiers";
+import { CARRY_IN_PERCENT, demotionRuleFor, formatCoins, hintCostOf, plural } from "@/lib/tiers";
 import { useSyncedResource } from "@/lib/use-synced";
 import type { InfiniteMeResponse, InfiniteTiersResponse, TierDefinition } from "@/types";
 
@@ -18,11 +17,11 @@ const TIERS_CACHE_KEY = "infinite:tiers";
 const MUTED = "text-[#9a8aa2]";
 const SOFT = "text-[#c9bfcc]";
 const DIAMOND_TEXT = "text-[#9fd4e6]";
+const COIN_TEXT = "text-[#e3b75a]";
 
 /** The tier ladder explained: each tier's daily targets, hints and days to
- * stick, straight from the server's TierConfig, plus the promotion/demotion
- * rules. With MONEY_ENABLED off, Diamond's reward reads as a profile star
- * instead of ₹. */
+ * stick, straight from the server's TierConfig, plus the promotion/demotion,
+ * decay and coin rules. */
 export default function HowTiersWorkScreen({ onBack }: { onBack: () => void }) {
   // Synced (lib/use-synced.ts): the ladder is only refetched when the team
   // edits the tier config.
@@ -50,8 +49,19 @@ export default function HowTiersWorkScreen({ onBack }: { onBack: () => void }) {
 
   const ladder = [...tiers.tiers].sort((a, b) => a.tier - b.tier);
   const top = ladder.find((t) => t.tier === 1);
-  const paid = MONEY_ENABLED && !!top && top.rewardInr > 0;
   const carry = tiers.carryInPercent ?? CARRY_IN_PERCENT;
+  // v0.2 config — optional so a cached older ladder still renders.
+  const penalty = tiers.demotionPenalty ?? 0;
+  const decay = tiers.decay;
+  const solveReward = tiers.coins?.solveReward;
+  // "From Copper up, a hint costs 1,000 coins." — the lowest paid tier.
+  const firstPaid = [...ladder].reverse().find((t) => (hintCostOf(t) ?? 0) > 0);
+  const coinLine = [
+    solveReward ? `Every solved word earns ${formatCoins(solveReward)}.` : null,
+    firstPaid ? `From ${firstPaid.name} up, a hint costs ${formatCoins(hintCostOf(firstPaid)!)}.` : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   // Windows differ per tier (30/21/14 days for tiers 1–4, 7 below), so the
   // rule is spelled out for the player's own tier and listed per row.
@@ -84,12 +94,25 @@ export default function HowTiersWorkScreen({ onBack }: { onBack: () => void }) {
         A missed day also resets your day count, and each miss stops counting once it&apos;s older than your
         tier&apos;s window.
       </span>
-      <span>Moving up or down keeps {carry}% of your points and starts you with a clean slate: day count and misses at 0.</span>
+      {penalty > 0 ? (
+        <span>
+          Moving up keeps {carry}% of your points. Moving down keeps {carry}%, minus a {penalty}-point demotion penalty.
+          Both reset your day count to 0.
+        </span>
+      ) : (
+        <span>Moving up or down keeps {carry}% of your points and starts you with a clean slate: day count and misses at 0.</span>
+      )}
+      {decay && (
+        <span>
+          A day with no games played takes {Math.round(decay.rate * 100)}% off your points (at least {decay.minPoints}) at{" "}
+          {tiers.resetTimeIst} IST.
+        </span>
+      )}
       <span className="hidden md:inline">The day resets at {tiers.resetTimeIst} IST.</span>
+      {coinLine && <span className={COIN_TEXT}>{coinLine}</span>}
       {top && (
         <span className={DIAMOND_TEXT}>
-          In {top.name}, every {top.daysToStick} days in a row earns{" "}
-          {paid ? `${formatInr(top.rewardInr)}, paid to a verified bank account.` : `a ${top.name} star on your profile.`}
+          In {top.name}, every {top.daysToStick} days in a row earns a {top.name} star on your profile.
         </span>
       )}
     </>
@@ -126,7 +149,7 @@ export default function HowTiersWorkScreen({ onBack }: { onBack: () => void }) {
                     {plural(t.daysToStick, "day")}
                   </span>
                   <span className={`text-[11px] ${MUTED}`}>
-                    {t.tier === 1 ? (paid ? `${formatInr(t.rewardInr)} each cycle` : "star each cycle") : "to move up"}
+                    {t.tier === 1 ? "star each cycle" : "to move up"}
                   </span>
                 </span>
               </div>
@@ -177,10 +200,10 @@ export default function HowTiersWorkScreen({ onBack }: { onBack: () => void }) {
                 </span>
                 <span className={SOFT}>{t.minActiveMinutes > 0 ? `${t.minActiveMinutes} min` : "—"}</span>
                 <span className={SOFT}>{t.minGamesCompleted}</span>
-                <span className={SOFT}>{t.hintsEnabled ? "On" : "Off"}</span>
+                <span className={SOFT}>{hintCell(t)}</span>
                 <span className={t.tier === 1 ? DIAMOND_TEXT : ""}>
                   {t.daysToStick}
-                  {t.tier === 1 && (paid ? ` · ${formatInr(t.rewardInr)}` : " · ★")}
+                  {t.tier === 1 && " · ★"}
                 </span>
                 <span className={SOFT}>{dropCell(tiers, t.tier)}</span>
               </div>
@@ -196,7 +219,7 @@ export default function HowTiersWorkScreen({ onBack }: { onBack: () => void }) {
   );
 }
 
-const LADDER_COLS = "grid-cols-[minmax(0,1fr)_110px_110px_80px_130px_140px]";
+const LADDER_COLS = "grid-cols-[minmax(0,1fr)_110px_110px_110px_130px_140px]";
 
 function ordinal(n: number): string {
   const suffix = n % 100 >= 11 && n % 100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10] ?? "th";
@@ -215,11 +238,18 @@ function dropCell(tiers: InfiniteTiersResponse, tier: number): string {
   return rule ? `${rule.misses} in ${rule.windowDays} days` : "—";
 }
 
-/** "60 min · 20 games · no hints"; Stone has no time target: "1 game · hints on". */
+/** Desktop Hints cell: "1,000 coins", "Free", or "Off" (hints off in that tier). */
+function hintCell(t: TierDefinition): string {
+  const cost = hintCostOf(t);
+  return cost === null ? "Off" : cost === 0 ? "Free" : formatCoins(cost);
+}
+
+/** "60 min · 20 games · hint 1,000 coins"; Stone has no time target: "1 game · free hints". */
 function targetsLine(t: TierDefinition): string {
   const parts = [];
   if (t.minActiveMinutes > 0) parts.push(`${t.minActiveMinutes} min`);
   parts.push(plural(t.minGamesCompleted, "game"));
-  parts.push(t.hintsEnabled ? "hints on" : "no hints");
+  const cost = hintCostOf(t);
+  parts.push(cost === null ? "no hints" : cost === 0 ? "free hints" : `hint ${formatCoins(cost)}`);
   return parts.join(" · ");
 }

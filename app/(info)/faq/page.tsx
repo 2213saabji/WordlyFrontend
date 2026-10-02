@@ -25,7 +25,10 @@ export const metadata: Metadata = pageMetadata(
 // Tier rules mirror the backend's current config (GET /infinite/tiers:
 // 8 tiers; 3rd miss in a rolling window demotes — 30 days for Diamond and
 // Platinum, 21 Gold, 14 Silver, 7 Bronze–Iron; scoring 10 + 2 per unused
-// guess + 20 per qualifying day). Update this copy if those change.
+// guess + 20 per qualifying day; carry-in 20%, demotion penalty 50 points;
+// decay 5% (min 10) per idle day; +10 coins per solve; hints 1,000 coins in
+// Copper–Diamond; one pack, 3,000 coins for ₹10). Update this copy if those
+// change.
 const TIER_FAQS: FaqItem[] = [
   {
     question: "Does Infinite mode affect my streak?",
@@ -48,6 +51,16 @@ const TIER_FAQS: FaqItem[] = [
       "Yes. Each tier lets you miss up to 2 days in a rolling window: 30 days in Diamond and Platinum, 21 in Gold, 14 in Silver, and 7 in Bronze, Copper and Iron. A 3rd miss in that window drops you one tier, and any missed day also resets your day count. Stone is the bottom tier, so you can't drop below it.",
   },
   {
+    question: "What happens to my points when I change tier?",
+    answer:
+      "Moving up, you start the new tier with 20% of your points. Moving down, you keep 20% minus a 50-point penalty (never below 0) — for example, 900 points in Gold becomes 130 in Silver.",
+  },
+  {
+    question: "Do I lose points if I don't play?",
+    answer:
+      "Yes. A day with no completed Infinite rounds costs 5% of your tier points (at least 10), taken at midnight IST. A day you play but miss your targets doesn't lose points — it only counts as a missed day.",
+  },
+  {
     question: "How are Infinite points scored?",
     answer:
       "A solved word earns 10 points plus 2 for every guess you didn't need, and each day you meet your targets adds a 20-point bonus. Tier leaderboards rank by points, then by days counted in the tier.",
@@ -56,6 +69,11 @@ const TIER_FAQS: FaqItem[] = [
     question: "Where can I see the Infinite leaderboard?",
     answer:
       "Anyone can view it at guessword.games/leaderboard/infinite, no account needed. Sign in to see your own rank and tier.",
+  },
+  {
+    question: "What are coins?",
+    answer:
+      "Coins are GuessWord's in-game currency. You earn 10 coins for every word you solve, Daily or Infinite, and you can buy more: 3,000 coins for ₹10. Spend them on hints in the Copper to Diamond tiers. Coins have no cash value, can't be withdrawn or transferred, and don't expire.",
   },
 ];
 
@@ -88,7 +106,9 @@ const FAQS: FaqItem[] = [
   },
   {
     question: "Is GuessWord free?",
-    answer: "Yes, GuessWord is completely free to play, with no download required.",
+    answer: INFINITE_TIERS_ENABLED
+      ? "Yes, GuessWord is free to play, with no download required. Buying coins for hints in the higher Infinite tiers is optional."
+      : "Yes, GuessWord is completely free to play, with no download required.",
   },
   {
     question: "Do I need an account to play?",
@@ -107,7 +127,7 @@ const FAQS: FaqItem[] = [
   {
     question: "Are hints available?",
     answer: INFINITE_TIERS_ENABLED
-      ? "Yes — after four guesses without solving the word, a hint becomes available with a short clue. It never reveals the word itself. In Infinite mode, hints are only available in the Stone and Iron tiers."
+      ? "Yes — after four guesses without solving the word, a hint becomes available with a short clue. It never reveals the word itself. In Infinite mode, hints are free in the Stone and Iron tiers; from Copper up, a hint costs 1,000 coins."
       : "Yes — after four guesses without solving the word, a hint becomes available with a short clue. It never reveals the word itself.",
   },
 ];

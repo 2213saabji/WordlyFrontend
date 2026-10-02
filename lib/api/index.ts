@@ -9,12 +9,11 @@
 //   infinite-tiers  Infinite tier leaderboard: tiers, status, board
 //   groups          create/join/leave, my groups
 //   leaderboards    Daily-mode global and group leaderboards
-//   notifications   tier and payout notifications
-//   verification    MONEY — Tier 1 identity verification
-//   rewards         MONEY — Tier 1 reward tracker and payouts
+//   notifications   tier, coin and decay notifications
+//   wallet          coin balance and ledger
+//   store           coin packs and Razorpay orders
 //   contact         public contact form
 //
-// MONEY modules are only called when MONEY_ENABLED is on (lib/flags.ts).
 // Cron, webhook and admin endpoints in the backend contract are
 // server-to-server only and deliberately have no client here.
 
@@ -37,7 +36,7 @@ export * from "./infinite-tiers";
 export * from "./groups";
 export * from "./leaderboards";
 export * from "./notifications";
-export * from "./verification";
-export * from "./rewards";
+export * from "./wallet";
+export * from "./store";
 export * from "./contact";
 export * from "./sync";

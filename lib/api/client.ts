@@ -100,6 +100,9 @@ export interface ApiFetchOptions {
   method?: string;
   body?: unknown;
   skipAuth?: boolean;
+  /** Extra request headers, e.g. `Idempotency-Key` on POST /store/orders
+   * (which also makes the one automatic retry below safe for it). */
+  headers?: Record<string, string>;
   /** Internal — sat after one refresh-and-retry attempt, so a second 401
    * (refresh itself is somehow not fixing it) doesn't loop forever. */
   isRetry?: boolean;
@@ -130,8 +133,7 @@ function clearSession(): void {
 function redirectToLogin(): void {
   // The login screen lives at "/" (it's part of the single-page app, not a
   // separate route). Of the other real routes, /reset-password/[token] never
-  // makes an authenticated call; /verify-email/[token] does, and lands here
-  // (→ "/") when its link is opened without a signed-in session.
+  // makes an authenticated call.
   if (typeof window !== "undefined" && window.location.pathname !== "/") {
     // Plain module outside the React tree (no useRouter here); a hard
     // navigation also clears any in-memory state left over from the expired
@@ -149,9 +151,9 @@ let refreshPromise: Promise<{ token: string; user: User } | null> | null = null;
 
 async function performRequest<T>(
   path: string,
-  { method = "GET", body, skipAuth = false, isRetry = false }: ApiFetchOptions = {},
+  { method = "GET", body, skipAuth = false, headers: extraHeaders, isRetry = false }: ApiFetchOptions = {},
 ): Promise<T> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const headers: Record<string, string> = { "Content-Type": "application/json", ...extraHeaders };
 
   if (!skipAuth) {
     // On a reload, screens render straight from the cache (lib/cache.ts) and
@@ -187,7 +189,7 @@ async function performRequest<T>(
     if (res.status === 401 && !skipAuth && !isRetry) {
       const refreshed = await refreshSession();
       if (refreshed) {
-        return performRequest<T>(path, { method, body, skipAuth, isRetry: true });
+        return performRequest<T>(path, { method, body, skipAuth, headers: extraHeaders, isRetry: true });
       }
       // Stored device session is gone (revoked, or this is a stale
       // pre-device-session token) — there's nothing left to silently retry.

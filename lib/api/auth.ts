@@ -56,7 +56,8 @@ export function login(payload: {
   });
 }
 
-export function getMe(): Promise<{ user: User }> {
+/** `coinBalance` feeds the header coin chip (same number as GET /wallet). */
+export function getMe(): Promise<{ user: User; infinite?: User["infinite"]; coinBalance?: number }> {
   return apiFetch("/auth/me");
 }
 
