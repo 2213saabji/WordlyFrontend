@@ -1,26 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import FaqAccordion, { type FaqItem } from "@/components/FaqAccordion";
-import { INFINITE_TIERS_ENABLED } from "@/lib/flags";
 import { JsonLd, breadcrumbJsonLd, pageMetadata } from "@/lib/seo";
 
 const PATH = "/faq";
 
-export const metadata: Metadata = pageMetadata(
-  INFINITE_TIERS_ENABLED
-    ? {
-        title: "FAQ — Daily Word, Streaks, Infinite Tiers & Hints",
-        description:
-          "Answers to common GuessWord questions: when the daily word changes, how streaks work, how Infinite tiers and the Infinite leaderboard work, hints, groups, and playing on mobile.",
-        path: PATH,
-      }
-    : {
-        title: "FAQ — Daily Word, Streaks, Groups & Hints",
-        description:
-          "Answers to common GuessWord questions: when the daily word changes, how streaks and leaderboards work, Infinite mode, hints, groups, and playing on mobile.",
-        path: PATH,
-      },
-);
+export const metadata: Metadata = pageMetadata({
+  title: "FAQ — Daily Word, Streaks, Infinite Tiers & Hints",
+  description:
+    "Answers to common GuessWord questions: when the daily word changes, how streaks work, how Infinite tiers and the Infinite leaderboard work, hints, groups, and playing on mobile.",
+  path: PATH,
+});
 
 // Tier rules mirror the backend's current config (GET /infinite/tiers:
 // 8 tiers; 3rd miss in a rolling window demotes — 30 days for Diamond and
@@ -87,14 +77,7 @@ const FAQS: FaqItem[] = [
     answer:
       "Solve the daily word and your streak goes up by one. Miss a day without solving it and your streak resets to zero — your best streak is saved separately, so you always know your record.",
   },
-  ...(INFINITE_TIERS_ENABLED
-    ? TIER_FAQS
-    : [
-        {
-          question: "Does Infinite mode affect my streak?",
-          answer: "No — Infinite mode is just for practice. It never touches your stats, streak, or any leaderboard.",
-        },
-      ]),
+  ...TIER_FAQS,
   {
     question: "How do I join a group?",
     answer: "Open Groups and enter a friend's invite code, or create your own group to get a code to share.",
@@ -106,9 +89,8 @@ const FAQS: FaqItem[] = [
   },
   {
     question: "Is GuessWord free?",
-    answer: INFINITE_TIERS_ENABLED
-      ? "Yes, GuessWord is free to play, with no download required. Buying coins for hints in the higher Infinite tiers is optional."
-      : "Yes, GuessWord is completely free to play, with no download required.",
+    answer:
+      "Yes, GuessWord is free to play, with no download required. Buying coins for hints in the higher Infinite tiers is optional.",
   },
   {
     question: "Do I need an account to play?",
@@ -126,9 +108,8 @@ const FAQS: FaqItem[] = [
   },
   {
     question: "Are hints available?",
-    answer: INFINITE_TIERS_ENABLED
-      ? "Yes — after four guesses without solving the word, a hint becomes available with a short clue. It never reveals the word itself. In Infinite mode, hints are free in the Stone and Iron tiers; from Copper up, a hint costs 1,000 coins."
-      : "Yes — after four guesses without solving the word, a hint becomes available with a short clue. It never reveals the word itself.",
+    answer:
+      "Yes — after four guesses without solving the word, a hint becomes available with a short clue. It never reveals the word itself. In Infinite mode, hints are free in the Stone and Iron tiers; from Copper up, a hint costs 1,000 coins.",
   },
 ];
 

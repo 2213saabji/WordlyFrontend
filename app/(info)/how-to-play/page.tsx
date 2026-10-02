@@ -1,22 +1,19 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import ContentPage, { Eyebrow } from "@/components/ContentPage";
-import { INFINITE_TIERS_ENABLED } from "@/lib/flags";
 import { JsonLd, SITE_URL, breadcrumbJsonLd, pageMetadata } from "@/lib/seo";
 
 const PATH = "/how-to-play";
 
 export const metadata: Metadata = pageMetadata({
   title: "How to Play — Rules & Tile Colors",
-  description: INFINITE_TIERS_ENABLED
-    ? "Learn how to play GuessWord: guess the five-letter word in six tries, what the green, amber, and gray tiles mean, how Daily and Groups work, and how to climb the Infinite tiers."
-    : "Learn how to play GuessWord: guess the five-letter word in six tries, what the green, amber, and gray tiles mean, and how Daily, Infinite, and Groups modes work.",
+  description:
+    "Learn how to play GuessWord: guess the five-letter word in six tries, what the green, amber, and gray tiles mean, how Daily and Groups work, and how to climb the Infinite tiers.",
   path: PATH,
 });
 
-const STREAK_STEP = INFINITE_TIERS_ENABLED
-  ? "Solve the daily word to grow your streak, or play Infinite mode to earn points and climb eight tiers, from Stone to Diamond."
-  : "Solve the daily word to grow your streak, or play Infinite mode for unlimited practice that doesn't affect your stats.";
+const STREAK_STEP =
+  "Solve the daily word to grow your streak, or play Infinite mode to earn points and climb eight tiers, from Stone to Diamond.";
 
 // HowTo mirrors the steps this page actually shows, giving answer engines a
 // clean, quotable "how do you play" answer.
@@ -44,9 +41,8 @@ const howToJsonLd = {
       "@type": "HowToStep",
       position: 3,
       name: "Narrow it down",
-      text: INFINITE_TIERS_ENABLED
-        ? "Use the feedback to choose your next guess. After four guesses without solving it, a hint with a short clue becomes available. From Copper up in Infinite mode, a hint costs 1,000 coins."
-        : "Use the feedback to choose your next guess. After four guesses without solving it, a hint with a short clue becomes available.",
+      text:
+        "Use the feedback to choose your next guess. After four guesses without solving it, a hint with a short clue becomes available. From Copper up in Infinite mode, a hint costs 1,000 coins.",
     },
     {
       "@type": "HowToStep",
@@ -126,15 +122,10 @@ const WAYS_TO_PLAY = [
     heading: "Daily",
     body: "One word for everyone, released at midnight. Solving it keeps your streak going.",
   },
-  INFINITE_TIERS_ENABLED
-    ? {
-        heading: "Infinite",
-        body: "A new word as soon as you finish. Solved words earn points on your tier's leaderboard; meet your daily targets to climb from Stone to Diamond.",
-      }
-    : {
-        heading: "Infinite",
-        body: "A new word as soon as you finish. Practice as long as you like; it doesn't touch your streak.",
-      },
+  {
+    heading: "Infinite",
+    body: "A new word as soon as you finish. Solved words earn points on your tier's leaderboard; meet your daily targets to climb from Stone to Diamond.",
+  },
   {
     heading: "Groups",
     body: "Share an eight-character invite code. Everyone plays the daily word and ranks on a weekly board.",
@@ -188,26 +179,24 @@ export default function HowToPlayPage() {
         </div>
       </div>
 
-      {INFINITE_TIERS_ENABLED && (
-        <div className="flex flex-col gap-5">
-          <Eyebrow>Infinite tiers</Eyebrow>
-          <div className="grid grid-cols-1 gap-8 sm:grid-cols-3">
-            {TIER_STEPS.map((step) => (
-              <div key={step.heading} className="flex flex-col gap-2.5 border-t border-white/10 pt-5.5">
-                <h2 className="text-lg font-semibold">{step.heading}</h2>
-                <span className="text-[14.5px] leading-relaxed text-[#c9bfcc]">{step.body}</span>
-              </div>
-            ))}
-          </div>
-          <span className="text-[14.5px] text-[#c9bfcc]">
-            See the current rankings on the{" "}
-            <Link href="/leaderboard/infinite" className="text-accent underline hover:no-underline">
-              Infinite leaderboard
-            </Link>
-            .
-          </span>
+      <div className="flex flex-col gap-5">
+        <Eyebrow>Infinite tiers</Eyebrow>
+        <div className="grid grid-cols-1 gap-8 sm:grid-cols-3">
+          {TIER_STEPS.map((step) => (
+            <div key={step.heading} className="flex flex-col gap-2.5 border-t border-white/10 pt-5.5">
+              <h2 className="text-lg font-semibold">{step.heading}</h2>
+              <span className="text-[14.5px] leading-relaxed text-[#c9bfcc]">{step.body}</span>
+            </div>
+          ))}
         </div>
-      )}
+        <span className="text-[14.5px] text-[#c9bfcc]">
+          See the current rankings on the{" "}
+          <Link href="/leaderboard/infinite" className="text-accent underline hover:no-underline">
+            Infinite leaderboard
+          </Link>
+          .
+        </span>
+      </div>
 
       <div className="flex flex-wrap items-center gap-5 rounded-3xl border border-accent/28 bg-accent/8 p-7">
         <div className="flex flex-1 flex-col gap-1.5 basis-70">

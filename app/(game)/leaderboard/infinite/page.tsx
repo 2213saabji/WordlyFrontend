@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import PublicTierBoard from "@/components/PublicTierBoard";
-import { INFINITE_TIERS_ENABLED } from "@/lib/flags";
 import { JsonLd, breadcrumbJsonLd, pageMetadata } from "@/lib/seo";
 
 const PATH = "/leaderboard/infinite";
@@ -18,7 +16,6 @@ export const metadata: Metadata = pageMetadata({
 });
 
 export default function InfiniteLeaderboardPage() {
-  if (!INFINITE_TIERS_ENABLED) notFound();
   return (
     <>
       <JsonLd data={breadcrumbJsonLd("Infinite Leaderboard", PATH)} />

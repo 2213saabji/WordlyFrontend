@@ -9,8 +9,7 @@ import type { Screen } from "@/lib/screen-context";
 import { CARRY_IN_PERCENT, demotionRuleFor, formatPaise, lastDays, plural } from "@/lib/tiers";
 import type { AppNotification, InfiniteTiersResponse, TierNumber } from "@/types";
 
-// Mount only with INFINITE_TIERS_ENABLED — the feed is tier, coin and decay
-// events.
+// The feed is tier, coin and decay events.
 
 const TIERS_CACHE_KEY = "infinite:tiers";
 const NOTIFICATIONS_CACHE_KEY = "infinite:notifications";
