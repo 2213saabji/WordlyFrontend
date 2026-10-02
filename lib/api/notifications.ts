@@ -1,7 +1,5 @@
-// In-app notifications (tier promotion/demotion, demotion risk, and — money
-// only — reward/payout/verification events). Payout events are also emailed
-// by the backend. Filter out MONEY_NOTIFICATION_TYPES when MONEY_ENABLED is
-// off (lib/flags.ts).
+// In-app notifications: tier promotion/demotion, demotion risk, coin
+// purchases (and failed payments) and inactivity decay.
 
 import type { NotificationsResponse } from "@/types";
 import { apiFetch } from "./client";

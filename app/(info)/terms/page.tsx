@@ -5,7 +5,7 @@ import { pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "Terms of Service",
   description:
-    "The terms that apply to using GuessWord — your account, fair play on leaderboards, display and group names, and how the service may change.",
+    "The terms that apply to using GuessWord — your account, fair play on leaderboards, display and group names, coins and purchases, and how the service may change.",
   path: "/terms",
 });
 
@@ -29,14 +29,20 @@ const SECTIONS: LegalSection[] = [
     body: "Display names and group names must not be offensive or impersonate others. We may rename or remove them if they do.",
   },
   {
-    id: "the-service",
+    id: "coins-and-purchases",
     number: "04",
+    heading: "Coins and purchases",
+    body: "Coins are an in-game currency. You earn them by solving words and can buy more: 3,000 coins for ₹10, inclusive of GST, paid through Razorpay. Coins can only be spent in GuessWord, for example on hints. They have no cash value, can't be withdrawn, exchanged or transferred to another account, and don't expire. Purchases are non-refundable, except where the law requires a refund or you were charged twice for the same order. If a payment fails, no coins are added and you aren't charged.",
+  },
+  {
+    id: "the-service",
+    number: "05",
     heading: "The service",
     body: "We work to keep GuessWord available, but it may occasionally be down for maintenance. Features may change over time.",
   },
   {
     id: "ending-your-use",
-    number: "05",
+    number: "06",
     heading: "Ending your use",
     // The mockup's copy said "delete your account at any time" — there's no
     // self-serve deletion in the app yet, only via emailing support (see the
@@ -47,10 +53,11 @@ const SECTIONS: LegalSection[] = [
   },
   {
     id: "changes-to-these-terms",
-    number: "06",
+    number: "07",
     heading: "Changes to these terms",
-    // Dropped "and let you know in the app" from the mockup's copy — there's
-    // no in-app notification system to actually do that.
+    // Dropped "and let you know in the app" from the mockup's copy — the
+    // in-app notifications only carry tier and coin events, not terms
+    // updates.
     body: "If we make important changes, we will update the date at the top of this page.",
   },
 ];
@@ -60,7 +67,7 @@ export default function TermsPage() {
     <LegalPage
       eyebrow="Legal"
       title="Terms of use"
-      lastUpdated="25 September 2026"
+      lastUpdated="2 October 2026"
       readTime="5 min read"
       intro="These terms apply when you use GuessWord, operated by Gurpreet Singh, an individual developer, and governed by the laws of India. By creating an account or playing, you agree to them."
       sections={SECTIONS}

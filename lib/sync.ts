@@ -115,7 +115,7 @@ const ALL_FLAGS: SyncFlag[] = [
   "notifications",
   "infinite",
   "tierChanges",
-  "rewards",
+  "wallet",
   "today",
   "tiers",
   "daily",

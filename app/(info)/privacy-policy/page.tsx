@@ -6,7 +6,7 @@ import { pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "Privacy Policy",
   description:
-    "How GuessWord collects, uses, and protects your information — what we store, what other players can see, cookies, data retention, and your choices.",
+    "How GuessWord collects, uses, and protects your information — what we store, payments, what other players can see, cookies, data retention, and your choices.",
   path: "/privacy-policy",
 });
 
@@ -26,12 +26,18 @@ const SECTIONS: LegalSection[] = [
     number: "02",
     heading: "How we use it",
     body: INFINITE_TIERS_ENABLED
-      ? "To run the game: saving your progress and streaks, ranking group and Infinite tier leaderboards, checking your daily Infinite targets, keeping you signed in on your device, spotting cheating and duplicate accounts, and sending account emails such as signup verification codes and password resets. We do not sell your information."
+      ? "To run the game: saving your progress and streaks, ranking group and Infinite tier leaderboards, checking your daily Infinite targets, keeping you signed in on your device, spotting cheating and duplicate accounts, and sending account emails such as signup verification codes, password resets and purchase receipts. We do not sell your information."
       : "To run the game: saving your progress and streaks, ranking group leaderboards, and sending account emails such as password resets. We do not sell your information.",
   },
   {
-    id: "what-others-can-see",
+    id: "coins-and-payments",
     number: "03",
+    heading: "Coins and payments",
+    body: "Coin purchases are processed by Razorpay. We store the order, the coins bought, the amount and Razorpay's order and payment IDs, and your coin balance and coin history — never your card, UPI or bank details, which go straight to Razorpay. We no longer collect mobile numbers or bank account details, and any we stored before have been deleted.",
+  },
+  {
+    id: "what-others-can-see",
+    number: "04",
     heading: "What others can see",
     body: INFINITE_TIERS_ENABLED
       ? "Members of your groups see your display name and results for the daily word, and other players can see your display name and results on the global daily and weekly leaderboards. The Infinite leaderboard is public: anyone, even without an account, can see your display name, points and days in your tier. Your email address is never shown to other players."
@@ -39,7 +45,7 @@ const SECTIONS: LegalSection[] = [
   },
   {
     id: "cookies",
-    number: "04",
+    number: "05",
     heading: "Cookies",
     // Covers the disclosures AdSense requires of every site showing its ads.
     body: (
@@ -72,13 +78,13 @@ const SECTIONS: LegalSection[] = [
   },
   {
     id: "keeping-your-data",
-    number: "05",
+    number: "06",
     heading: "Keeping your data",
     body: "We keep your account and game data while your account is active. There's no self-serve deletion in the app yet — email support and we'll delete your account and data.",
   },
   {
     id: "your-choices",
-    number: "06",
+    number: "07",
     heading: "Your choices",
     body: "You can update your display name at any time in the app, and can contact support with any question, correction, or deletion request.",
   },
@@ -89,7 +95,7 @@ export default function PrivacyPolicyPage() {
     <LegalPage
       eyebrow="Legal"
       title="Privacy policy"
-      lastUpdated="28 September 2026"
+      lastUpdated="2 October 2026"
       readTime="4 min read"
       intro="This page explains what information GuessWord collects, why we collect it and the choices you have."
       sections={SECTIONS}

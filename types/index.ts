@@ -68,8 +68,9 @@ export interface Game {
   word?: string;
   difficulty?: GameDifficulty;
   /** Only present once the round is over — see the hint-button note in
-   * PlayScreen for how an in-progress hint is fetched instead. For Infinite
-   * rounds, an in-progress hint comes only from POST /game/infinite/hint. */
+   * PlayScreen for how an in-progress hint is fetched instead. Infinite
+   * rounds include it mid-round only when it's free (hintCost 0) or already
+   * revealed; otherwise it comes from POST /game/infinite/hint. */
   hint?: string;
   timeTakenMs?: number | null;
 
@@ -77,10 +78,15 @@ export interface Game {
   /** The round id (backend sends `id`; `_id` kept for older payloads). */
   id?: string;
   _id?: string;
-  /** false in Tiers 1–6 — hide the hint control entirely. */
+  /** Price of this round's hint, from the player's tier: 0 free (Tiers
+   * 7–8), > 0 coins (Tiers 1–6), null = hints off in this tier. */
+  hintCost?: number | null;
+  /** @deprecated Same as hintCost === 0 — removed next backend release. */
   hintsEnabled?: boolean;
   /** true once POST /game/infinite/hint has revealed it for this round. */
   hintRevealed?: boolean;
+  /** Coins this round's hint cost (0 when free or not bought). */
+  hintCoinsSpent?: number;
   /** Present on history entries once the round is scored. */
   pointsAwarded?: number;
   /** IST day the round counted toward (a game finished after midnight
@@ -179,31 +185,43 @@ export type ApiErrorCode =
   | "SIGNUP_INVALID"
   | "SIGNUP_NOT_FOUND"
   | "SIGNUP_LINK_INVALID"
-  | "HINTS_DISABLED_FOR_TIER"
-  | "TIER1_REQUIRED"
-  | "PHONE_INVALID"
-  | "OTP_INVALID"
-  | "OTP_RATE_LIMITED"
-  | "OTP_SEND_FAILED"
-  | "SMS_PROVIDER_NOT_CONFIGURED"
-  | "WHATSAPP_RECIPIENT_NOT_ALLOWED"
-  | "EMAIL_RATE_LIMITED"
   | "EMAIL_SEND_FAILED"
-  | "VERIFICATION_TOKEN_INVALID"
-  | "BANK_NAME_INVALID"
-  | "BANK_ACCOUNT_INVALID"
-  | "IFSC_INVALID"
-  | "VERIFICATION_INCOMPLETE"
-  | "INVALID_TIER";
+  | "INVALID_TIER"
+  // hint
+  | "HINTS_DISABLED_FOR_TIER"
+  | "INSUFFICIENT_COINS"
+  | "HINT_COST_CHANGED"
+  | "NOTHING_TO_REVEAL"
+  | "NO_GAME_IN_PROGRESS"
+  // coin store
+  | "INVALID_PACK"
+  | "IDEMPOTENCY_KEY_REUSED"
+  | "PAYMENTS_NOT_CONFIGURED"
+  | "PAYMENT_PROVIDER_ERROR"
+  | "PAYMENT_FAILED"
+  | "ALREADY_CREDITED"
+  | "ORDER_NOT_FOUND"
+  // cursor-paged lists (wallet transactions, score events)
+  | "INVALID_CURSOR"
+  // removed endpoints (verification, rewards) during their 410 release
+  | "GONE";
 
 export interface ApiErrorBody {
   message: string;
   code?: ApiErrorCode;
-  /** Sent with OTP_RATE_LIMITED, EMAIL_RATE_LIMITED and SIGNUP_RATE_LIMITED. */
+  /** Sent with SIGNUP_RATE_LIMITED. */
   retryAfterSeconds?: number;
   game?: Game;
+  /** INSUFFICIENT_COINS, HINT_COST_CHANGED, ALREADY_CREDITED. */
+  balance?: number;
+  /** INSUFFICIENT_COINS: the hint's price. */
+  required?: number;
+  /** HINT_COST_CHANGED: the current price. */
+  hintCost?: number | null;
+  /** ALREADY_CREDITED. */
+  coinsCredited?: number;
 }
 
 export * from "@/types/infinite";
-export * from "@/types/rewards";
+export * from "@/types/coins";
 export * from "@/types/notifications";

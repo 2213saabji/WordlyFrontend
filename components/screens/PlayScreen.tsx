@@ -15,6 +15,8 @@ import {
   ApiRequestError,
 } from "@/lib/api";
 import ShareModal from "@/components/ShareModal";
+import CoinChip from "@/components/CoinChip";
+import { PaidHintCard, PaidHintRow, PaidHintSheets, usePaidHint } from "@/components/PaidHint";
 import { TierChip } from "@/components/TierBadge";
 import {
   HintsOffNotice,
@@ -25,8 +27,10 @@ import {
   type TierRoundResult,
 } from "@/components/InfiniteTierPanel";
 import { INFINITE_TIERS_ENABLED } from "@/lib/flags";
+import { hintCostOf } from "@/lib/tiers";
 import { useAuth } from "@/lib/auth-context";
 import { readCache, writeCache } from "@/lib/cache";
+import { setCoinBalance } from "@/lib/coins";
 import { invalidate, runSync } from "@/lib/sync";
 import { useSyncedLoader } from "@/lib/use-synced";
 import { isKnownGuess, preloadWordLists } from "@/lib/word-check";
@@ -723,7 +727,7 @@ export default function PlayScreen({
   // is counted server-side from round starts and guesses — no heartbeat.
   // Inert for Daily or with the feature flag off.
   const tierMode = INFINITE_TIERS_ENABLED && mode === "infinite";
-  const { me: tierMe, tiers, today, setToday, refreshMe, hintsOffFrom } = useInfiniteTier(tierMode);
+  const { me: tierMe, tiers, today, setToday, refreshMe, hintsOffFrom, paidHintsFrom } = useInfiniteTier(tierMode);
   // The tier summary for the round that just ended (from its final guess
   // response) — shown as a bottom sheet on mobile, a sidebar card on desktop.
   const [tierResult, setTierResult] = useState<TierRoundResult | null>(null);
@@ -877,6 +881,9 @@ export default function PlayScreen({
       const { game } = res;
       setGame(game);
       setCurrentGuess("");
+      // The guess that ends the game carries the new coin balance (+10 for
+      // a solve) — every coin chip shows it straight away.
+      if (res.coins) setCoinBalance(res.coins.balance);
       // The guess that ends an Infinite round carries the updated tier
       // progress; mid-round guesses carry `today` only once the backend
       // adds it — until then "Active time" updates once per round.
@@ -885,7 +892,11 @@ export default function PlayScreen({
       if (tierBlock) {
         setToday(tierBlock.today);
         // After a promotion the rank is in the new tier: no "moved from #n".
-        setTierResult({ block: tierBlock, prevRank: tierBlock.promotion ? null : (prevRankRef.current ?? null) });
+        setTierResult({
+          block: tierBlock,
+          prevRank: tierBlock.promotion ? null : (prevRankRef.current ?? null),
+          coins: infiniteRes?.coins,
+        });
         setResultSheetOpen(true);
         prevRankRef.current = tierBlock.rank;
         // Rank, day count and today's card as the server now has them.
@@ -893,8 +904,7 @@ export default function PlayScreen({
         // Tier boards now rank this round's score.
         invalidate("infiniteBoard");
         // This round moved the player up on the spot: sync now (skipping
-        // the 15 s throttle) so the promotion screen — and on reaching
-        // Diamond, the verification prompt — shows right away.
+        // the 15 s throttle) so the promotion screen shows right away.
         if (tierBlock.promotion) void runSync({ force: true });
       } else if (infiniteRes?.today) {
         setToday(infiniteRes.today);
@@ -955,6 +965,24 @@ export default function PlayScreen({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [handleKey]);
 
+  // The round's hint price (else the tier's): 0 free, > 0 coins, null off.
+  const hintCost =
+    game && (game.hintCost !== undefined || game.hintsEnabled !== undefined)
+      ? hintCostOf(game)
+      : tierMe
+        ? hintCostOf(tierMe)
+        : undefined;
+  const gameId = game?.id ?? game?._id;
+  const paidHint = usePaidHint({
+    gameId,
+    hintCost: hintCost ?? 0,
+    onRevealed: (hint) => {
+      setFetchedHint(hint);
+      setHintRevealed(true);
+    },
+    onHintsOff: () => setHintsRejected(true),
+  });
+
   if (loading || !game) {
     return <Loader label={mode === "daily" ? "Loading today's game…" : "Loading a fresh word…"} />;
   }
@@ -983,12 +1011,15 @@ export default function PlayScreen({
   const known = buildKnownLetters(game.guesses);
   const hintUnlocked = game.guesses.length >= HINT_UNLOCK_ATTEMPT;
 
-  // --- hints: from the payload (Daily, finished rounds, older backend) or,
-  // with tiers on, from POST /game/infinite/hint; hidden in Tiers 1–6. ---
-  const hintsOnForTier = game.hintsEnabled ?? tierMe?.hintsEnabled;
-  const hintsOff = tierMode && !finished && !game.hint && (hintsOnForTier === false || hintsRejected);
+  // --- hints: from the payload (Daily, finished rounds, free or already
+  // bought) or, with tiers on, from POST /game/infinite/hint. Free tiers use
+  // the hint icon toggle; paid tiers (Tiers 1–6) the "Need a hint?" row /
+  // card with a confirm sheet, so coins are never spent unasked. ---
   const hintText = game.hint ?? fetchedHint ?? undefined;
-  const hintAvailable = !hintsOff && (!!hintText || (tierMode && !finished && hintsOnForTier === true));
+  const paidTier = tierMode && !finished && !hintsRejected && (hintCost ?? 0) > 0 && !paidHint.noClue;
+  const hintsOff = tierMode && !finished && !game.hint && (hintCost === null || hintsRejected);
+  const hintAvailable =
+    !hintsOff && !paidTier && (!!hintText || (tierMode && !finished && hintCost === 0 && !paidHint.noClue));
 
   async function toggleHint() {
     if (hintText) {
@@ -996,7 +1027,7 @@ export default function PlayScreen({
       return;
     }
     try {
-      const { hint } = await revealInfiniteHint();
+      const { hint } = await revealInfiniteHint({ gameId });
       setFetchedHint(hint);
       setHintRevealed(true);
     } catch (err) {
@@ -1040,6 +1071,7 @@ export default function PlayScreen({
         </span>
         {mode === "infinite" && (!finished || (tierMode && tierMe)) && (
           <span className="ml-auto flex flex-none items-center gap-2">
+            {tierMode && <CoinChip />}
             {tierMode && tierMe && <TierChip tier={tierMe.tier} name={tierMe.tierName} />}
             {!finished && (
               <button
@@ -1209,6 +1241,11 @@ export default function PlayScreen({
           />
 
           {hintsOffNotice && <div className="w-full max-w-lg md:hidden">{hintsOffNotice}</div>}
+          {paidTier && (
+            <div className="w-full max-w-lg md:hidden">
+              <PaidHintRow hint={hintText} unlocked={hintUnlocked} unlockAfter={HINT_UNLOCK_ATTEMPT} state={paidHint} />
+            </div>
+          )}
 
           <Keyboard guesses={game.guesses} onKey={handleKey} disabled={finished || submitting} />
         </div>
@@ -1229,6 +1266,15 @@ export default function PlayScreen({
             </div>
           )}
           {hintsOffNotice}
+          {paidTier && (
+            <PaidHintCard
+              hint={hintText}
+              unlocked={hintUnlocked}
+              unlockAfter={HINT_UNLOCK_ATTEMPT}
+              fromName={paidHintsFrom?.name}
+              state={paidHint}
+            />
+          )}
           {mode === "daily" ? (
             <div className="flex items-center justify-between gap-4 rounded-3xl border border-border bg-white/4.5 p-5">
               <span className="flex flex-col gap-0.75">
@@ -1271,6 +1317,8 @@ export default function PlayScreen({
 
       {/* mobile: tier result as a bottom sheet over the dimmed board; tap
           outside to dismiss (the regular result card then shows instead). */}
+      {paidTier && <PaidHintSheets state={paidHint} tierName={tierMe?.tierName} />}
+
       {finished && tierResult && resultSheetOpen && (
         <div className="fixed inset-0 z-30 flex flex-col justify-end md:hidden">
           <button

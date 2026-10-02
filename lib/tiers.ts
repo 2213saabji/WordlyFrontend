@@ -1,6 +1,6 @@
-// Display helpers for the Infinite tier leaderboard. Tier names, targets and
-// rewards come from the server (GET /infinite/tiers) — only presentation
-// lives here.
+// Display helpers for the Infinite tier leaderboard. Tier names, targets,
+// hint prices and rules come from the server (GET /infinite/tiers) — only
+// presentation lives here.
 
 import type { DemotionRule, InfiniteTiersResponse, TierNumber } from "@/types";
 
@@ -32,8 +32,31 @@ export function lastDays(windowDays: number): string {
   return `in the last ${windowDays} days`;
 }
 
+/** Coin-pack prices only — there's no other money in the app. */
 export function formatInr(amount: number): string {
   return `₹${amount.toLocaleString("en-IN")}`;
+}
+
+export function formatPaise(paise: number): string {
+  return formatInr(paise / 100);
+}
+
+/** "1,000 coins", "10 coins", "1 coin". */
+export function formatCoins(n: number): string {
+  return plural(n, "coin").replace(/^\d+/, n.toLocaleString("en-IN"));
+}
+
+/** A tier's or round's hint price: 0 free, > 0 coins, null off. Falls back
+ * to the deprecated `hintsEnabled` for payloads from before v0.2. */
+export function hintCostOf(x: { hintCost?: number | null; hintsEnabled?: boolean }): number | null {
+  if (x.hintCost !== undefined) return x.hintCost;
+  return x.hintsEnabled ? 0 : null;
+}
+
+/** Points one idle day costs at `points` (mirrors the server's settle). */
+export function decayFor(tiers: InfiniteTiersResponse, points: number): number {
+  const { rate, minPoints } = tiers.decay;
+  return Math.min(points, Math.max(minPoints, Math.floor(points * rate)));
 }
 
 export function plural(n: number, one: string, many = `${one}s`): string {

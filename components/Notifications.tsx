@@ -4,18 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Loader from "@/components/Loader";
 import ScreenHeader from "@/components/ScreenHeader";
 import { getInfiniteTiers, getNotifications, markNotificationsRead } from "@/lib/api";
-import { MONEY_ENABLED } from "@/lib/flags";
 import { useSyncedResource } from "@/lib/use-synced";
 import type { Screen } from "@/lib/screen-context";
-import { demotionRuleFor, formatInr, lastDays } from "@/lib/tiers";
-import {
-  MONEY_NOTIFICATION_TYPES,
-  type AppNotification,
-  type InfiniteTiersResponse,
-  type TierNumber,
-} from "@/types";
+import { CARRY_IN_PERCENT, demotionRuleFor, formatPaise, lastDays, plural } from "@/lib/tiers";
+import type { AppNotification, InfiniteTiersResponse, TierNumber } from "@/types";
 
-// Mount only with INFINITE_TIERS_ENABLED — every type here is a tier event.
+// Mount only with INFINITE_TIERS_ENABLED — the feed is tier, coin and decay
+// events.
 
 const TIERS_CACHE_KEY = "infinite:tiers";
 const NOTIFICATIONS_CACHE_KEY = "infinite:notifications";
@@ -23,21 +18,20 @@ const NOTIFICATIONS_CACHE_KEY = "infinite:notifications";
 const MUTED = "text-[#6f6376]";
 const SOFT = "text-[#c9bfcc]";
 const DIAMOND = "#9fd4e6";
+const COIN = "#e3b75a";
 
-async function fetchVisibleNotifications(): Promise<AppNotification[]> {
-  const { notifications } = await getNotifications();
-  return MONEY_ENABLED ? notifications : notifications.filter((n) => !MONEY_NOTIFICATION_TYPES.includes(n.type));
+async function fetchNotifications(): Promise<AppNotification[]> {
+  return (await getNotifications()).notifications;
 }
 
-/** The feed plus read-state actions. Money-only types are dropped when
- * MONEY_ENABLED is off. Refetched only when /sync reports `notifications`
+/** The feed plus read-state actions. Refetched only when /sync reports `notifications`
  * changed (a new one, or read on another device) — including when the tab
  * regains focus, which GameApp syncs on. */
 export function useNotifications() {
   const { data, setData, failed, refetch } = useSyncedResource({
     flag: "notifications",
     key: NOTIFICATIONS_CACHE_KEY,
-    fetcher: fetchVisibleNotifications,
+    fetcher: fetchNotifications,
   });
   // Nothing cached and the fetch failed: show an empty feed, not a loader.
   const items = data ?? (failed ? [] : null);
@@ -64,9 +58,9 @@ function useTiers(): InfiniteTiersResponse | null {
 }
 
 // ---------------------------------------------------------------------------
-// Row content per type. `data` fields beyond { fromTier, toTier, oldRank,
-// rankAtEntry } are ASSUMED (the contract only gives that example) — each
-// line degrades to a shorter sentence when a field is missing.
+// Row content per type. Each line degrades to a shorter sentence when a
+// `data` field is missing (older notifications, older backends). Types the
+// app doesn't know (e.g. ones removed in v0.2) render nothing.
 
 interface Row {
   icon: string;
@@ -79,19 +73,14 @@ interface Row {
 function num(v: unknown): number | undefined {
   return typeof v === "number" ? v : undefined;
 }
-function str(v: unknown): string | undefined {
-  return typeof v === "string" ? v : undefined;
-}
+const fmt = (n: number) => n.toLocaleString("en-IN");
 
 function describe(n: AppNotification, tiers: InfiniteTiersResponse | null): Row | null {
   const d = n.data;
   const tierName = (t: number | undefined) => (t ? (tiers?.tiers.find((x) => x.tier === t)?.name ?? `Tier ${t}`) : "");
   const top = tiers?.tiers.find((t) => t.tier === 1);
   const topName = top?.name ?? "Diamond";
-  const reward = top && top.rewardInr > 0 ? formatInr(top.rewardInr) : null;
   const cycleDays = top?.daysToStick ?? 30;
-  const amount = num(d.amountInr) !== undefined ? formatInr(num(d.amountInr)!) : (reward ?? "Your reward");
-  const cycle = num(d.cycle);
 
   switch (n.type) {
     case "promotion": {
@@ -101,10 +90,7 @@ function describe(n: AppNotification, tiers: InfiniteTiersResponse | null): Row 
           icon: "1",
           iconBg: DIAMOND,
           title: `You reached ${topName}`,
-          body:
-            MONEY_ENABLED && reward
-              ? `Stay ${cycleDays} days in a row to earn ${reward}.`
-              : `Stay ${cycleDays} days in a row to earn a ${topName} star.`,
+          body: `Stay ${cycleDays} days in a row to earn a ${topName} star.`,
           target: { name: "diamond" },
         };
       }
@@ -126,12 +112,17 @@ function describe(n: AppNotification, tiers: InfiniteTiersResponse | null): Row 
       const size = num(d.newTierSize);
       // The rule of the tier they dropped out of (windows run 7–30 days).
       const rule = tiers ? demotionRuleFor(tiers, num(d.fromTier) ?? 8) : null;
+      const entry = num(d.entryPoints);
+      const penalty = num(d.penalty) ?? 0;
       return {
         icon: "↓",
         iconBg: "#b5543f",
         title: `Moved down to ${tierName(to)}`,
         body: [
           rule ? `${rule.misses} missed days ${lastDays(rule.windowDays)}.` : null,
+          entry !== undefined
+            ? `${fmt(entry)} points carried in${penalty < 0 ? ` after the ${fmt(-penalty)}-point penalty` : ""}.`
+            : null,
           d.rankAtEntry != null ? `You're #${d.rankAtEntry}${size ? ` of ${size}` : ""}.` : null,
         ]
           .filter(Boolean)
@@ -145,59 +136,57 @@ function describe(n: AppNotification, tiers: InfiniteTiersResponse | null): Row 
       const misses = num(d.missesInWindow) ?? (rule ? rule.misses - 1 : 2);
       const windowDays = num(d.windowDays) ?? rule?.windowDays;
       const lower = tier ? tierName(tier + 1) : "";
+      const penalty = num(d.demotionPenalty) ?? tiers?.demotionPenalty;
+      const percent = tiers?.carryInPercent ?? CARRY_IN_PERCENT;
+      const keeping = penalty ? `, keeping ${percent}% of your points minus a ${fmt(penalty)}-point penalty` : "";
       return {
         icon: "!",
         iconBg: "#f2a05c",
         title: `${misses} missed days${windowDays ? ` ${lastDays(windowDays)}` : ""}`,
         body: lower
-          ? `One more miss and you'll drop to ${lower}. Qualify today to stay in ${tierName(tier)}.`
+          ? `One more miss and you'll drop to ${lower}${keeping}. Qualify today to stay in ${tierName(tier)}.`
           : "Qualify today to stay in your tier.",
         target: { name: "infinite-hub" },
       };
     }
-    case "reward_earned":
-      return MONEY_ENABLED
-        ? {
-            icon: "★",
-            iconBg: DIAMOND,
-            title: "Cycle complete",
-            body: `${cycleDays} days in ${topName}. ${amount} is on its way.`,
-            target: { name: "diamond" },
-          }
-        : {
-            icon: "★",
-            iconBg: DIAMOND,
-            title: `${topName} star earned`,
-            body: `${cycleDays} days in a row in ${topName}.`,
-            target: { name: "diamond" },
-          };
-    case "payout_sent": {
-      const last4 = str(d.accountLast4);
+    case "coins_purchased": {
+      const coins = num(d.coins);
+      const balance = num(d.balance);
+      const paid = num(d.amountPaise);
       return {
-        icon: "₹",
-        iconBg: DIAMOND,
-        title: `${amount} sent`,
-        body: `${cycle ? `Cycle ${cycle} payout` : "Your payout"} reached your account${last4 ? ` ending ${last4}` : ""}.`,
-        target: { name: "diamond" },
+        icon: "+",
+        iconBg: COIN,
+        title: coins !== undefined ? `${fmt(coins)} coins added` : "Coins added",
+        // "₹10 paid. Balance 3,340 coins." — the price only if the backend sends it.
+        body: [paid !== undefined ? `${formatPaise(paid)} paid.` : null, balance !== undefined ? `Balance ${fmt(balance)} coins.` : null]
+          .filter(Boolean)
+          .join(" "),
+        target: { name: "coins" },
       };
     }
-    case "payout_failed":
+    case "payment_failed":
       return {
         icon: "!",
         iconBg: "#e8636b",
-        title: "Payout failed",
-        body: `${cycle ? `Cycle ${cycle} payout` : "Your payout"} couldn't be sent. Check your bank details.`,
-        target: { name: "verify", step: "bank" },
+        title: "Payment didn't go through",
+        body: "You weren't charged.",
+        target: { name: "coins" },
       };
-    case "verification_needed":
+    case "points_decayed": {
+      const points = Math.abs(num(d.points) ?? 0);
+      const days = num(d.days) ?? 1;
+      const rate = tiers?.decay ? `${Math.round(tiers.decay.rate * 100)}%` : null;
+      const tier = num(d.tier) ? tierName(num(d.tier)) : null;
+      // "No games played yesterday. 5% off your Silver points."
+      const off = rate ? ` ${rate} off your ${tier ? `${tier} ` : ""}points${days > 1 ? " each day" : ""}.` : "";
       return {
-        icon: "1",
-        iconBg: DIAMOND,
-        title: `You reached ${topName}: verify your mobile`,
-        body: `Verify your mobile, email and bank to receive ${reward ?? "your reward"}.`,
-        // Opens where the player left off (mobile first on a fresh start).
-        target: { name: "verify" },
+        icon: "−",
+        iconBg: "#b5543f",
+        title: `${fmt(points)} points lost${days > 1 ? ` over ${plural(days, "day")}` : ""}`,
+        body: `No games played ${days > 1 ? `on ${plural(days, "day")}` : "yesterday"}.${off}`,
+        target: { name: "infinite-hub" },
       };
+    }
     default:
       return null;
   }

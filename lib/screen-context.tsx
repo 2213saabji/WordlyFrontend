@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
-import type { TierNumber, VerificationStep } from "@/types";
+import type { TierNumber } from "@/types";
 
 export type PlayMode = "daily" | "infinite";
 
@@ -15,8 +15,8 @@ export type Screen =
   | { name: "infinite-hub" } // Infinite mode's home: tier status + today's progress
   | { name: "how-tiers" } // the tier ladder and rules
   | { name: "tier-history" } // every tier move + completed Diamond cycles
-  | { name: "diamond" } // Tier 1 cycle: reward tracker (money) / stars
-  | { name: "verify"; step?: VerificationStep } // MONEY: payout verification flow
+  | { name: "diamond" } // Tier 1 cycle: Diamond stars and completed cycles
+  | { name: "coins" } // wallet: balance, coin pack, activity
   | { name: "notifications" } // mobile: full-screen list (desktop uses the Nav dropdown)
   | { name: "play"; mode: PlayMode }
   | { name: "history" }
@@ -24,7 +24,7 @@ export type Screen =
   | { name: "leaderboard"; groupId?: string } // groupId omitted = Global leaderboard
   | { name: "tier-leaderboard"; tier?: TierNumber }; // tier omitted = the caller's own
 
-export const POST_AUTH_SCREENS: Screen["name"][] = ["home", "infinite-hub", "how-tiers", "tier-history", "diamond", "verify", "notifications", "play", "history", "groups", "leaderboard", "tier-leaderboard"];
+export const POST_AUTH_SCREENS: Screen["name"][] = ["home", "infinite-hub", "how-tiers", "tier-history", "diamond", "coins", "notifications", "play", "history", "groups", "leaderboard", "tier-leaderboard"];
 
 interface ScreenContextValue {
   screen: Screen;

@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import CoinChip from "@/components/CoinChip";
 import Loader from "@/components/Loader";
 import ScreenHeader from "@/components/ScreenHeader";
 import TierBadge, { TierChip } from "@/components/TierBadge";
 import { getInfiniteMe, getInfiniteTiers } from "@/lib/api";
-import { MONEY_ENABLED } from "@/lib/flags";
 import { useSyncedResource } from "@/lib/use-synced";
-import { demotionRuleFor, formatInr, lastDays, plural } from "@/lib/tiers";
+import { CARRY_IN_PERCENT, demotionRuleFor, lastDays, plural } from "@/lib/tiers";
 import type { InfiniteMeResponse, InfiniteTiersResponse, TierWindowDay } from "@/types";
 
 const ME_CACHE_KEY = "infinite:me";
@@ -21,8 +21,7 @@ const CARD = "rounded-[22px] border border-white/8 bg-white/[0.045] md:rounded-3
 
 /** Infinite mode's home: the player's tier, their "days in a row" counter
  * toward promotion, today's targets and the tier's demotion window (7–30
- * settled days). Money
- * content (the Diamond reward line) only shows when MONEY_ENABLED is on. */
+ * settled days). */
 export default function InfiniteHubScreen({
   onBack,
   onPlay,
@@ -36,7 +35,7 @@ export default function InfiniteHubScreen({
   /** Omitted until the tier leaderboard screen exists — hides that button. */
   onOpenTierLeaderboard?: () => void;
   onOpenHowTiersWork?: () => void;
-  /** Tier 1 only: the Diamond cycle / reward screen. */
+  /** Tier 1 only: the Diamond cycle / stars screen. */
   onOpenDiamond?: () => void;
   onOpenTierHistory?: () => void;
 }) {
@@ -96,9 +95,7 @@ export default function InfiniteHubScreen({
 
   const counterText =
     me.tier === 1
-      ? MONEY_ENABLED && topTier && topTier.rewardInr > 0
-        ? `${plural(me.counter.daysLeft, "more qualifying day")} to earn ${formatInr(topTier.rewardInr)}. A missed day resets this to 0.`
-        : `You're at the top. A missed day resets this to 0.`
+      ? `You're at the top. A missed day resets this to 0.`
       : `${plural(me.counter.daysLeft, "more qualifying day")} to move up to ${nextTier?.name ?? `Tier ${me.tier - 1}`}. A missed day resets this to 0.`;
 
   // Not in the Figma — the ways into the tier ladder/rules and history screens.
@@ -120,7 +117,7 @@ export default function InfiniteHubScreen({
   );
 
   // In Diamond the "N tiers to Diamond" callout becomes the way into the
-  // cycle / reward screen (not in the hub Figma).
+  // cycle / stars screen (not in the hub Figma).
   const diamondLink = me.tier === 1 && onOpenDiamond && (
     <button
       type="button"
@@ -129,7 +126,7 @@ export default function InfiniteHubScreen({
     >
       <TierBadge tier={1} size="sm" />
       <span className="text-[13px] leading-[1.45] md:text-[13.5px]">
-        <strong className="text-[#9fd4e6]">{MONEY_ENABLED ? "Diamond reward" : "Diamond cycle"}</strong> · day{" "}
+        <strong className="text-[#9fd4e6]">Diamond cycle</strong> · day{" "}
         {me.counter.stickDays} of {me.counter.daysToStick}
       </span>
       <span className="ml-auto text-[#9fd4e6]">→</span>
@@ -140,20 +137,8 @@ export default function InfiniteHubScreen({
     <div className="flex items-center gap-3 rounded-2xl border border-[#9fd4e6]/22 bg-[#9fd4e6]/8 px-[18px] py-3.5 md:px-4">
       <TierBadge tier={1} size="sm" />
       <span className="text-[13px] leading-[1.45] md:text-[13.5px]">
-        {plural(me.tier - 1, "tier")} to{" "}
-        {MONEY_ENABLED && topTier.rewardInr > 0 ? (
-          <>
-            {topTier.name}. {topTier.name} players earn{" "}
-            <strong className="text-[#9fd4e6]">
-              {formatInr(topTier.rewardInr)} every {topTier.daysToStick} days
-            </strong>
-            .
-          </>
-        ) : (
-          <>
-            <strong className="text-[#9fd4e6]">{topTier.name}</strong>, the top of the Infinite board.
-          </>
-        )}
+        {plural(me.tier - 1, "tier")} to <strong className="text-[#9fd4e6]">{topTier.name}</strong>, the top of the
+        Infinite board.
       </span>
     </div>
   ) : (
@@ -189,7 +174,8 @@ export default function InfiniteHubScreen({
         windowDays={windowDays}
         lowerTierName={lowerTier?.name ?? `Tier ${me.tier + 1}`}
         resetTimeIst={tiers.resetTimeIst}
-        rewardInr={topTier?.rewardInr ?? 0}
+        carryInPercent={tiers.carryInPercent ?? CARRY_IN_PERCENT}
+        demotionPenalty={tiers.demotionPenalty ?? 0}
         onBack={onBack}
         onPlay={onPlay}
         todayRows={todayRows}
@@ -201,7 +187,12 @@ export default function InfiniteHubScreen({
     <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-5 pb-6 pt-6 md:gap-9 md:px-8 md:py-14">
       {/* ---------- mobile ---------- */}
       <div className="flex flex-1 flex-col md:hidden">
-        <ScreenHeader title="Infinite" onBack={onBack} trailing={<TierChip tier={me.tier} name={me.tierName} />} />
+        <ScreenHeader title="Infinite" onBack={onBack} trailing={
+            <span className="flex items-center gap-2">
+              <CoinChip />
+              <TierChip tier={me.tier} name={me.tierName} />
+            </span>
+          } />
 
         <div className={`mt-4 flex flex-col gap-[18px] p-[22px] ${CARD}`}>
           <div className="flex items-center gap-3.5">
@@ -404,13 +395,14 @@ function useTimeLeft(resetsAt: string): string {
 /** The hub's "at risk" state: the window's settled days plus today (dashed),
  * what's still needed before the reset, and — since any miss also resets
  * the day counter — what today's miss would cost beyond the demotion. In
- * Tier 1 that counter is the reward cycle (₹ only with MONEY_ENABLED). */
+ * Tier 1 that counter is the Diamond cycle. */
 function AtRiskView({
   me,
   windowDays,
   lowerTierName,
   resetTimeIst,
-  rewardInr,
+  carryInPercent,
+  demotionPenalty,
   onBack,
   onPlay,
   todayRows,
@@ -419,8 +411,9 @@ function AtRiskView({
   windowDays: number;
   lowerTierName: string;
   resetTimeIst: string;
-  /** Tier 1's reward (TierConfig) — 0 means unpaid. */
-  rewardInr: number;
+  carryInPercent: number;
+  /** Points taken off the carry-in on a demotion (0 = none). */
+  demotionPenalty: number;
   onBack: () => void;
   onPlay: () => void;
   todayRows: React.ReactNode;
@@ -431,13 +424,14 @@ function AtRiskView({
   const past = me.demotion.window.slice(-(windowDays - 1));
   const empty = Math.max(0, windowDays - 1 - past.length);
   const nth = ORDINALS[me.demotion.limit] ?? `${me.demotion.limit}th`;
-  const consequence = `A ${nth} miss moves you down to ${lowerTierName} at ${resetTimeIst} IST.`;
+  const consequence = `A ${nth} miss moves you down to ${lowerTierName} at ${resetTimeIst} IST${
+    demotionPenalty > 0 ? `, keeping ${carryInPercent}% of your points minus a ${demotionPenalty}-point penalty` : ""
+  }.`;
   const missedLine = `You've missed ${plural(me.demotion.missesInWindow, "day")} ${lastDays(windowDays)}.`;
   const expiry = oldestMissExpiry(me.demotion.window, windowDays);
   const expiryLine = expiry ? `Your oldest miss stops counting after ${expiry}.` : null;
   const { stickDays, daysToStick } = me.counter;
   const top = me.tier === 1;
-  const paidCycle = top && MONEY_ENABLED && rewardInr > 0;
 
   // Up to 30 slots in one row: shrink gaps and corners as the window grows
   // so it fits a phone without scrolling.
@@ -470,13 +464,13 @@ function AtRiskView({
 
   // What a miss today resets besides the tier (not in the Figma for tiers 2–7).
   const cycleTitle = top
-    ? `${paidCycle ? "Reward" : me.tierName} cycle: day ${stickDays} of ${daysToStick}`
+    ? `${me.tierName} cycle: day ${stickDays} of ${daysToStick}`
     : `${me.tierName} day count: ${stickDays} of ${daysToStick}`;
   const cycleBody = top
-    ? `Missing today also resets your ${paidCycle ? `${formatInr(rewardInr)} ` : ""}cycle to day 0, even if you stay in ${me.tierName}.`
+    ? `Missing today also resets your cycle to day 0, even if you stay in ${me.tierName}.`
     : `Missing today also resets your day count to 0, even if you stay in ${me.tierName}.`;
   const cycleLine = top
-    ? `Missing today also resets your ${paidCycle ? formatInr(rewardInr) : me.tierName} cycle (day ${stickDays} of ${daysToStick}) to day 0, even if you stay in ${me.tierName}.`
+    ? `Missing today also resets your ${me.tierName} cycle (day ${stickDays} of ${daysToStick}) to day 0, even if you stay in ${me.tierName}.`
     : `Missing today also resets your day count (${stickDays} of ${daysToStick}) to 0, even if you stay in ${me.tierName}.`;
   const showCycle = stickDays > 0;
 
@@ -501,7 +495,12 @@ function AtRiskView({
     <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-5 pb-6 pt-6 md:gap-8 md:px-8 md:py-14">
       {/* ---------- mobile ---------- */}
       <div className="flex flex-1 flex-col md:hidden">
-        <ScreenHeader title="Infinite" onBack={onBack} trailing={<TierChip tier={me.tier} name={me.tierName} />} />
+        <ScreenHeader title="Infinite" onBack={onBack} trailing={
+            <span className="flex items-center gap-2">
+              <CoinChip />
+              <TierChip tier={me.tier} name={me.tierName} />
+            </span>
+          } />
 
         <div className="mt-4 flex flex-col gap-4 rounded-[22px] border border-accent/45 bg-accent/10 p-[22px]">
           <span className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">At risk</span>

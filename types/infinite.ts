@@ -1,11 +1,9 @@
-// Infinite mode tier leaderboard — Phase 1 (tiers, daily targets, ranking,
-// promotion/demotion). Shapes follow the backend contract v0.3; see
-// lib/api/infinite-tiers.ts for the endpoints. Money fields (rewardInr,
-// reward) are always sent by the backend but only rendered when
-// MONEY_ENABLED is on (lib/flags.ts).
+// Infinite mode tier leaderboard (tiers, daily targets, ranking,
+// promotion/demotion, decay, paid hints). Shapes follow the backend contract
+// v0.3 as updated by v0.4 (docs/COINS_HINTS_CONTRACT.md); see
+// lib/api/infinite-tiers.ts for the endpoints.
 
 import type { Pagination } from "@/types";
-import type { RewardStatus } from "@/types/rewards";
 
 /** 1 = Diamond (top) … 8 = Stone (entry tier every new player starts in). */
 export type TierNumber = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
@@ -18,14 +16,18 @@ export const TIER_NUMBERS: readonly TierNumber[] = [1, 2, 3, 4, 5, 6, 7, 8];
 export interface TierDefinition {
   tier: TierNumber;
   name: string;
+  /** Coins per hint: 0 free (Tiers 7–8), > 0 paid (Tiers 1–6), null = hints
+   * off in this tier. */
+  hintCost: number | null;
+  /** @deprecated Same as hintCost === 0. */
   hintsEnabled: boolean;
   minActiveMinutes: number;
   minGamesCompleted: number;
   /** Consecutive qualifying days needed to move up (in Tier 1: the length of
-   * one reward cycle). */
+   * one Diamond cycle). */
   daysToStick: number;
-  /** Tier 1 only; 0 elsewhere. Money — gate behind MONEY_ENABLED. */
-  rewardInr: number;
+  /** Tier 1: a Diamond star each completed cycle. null elsewhere. */
+  reward: { type: "star" } | null;
   /** This tier's rule — `misses` in any rolling `windowDays` demotes. Use
    * this, not the top-level default, for anything tier-specific (tiers 1–4
    * have longer windows). Optional only for older backends. */
@@ -47,6 +49,12 @@ export interface InfiniteTiersResponse {
   carryInPercent?: number;
   /** "HH:MM" in IST — the day boundary for everything in Infinite mode. */
   resetTimeIst: string;
+  /** Points taken off the carry-in on a demotion (floor 0). */
+  demotionPenalty: number;
+  /** Each idle day (no completed Infinite game) costs max(minPoints,
+   * floor(rate × points)). */
+  decay: { rate: number; minPoints: number };
+  coins: { solveReward: number };
 }
 
 /** Today's targets vs. progress for the player's current tier. A day
@@ -78,6 +86,9 @@ export type TierChangeReason = "promotion" | "demotion" | "seed" | "admin";
 export interface InfiniteMeResponse {
   tier: TierNumber;
   tierName: string;
+  /** This tier's hint price — see TierDefinition.hintCost. */
+  hintCost: number | null;
+  /** @deprecated Same as hintCost === 0. */
   hintsEnabled: boolean;
   score: number;
   /** null before the player's first completed Infinite game. */
@@ -87,7 +98,7 @@ export interface InfiniteMeResponse {
   consistencyPercent: number;
   counter: {
     /** Consecutive qualifying days in this tier (in Tier 1: day X of the
-     * reward cycle). */
+     * Diamond cycle). */
     stickDays: number;
     daysToStick: number;
     daysLeft: number;
@@ -113,10 +124,23 @@ export interface InfiniteMeResponse {
     oldRank: number | null;
     rankAtEntry: number | null;
     day: string;
+    oldScore?: number;
+    carriedPoints?: number;
+    /** ≤ 0 — the demotion penalty taken (0 on promotions). */
+    penalty?: number;
+    entryPoints?: number;
   } | null;
-  /** Tier 1 only (same shape as GET /rewards/me), otherwise null. Money —
-   * gate behind MONEY_ENABLED. */
-  reward: RewardStatus | null;
+  /** Diamond stars = completed Diamond cycles. */
+  stars: number;
+  /** One entry per completed Diamond cycle (`day` = IST day it completed). */
+  completedCycles: CompletedCycle[];
+  /** The most recent inactivity decay (`points` negative), or null. */
+  lastDecay: { day: string; points: number } | null;
+}
+
+export interface CompletedCycle {
+  cycle: number;
+  day: string;
 }
 
 /** Added to POST /game/infinite/guess once the round ends — the round is
@@ -166,7 +190,14 @@ export interface TierChange {
   oldScore: number;
   oldRank: number | null;
   oldTierSize: number;
+  /** = entryPoints (kept for older readers). */
   carriedScore: number;
+  /** floor(carryInPercent% × points after that night's decay). */
+  carriedPoints: number;
+  /** ≤ 0 — the demotion penalty taken (0 on promotions). */
+  penalty: number;
+  /** Points the player entered the new tier with. */
+  entryPoints: number;
   rankAtEntry: number | null;
   newTierSize: number;
   createdAt: string;
@@ -181,4 +212,24 @@ export interface TierChange {
 export interface TierChangesResponse {
   changes: TierChange[];
   pagination: Pagination;
+}
+
+export type ScoreEventType = "game" | "day_bonus" | "decay" | "carry_in" | "demotion_penalty";
+
+/** One tier-points change (GET /infinite/score-events). */
+export interface ScoreEvent {
+  id: string;
+  type: ScoreEventType;
+  /** Signed. */
+  points: number;
+  /** IST day. */
+  day: string;
+  tier: TierNumber;
+  gameId: string | null;
+  createdAt: string;
+}
+
+export interface ScoreEventsResponse {
+  items: ScoreEvent[];
+  nextCursor: string | null;
 }

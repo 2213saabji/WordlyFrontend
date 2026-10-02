@@ -10,7 +10,7 @@ import InfiniteHubScreen from "@/components/screens/InfiniteHubScreen";
 import HowTiersWorkScreen from "@/components/screens/HowTiersWorkScreen";
 import TierHistoryScreen from "@/components/screens/TierHistoryScreen";
 import DiamondStatusScreen from "@/components/screens/DiamondStatusScreen";
-import VerificationFlowScreen from "@/components/screens/VerificationFlowScreen";
+import CoinsScreen from "@/components/screens/CoinsScreen";
 import { NotificationsScreen } from "@/components/Notifications";
 import PlayScreen from "@/components/screens/PlayScreen";
 import HistoryScreen from "@/components/screens/HistoryScreen";
@@ -20,7 +20,7 @@ import SignupScreen from "@/components/screens/SignupScreen";
 import ForgotPasswordScreen from "@/components/screens/ForgotPasswordScreen";
 import { useAuth } from "@/lib/auth-context";
 import { readPendingSignup } from "@/lib/pending-signup";
-import { INFINITE_TIERS_ENABLED, MONEY_ENABLED } from "@/lib/flags";
+import { INFINITE_TIERS_ENABLED } from "@/lib/flags";
 import { useScreen } from "@/lib/screen-context";
 import { parseReplayParam, type ReplayInvite } from "@/lib/share";
 import { runSync } from "@/lib/sync";
@@ -75,7 +75,6 @@ function AppShell() {
         <TierPromotionAnnouncer
           onOpenTierLeaderboard={(tier) => push({ name: "tier-leaderboard", tier })}
           onPlay={() => push({ name: "play", mode: "infinite" })}
-          onVerify={MONEY_ENABLED ? () => push({ name: "verify", step: "mobile" }) : undefined}
         />
       )}
       {invite && (
@@ -122,17 +121,11 @@ function AppShell() {
         {screen.name === "how-tiers" && <HowTiersWorkScreen onBack={() => backTo({ name: "infinite-hub" })} />}
         {screen.name === "tier-history" && <TierHistoryScreen onBack={() => backTo({ name: "infinite-hub" })} />}
         {screen.name === "diamond" && (
-          <DiamondStatusScreen
-            onBack={back}
-            onPlay={() => push({ name: "play", mode: "infinite" })}
-            onVerify={MONEY_ENABLED ? (step) => push({ name: "verify", step }) : undefined}
-          />
+          <DiamondStatusScreen onBack={back} onPlay={() => push({ name: "play", mode: "infinite" })} />
         )}
+        {screen.name === "coins" && <CoinsScreen onBack={back} />}
         {screen.name === "notifications" && INFINITE_TIERS_ENABLED && (
           <NotificationsScreen onBack={back} onNavigate={(target) => replace(target)} />
-        )}
-        {screen.name === "verify" && MONEY_ENABLED && (
-          <VerificationFlowScreen startStep={screen.step} onClose={back} />
         )}
         {screen.name === "play" && (
           <PlayScreen

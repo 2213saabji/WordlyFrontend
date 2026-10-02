@@ -44,7 +44,9 @@ const howToJsonLd = {
       "@type": "HowToStep",
       position: 3,
       name: "Narrow it down",
-      text: "Use the feedback to choose your next guess. After four guesses without solving it, a hint with a short clue becomes available.",
+      text: INFINITE_TIERS_ENABLED
+        ? "Use the feedback to choose your next guess. After four guesses without solving it, a hint with a short clue becomes available. From Copper up in Infinite mode, a hint costs 1,000 coins."
+        : "Use the feedback to choose your next guess. After four guesses without solving it, a hint with a short clue becomes available.",
     },
     {
       "@type": "HowToStep",
@@ -115,7 +117,7 @@ const TIER_STEPS = [
   },
   {
     heading: "Hold your place",
-    body: "A missed day resets your count. A 3rd miss within your tier's window — 7 days in the lower tiers, up to 30 in Diamond — drops you a tier. Hints are off from Copper up.",
+    body: "A missed day resets your count. A 3rd miss within your tier's window — 7 days in the lower tiers, up to 30 in Diamond — drops you a tier, keeping 20% of your points minus 50. A day without any rounds costs 5% of your points. From Copper up, a hint costs 1,000 coins. You earn 10 coins for every solved word.",
   },
 ];
 

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { useScreen, type Screen } from "@/lib/screen-context";
 import EditNameModal from "@/components/EditNameModal";
+import CoinChip from "@/components/CoinChip";
 import { TierChip } from "@/components/TierBadge";
 import { NotificationBell } from "@/components/Notifications";
 import { INFINITE_TIERS_ENABLED } from "@/lib/flags";
@@ -151,6 +152,7 @@ export default function Nav() {
                 />
               )}
               <span className="hidden animate-fade-in items-center gap-3 sm:flex">
+                <CoinChip />
                 {/* Infinite tier badge — only once /auth/me reports a tier
                     (after the player's first completed Infinite game). */}
                 {INFINITE_TIERS_ENABLED && user.infinite && (

@@ -3,9 +3,8 @@
 import { useEffect, useState } from "react";
 import { getInfiniteMe, getInfiniteTierChanges, getInfiniteTiers } from "@/lib/api";
 import { readCache, writeCache } from "@/lib/cache";
-import { MONEY_ENABLED } from "@/lib/flags";
 import { SITE_URL } from "@/lib/seo";
-import { TIER_COLORS, demotionRuleFor, formatInr, lastDays, plural } from "@/lib/tiers";
+import { CARRY_IN_PERCENT, TIER_COLORS, demotionRuleFor, lastDays, plural } from "@/lib/tiers";
 import { useSyncedResource } from "@/lib/use-synced";
 import type { InfiniteMeResponse, InfiniteTiersResponse, TierChange, TierNumber } from "@/types";
 
@@ -41,14 +40,10 @@ interface Announcement {
 export default function TierPromotionAnnouncer({
   onOpenTierLeaderboard,
   onPlay,
-  onVerify,
 }: {
   onOpenTierLeaderboard: (tier: TierNumber) => void;
   /** The demotion screen's "Play now". */
   onPlay: () => void;
-  /** MONEY: reaching Diamond makes "Verify mobile number" the main button,
-   * opening the verification flow at the mobile step. Omit to hide it. */
-  onVerify?: () => void;
 }) {
   // Synced (lib/use-synced.ts): shared with the other tier screens, and
   // refetched when /sync reports a change — so an overnight move also shows
@@ -102,14 +97,6 @@ export default function TierPromotionAnnouncer({
         close();
         onPlay();
       }}
-      onVerify={
-        onVerify
-          ? () => {
-              close();
-              onVerify();
-            }
-          : undefined
-      }
     />
   );
 }
@@ -121,12 +108,10 @@ function PromotionScreen({
   onClose,
   onSeeLeaderboard,
   onPlay,
-  onVerify,
 }: Announcement & {
   onClose: () => void;
   onSeeLeaderboard: (tier: TierNumber) => void;
   onPlay: () => void;
-  onVerify?: () => void;
 }) {
   const [copied, setCopied] = useState(false);
   const last = me.lastChange!;
@@ -139,17 +124,12 @@ function PromotionScreen({
   const top = tiers.tiers.find((t) => t.tier === 1);
   const fromName = from?.name ?? `Tier ${last.fromTier}`;
   const toName = to?.name ?? `Tier ${last.toTier}`;
-  const paid = MONEY_ENABLED && !!top && top.rewardInr > 0;
 
   const reachedTop = last.toTier === 1;
   const footer = top
     ? reachedTop
-      ? paid
-        ? `Every ${top.daysToStick} days in a row here pays ${formatInr(top.rewardInr)}.`
-        : `The top of the Infinite board.`
-      : `${plural(last.toTier - 1, "tier")} to ${top.name}${
-          paid ? `, where every ${top.daysToStick} days pays ${formatInr(top.rewardInr)}` : ""
-        }.`
+      ? `The top of the Infinite board.`
+      : `${plural(last.toTier - 1, "tier")} to ${top.name}.`
     : null;
 
   async function share() {
@@ -176,13 +156,33 @@ function PromotionScreen({
       </>,
     ]);
   }
-  if (change) {
+  // Carry-in: lastChange has it since v0.2; the log entry covers older
+  // backends. A demotion takes the penalty off the carried points:
+  // "130 (20% of 900 − 50)".
+  const oldScore = last.oldScore ?? change?.oldScore;
+  const carried = last.carriedPoints ?? change?.carriedPoints ?? change?.carriedScore;
+  const penalty = last.penalty ?? change?.penalty ?? 0;
+  const entry = last.entryPoints ?? change?.entryPoints ?? change?.carriedScore;
+  if (entry !== undefined) {
+    const fmt = (n: number) => n.toLocaleString("en-IN");
+    const percent =
+      tiers.carryInPercent ?? (oldScore && carried !== undefined ? Math.round((carried / oldScore) * 100) : CARRY_IN_PERCENT);
     rows.push([
       "Points carried in",
       <>
-        <strong>{change.carriedScore.toLocaleString("en-IN")}</strong>
-        {change.oldScore > 0 &&
-          ` (${Math.round((change.carriedScore / change.oldScore) * 100)}% of ${change.oldScore.toLocaleString("en-IN")})`}
+        <strong>{fmt(entry)}</strong>
+        {!!oldScore &&
+          carried !== undefined &&
+          (penalty < 0 ? (
+            // "130 (20% of 900 − 50)"; desktop adds "penalty".
+            <span className={MUTED}>
+              {" "}
+              ({percent}% of {fmt(oldScore)} − {fmt(-penalty)}
+              <span className="hidden md:inline"> penalty</span>)
+            </span>
+          ) : (
+            ` (${percent}% of ${fmt(oldScore)})`
+          ))}
       </>,
     ]);
   }
@@ -193,7 +193,7 @@ function PromotionScreen({
     rows.push(["Daily targets", <strong key="t">{targets}</strong>]);
   }
   rows.push([
-    demoted ? `Back to ${fromName}` : reachedTop ? (paid ? "Reward cycle" : "Day count") : "To move up",
+    demoted ? `Back to ${fromName}` : reachedTop ? "Day count" : "To move up",
     <>
       <strong>
         {me.counter.stickDays} of {me.counter.daysToStick}
@@ -206,20 +206,10 @@ function PromotionScreen({
     "rounded-2xl bg-accent p-4 text-[15.5px] font-bold text-background transition-all duration-150 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-accent/25 active:translate-y-0 active:scale-[0.98] md:rounded-[15px] md:px-7 md:py-[15px] md:text-[15px]";
   const SECONDARY =
     "rounded-2xl border border-white/12 bg-white/7 p-[15px] text-[14.5px] font-semibold transition-colors hover:border-accent/40 md:rounded-[15px] md:px-6 md:text-[15px]";
-  // Reaching Diamond: verifying the mobile number is the next step, so it
-  // leads; the leaderboard becomes the second button.
-  const verifyFirst = reachedTop && !demoted && !!onVerify;
-  const leaderboardButton = (
-    <button type="button" onClick={() => onSeeLeaderboard(last.toTier)} className={verifyFirst ? SECONDARY : PRIMARY}>
+  const primaryButton = (
+    <button type="button" onClick={() => onSeeLeaderboard(last.toTier)} className={PRIMARY}>
       See {toName} leaderboard
     </button>
-  );
-  const primaryButton = verifyFirst ? (
-    <button type="button" onClick={onVerify} className={PRIMARY}>
-      Verify mobile number
-    </button>
-  ) : (
-    leaderboardButton
   );
   const shareButton = (
     <button type="button" onClick={share} className={SECONDARY}>
@@ -227,9 +217,7 @@ function PromotionScreen({
     </button>
   );
   // Demotion swaps Share for Play now — same styling.
-  const secondaryButton = verifyFirst ? (
-    leaderboardButton
-  ) : demoted ? (
+  const secondaryButton = demoted ? (
     <button type="button" onClick={onPlay} className={SECONDARY}>
       Play now
     </button>
@@ -316,7 +304,7 @@ function PromotionScreen({
                 i < rows.length - 1 ? "border-b border-white/7" : ""
               }`}
             >
-              <span className={MUTED}>{label}</span>
+              <span className={`whitespace-nowrap ${MUTED}`}>{label}</span>
               <span className="text-right">{value}</span>
             </div>
           ))}
