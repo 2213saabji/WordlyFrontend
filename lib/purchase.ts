@@ -16,23 +16,28 @@ const CHECKOUT_SCRIPT = "https://checkout.razorpay.com/v1/checkout.js";
 const POLL_ATTEMPTS = 5;
 const POLL_INTERVAL_MS = 2_000;
 
-/** unavailable: store not open (503 PAYMENTS_NOT_CONFIGURED) · failed:
- * payment failed, was cancelled or didn't verify (nothing charged) ·
- * pending: paid, but the credit isn't confirmed yet (the webhook will add
- * it) · error: anything else (network, gateway down). */
-export type PurchaseErrorKind = "unavailable" | "failed" | "pending" | "error";
+/** unavailable: store not open (503 PAYMENTS_NOT_CONFIGURED) · cancelled:
+ * Checkout closed without a payment attempt · failed: a payment attempt
+ * failed or didn't verify (nothing charged) · pending: paid, but the credit
+ * isn't confirmed yet (the webhook will add it) · error: anything else
+ * (network, gateway down). */
+export type PurchaseErrorKind = "unavailable" | "cancelled" | "failed" | "pending" | "error";
 
 export class PurchaseError extends Error {
   kind: PurchaseErrorKind;
-  constructor(kind: PurchaseErrorKind) {
-    super(PURCHASE_ERROR_COPY[kind]);
+  /** failed: Razorpay's own reason for the last failed attempt, if any. */
+  reason?: string;
+  constructor(kind: PurchaseErrorKind, reason?: string) {
+    super(reason ? `${PURCHASE_ERROR_COPY[kind]} ${reason}` : PURCHASE_ERROR_COPY[kind]);
     this.name = "PurchaseError";
     this.kind = kind;
+    this.reason = reason;
   }
 }
 
 export const PURCHASE_ERROR_COPY: Record<PurchaseErrorKind, string> = {
   unavailable: "Buying coins is coming soon.",
+  cancelled: "Payment cancelled. You weren't charged.",
   failed: "Payment didn't go through. You weren't charged.",
   pending: "We're confirming your payment. Your coins will appear shortly.",
   error: "Something went wrong. Please try again.",
@@ -44,9 +49,14 @@ interface RazorpaySuccess {
   razorpay_signature: string;
 }
 
+/** The `payment.failed` event payload (only the part we read). */
+interface RazorpayFailure {
+  error?: { description?: string; reason?: string };
+}
+
 interface RazorpayInstance {
   open(): void;
-  on(event: "payment.failed", handler: () => void): void;
+  on(event: "payment.failed", handler: (response: RazorpayFailure) => void): void;
 }
 
 declare global {
@@ -109,6 +119,8 @@ export async function buyCoinPack(
       reject(new PurchaseError("error"));
       return;
     }
+    // null = no failed attempt yet; "" = failed without a description.
+    let lastFailure: string | null = null;
     const rzp = new Razorpay({
       key: order.gateway.key,
       order_id: order.gateway.orderId,
@@ -119,11 +131,18 @@ export async function buyCoinPack(
       prefill: email ? { email } : undefined,
       theme: { color: "#f2a05c" },
       handler: resolve,
-      // A failed attempt keeps Checkout open for a retry; closing it, after
-      // a failure or not, means nothing was charged.
-      modal: { ondismiss: () => reject(new PurchaseError("failed")) },
+      // A failed attempt keeps Checkout open for a retry (Razorpay shows its
+      // own error there); closing it means nothing was charged — reported
+      // as a failure if an attempt failed, else as a cancel.
+      modal: {
+        ondismiss: () =>
+          reject(lastFailure !== null ? new PurchaseError("failed", lastFailure || undefined) : new PurchaseError("cancelled")),
+      },
     });
-    rzp.on("payment.failed", () => {});
+    rzp.on("payment.failed", (response) => {
+      const description = response.error?.description?.trim() ?? "";
+      lastFailure = description && !/^undefined$/i.test(description) ? description : "";
+    });
     rzp.open();
   });
 
