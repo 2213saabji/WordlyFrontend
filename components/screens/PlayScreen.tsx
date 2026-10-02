@@ -26,7 +26,6 @@ import {
   useInfiniteTier,
   type TierRoundResult,
 } from "@/components/InfiniteTierPanel";
-import { INFINITE_TIERS_ENABLED } from "@/lib/flags";
 import { hintCostOf } from "@/lib/tiers";
 import { useAuth } from "@/lib/auth-context";
 import { readCache, writeCache } from "@/lib/cache";
@@ -245,7 +244,7 @@ function DifficultyBadge({ difficulty }: { difficulty?: GameDifficulty }) {
 }
 
 /** Toggles showing the hint. Its text either arrives with the game object
- * or, for Infinite with tiers on, is fetched on first reveal (see
+ * or, for Infinite, is fetched on first reveal (see
  * toggleHint in PlayScreen). Stays locked (shows a lock icon instead) until
  * HINT_UNLOCK_ATTEMPT guesses are in. */
 function HintButton({
@@ -702,7 +701,7 @@ export default function PlayScreen({
   onPlayInfinite: () => void;
   /** The tier result's "Board" / "Leaderboard" button. */
   onOpenTierLeaderboard?: () => void;
-  /** Infinite with tiers on: Back leads to the Infinite hub. */
+  /** Infinite: Back leads to the Infinite hub. */
   onOpenInfiniteHub?: () => void;
 }) {
   const { user, refreshUser } = useAuth();
@@ -725,8 +724,8 @@ export default function PlayScreen({
 
   // Infinite tier leaderboard: tier status and today's progress. Active time
   // is counted server-side from round starts and guesses — no heartbeat.
-  // Inert for Daily or with the feature flag off.
-  const tierMode = INFINITE_TIERS_ENABLED && mode === "infinite";
+  // Inert for Daily.
+  const tierMode = mode === "infinite";
   const { me: tierMe, tiers, today, setToday, refreshMe, hintsOffFrom, paidHintsFrom } = useInfiniteTier(tierMode);
   // The tier summary for the round that just ended (from its final guess
   // response) — shown as a bottom sheet on mobile, a sidebar card on desktop.
@@ -737,7 +736,7 @@ export default function PlayScreen({
   useEffect(() => {
     if (tierMe && prevRankRef.current === undefined) prevRankRef.current = tierMe.rank;
   }, [tierMe]);
-  // With tiers on, an in-progress round no longer carries `hint` — it's
+  // An in-progress Infinite round may not carry `hint` — it's
   // fetched from POST /game/infinite/hint on first reveal and kept here.
   const [fetchedHint, setFetchedHint] = useState<string | null>(null);
   // The hint endpoint said no (403 HINTS_DISABLED_FOR_TIER), e.g. after an
@@ -1012,7 +1011,7 @@ export default function PlayScreen({
   const hintUnlocked = game.guesses.length >= HINT_UNLOCK_ATTEMPT;
 
   // --- hints: from the payload (Daily, finished rounds, free or already
-  // bought) or, with tiers on, from POST /game/infinite/hint. Free tiers use
+  // bought) or, for Infinite, from POST /game/infinite/hint. Free tiers use
   // the hint icon toggle; paid tiers (Tiers 1–6) the "Need a hint?" row /
   // card with a confirm sheet, so coins are never spent unasked. ---
   const hintText = game.hint ?? fetchedHint ?? undefined;
@@ -1287,7 +1286,7 @@ export default function PlayScreen({
               <span className="flex flex-col gap-0.75">
                 <span className="text-[12.5px] text-foreground/50">Unlimited practice</span>
                 <span className="text-[14.5px] font-semibold">
-                  {/* With tiers on, finished rounds do count — toward the tier board. */}
+                  {/* Finished rounds count toward the tier board. */}
                   {tierMode && tierMe ? `Counts toward ${tierMe.tierName}` : "No stats, no streak"}
                 </span>
               </span>

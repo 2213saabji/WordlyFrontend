@@ -1,5 +1,4 @@
 import type { MetadataRoute } from "next";
-import { INFINITE_TIERS_ENABLED } from "@/lib/flags";
 
 const SITE_URL = "https://www.guessword.games";
 
@@ -18,9 +17,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${SITE_URL}/contact`, lastModified, changeFrequency: "yearly", priority: 0.3 },
     { url: `${SITE_URL}/privacy-policy`, lastModified, changeFrequency: "yearly", priority: 0.3 },
     { url: `${SITE_URL}/terms`, lastModified, changeFrequency: "yearly", priority: 0.3 },
-    // Public Infinite tier board — only listed once the feature is live.
-    ...(INFINITE_TIERS_ENABLED
-      ? [{ url: `${SITE_URL}/leaderboard/infinite`, lastModified, changeFrequency: "daily" as const, priority: 0.6 }]
-      : []),
+    // Public Infinite tier board.
+    { url: `${SITE_URL}/leaderboard/infinite`, lastModified, changeFrequency: "daily", priority: 0.6 },
   ];
 }

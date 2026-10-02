@@ -1,16 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import ContentPage from "@/components/ContentPage";
-import { INFINITE_TIERS_ENABLED } from "@/lib/flags";
 import { JsonLd, SITE_URL, breadcrumbJsonLd, pageMetadata } from "@/lib/seo";
 
 const PATH = "/about";
 
 export const metadata: Metadata = pageMetadata({
   title: "About Us — A Free Daily Word Game",
-  description: INFINITE_TIERS_ENABLED
-    ? "GuessWord is a free daily word-guessing game: one five-letter word a day, six tries, an unlimited Infinite mode with eight tiers to climb, and group leaderboards — no download, no cost."
-    : "GuessWord is a free daily word-guessing game: one five-letter word a day, six tries, an unlimited practice mode, and group leaderboards — no download, no cost.",
+  description:
+    "GuessWord is a free daily word-guessing game: one five-letter word a day, six tries, an unlimited Infinite mode with eight tiers to climb, and group leaderboards — no download, no cost.",
   path: PATH,
 });
 

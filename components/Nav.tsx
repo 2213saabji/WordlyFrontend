@@ -8,7 +8,6 @@ import EditNameModal from "@/components/EditNameModal";
 import CoinChip from "@/components/CoinChip";
 import { TierChip } from "@/components/TierBadge";
 import { NotificationBell } from "@/components/Notifications";
-import { INFINITE_TIERS_ENABLED } from "@/lib/flags";
 
 const LOGO_TILES = [
   { char: "G", className: "bg-accent text-background" },
@@ -145,17 +144,12 @@ export default function Nav() {
         <div className="ml-auto flex items-center gap-3 text-sm">
           {user ? (
             <>
-              {INFINITE_TIERS_ENABLED && (
-                <NotificationBell
-                  onNavigate={push}
-                  onOpenScreen={() => push({ name: "notifications" })}
-                />
-              )}
+              <NotificationBell onNavigate={push} onOpenScreen={() => push({ name: "notifications" })} />
               <span className="hidden animate-fade-in items-center gap-3 sm:flex">
                 <CoinChip />
                 {/* Infinite tier badge — only once /auth/me reports a tier
                     (after the player's first completed Infinite game). */}
-                {INFINITE_TIERS_ENABLED && user.infinite && (
+                {user.infinite && (
                   <Link
                     href="/"
                     onClick={() => push({ name: "infinite-hub" })}

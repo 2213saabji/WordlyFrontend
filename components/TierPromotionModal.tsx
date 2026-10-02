@@ -35,8 +35,7 @@ interface Announcement {
 
 /** Checks once per app load whether the player moved tier (promotion or
  * demotion) since they last looked, and if so shows the matching screen
- * (full-screen on mobile, a dialog on desktop) exactly once. Mount only with
- * INFINITE_TIERS_ENABLED. */
+ * (full-screen on mobile, a dialog on desktop) exactly once. */
 export default function TierPromotionAnnouncer({
   onOpenTierLeaderboard,
   onPlay,
