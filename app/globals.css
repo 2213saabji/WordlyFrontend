@@ -197,6 +197,70 @@ html[data-cached-session] .auth-pending {
   }
 }
 
+/* Next word: each filled tile flips back to empty (tile-flip, from its
+   current colours to the empty theme) while its letter drops out at the
+   midpoint, then the cleared board slides off and the next one slides in. */
+@keyframes tile-letter-out {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  50.001%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Toast over the board (e.g. "Already tried" + the word): eases in from
+   slightly above, coming into focus; a gentle drift up and blur out. */
+@keyframes toast-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-14px) scale(0.92);
+    filter: blur(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes toast-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.96);
+    filter: blur(4px);
+  }
+}
+
+@keyframes board-out {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-48px) scale(0.97);
+  }
+}
+
+@keyframes board-in {
+  from {
+    opacity: 0;
+    transform: translateX(48px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
 @keyframes tile-bounce {
   0%,
   20% {

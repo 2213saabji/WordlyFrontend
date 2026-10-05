@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { getInfiniteMe, getInfiniteTiers } from "@/lib/api";
 import { useSyncedResource } from "@/lib/use-synced";
 import { CoinIcon } from "@/components/CoinChip";
+import WordMeaning from "@/components/WordMeaning";
 import { formatCoins, hintCostOf, plural } from "@/lib/tiers";
 import type {
   CoinsAwarded,
@@ -231,6 +232,8 @@ export function TierResultCard({
         </span>
       </div>
 
+      <WordMeaning meaning={game.wordMeaning} className="-mt-2" />
+
       {today.qualified ? (
         <div className="flex items-center gap-3 rounded-2xl border border-[#5f8f49]/45 bg-[#5f8f49]/14 px-4 py-3.5">
           <svg viewBox="0 0 24 24" fill="none" stroke="#8FC274" strokeWidth={2.4} strokeLinecap="round" className="size-[18px] flex-none">
@@ -302,8 +305,8 @@ export function TierResultCard({
         <button
           type="button"
           onClick={onNext}
-          className={`flex-1 bg-accent font-bold text-background transition-all duration-150 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-accent/25 active:translate-y-0 active:scale-[0.98] ${
-            card ? "rounded-[15px] p-[15px] text-[15px]" : "rounded-2xl p-4 text-[15.5px]"
+          className={`flex-1 bg-accent font-bold whitespace-nowrap text-background transition-all duration-150 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-accent/25 active:translate-y-0 active:scale-[0.98] ${
+            card ? "rounded-xl px-3 py-2.5 text-[13.5px]" : "rounded-2xl p-4 text-[15.5px]"
           }`}
         >
           Next word
@@ -312,8 +315,8 @@ export function TierResultCard({
           <button
             type="button"
             onClick={onBoard}
-            className={`border border-white/12 bg-white/7 text-[14.5px] font-semibold transition-colors hover:border-accent/40 ${
-              card ? "rounded-[15px] px-[22px] py-[15px]" : "rounded-2xl px-5 py-4"
+            className={`whitespace-nowrap border border-white/12 bg-white/7 font-semibold transition-colors hover:border-accent/40 ${
+              card ? "rounded-xl px-4 py-2.5 text-[13.5px]" : "rounded-2xl px-5 py-4 text-[14.5px]"
             }`}
           >
             {card ? "Leaderboard" : "Board"}
@@ -328,7 +331,7 @@ function Stat({ label, card, children }: { label: string; card: boolean; childre
   return (
     <span className={`flex flex-col rounded-[14px] bg-white/4 ${card ? "gap-1 p-3.5" : "gap-[3px] p-3"}`}>
       <span className={`${card ? "text-[11.5px]" : "text-[11px]"} ${MUTED}`}>{label}</span>
-      <span className={`font-bold ${card ? "text-[19px]" : "text-[17px]"}`}>{children}</span>
+      <span className={`whitespace-nowrap font-bold ${card ? "text-[16px]" : "text-[17px]"}`}>{children}</span>
     </span>
   );
 }

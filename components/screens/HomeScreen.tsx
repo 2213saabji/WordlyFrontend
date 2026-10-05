@@ -25,6 +25,12 @@ function todayLabel() {
   return new Date().toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
 }
 
+/** The daily word is per UTC day, and `stats.lastPlayedDate` is set to that
+ * day's date once its game is finished (won or lost). */
+function playedDailyToday(lastPlayedDate: string | null | undefined) {
+  return lastPlayedDate === new Date().toISOString().slice(0, 10);
+}
+
 function CalendarIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="size-5">
@@ -106,6 +112,46 @@ function Stat({ value, label }: { value: string | number; label: string }) {
   );
 }
 
+/** One of the two play buttons. `primary` gets the filled accent style:
+ * Play Daily until today's word is done, then Play Infinite. */
+function PlayButton({
+  icon,
+  label,
+  primary,
+  onClick,
+}: {
+  icon: ReactNode;
+  label: string;
+  primary: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex flex-1 items-center gap-3.5 rounded-2xl px-6 py-5 transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] ${
+        primary
+          ? "bg-accent text-background shadow-lg shadow-accent/25 hover:shadow-xl hover:shadow-accent/35"
+          : "border border-border bg-surface hover:border-accent/30 hover:shadow-md"
+      }`}
+    >
+      <span className={primary ? "" : "text-accent"}>{icon}</span>
+      <span className={`text-[17px] tracking-tight ${primary ? "font-bold" : "font-semibold"}`}>{label}</span>
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.25"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className={`ml-auto size-4 ${primary ? "opacity-80" : "text-foreground/40"}`}
+      >
+        <path d="m9 18 6-6-6-6" />
+      </svg>
+    </button>
+  );
+}
+
 function MenuRow({
   icon,
   label,
@@ -174,6 +220,23 @@ export default function HomeScreen({
 
   const goToGlobalLeaderboard = () => onOpenLeaderboard();
 
+  // Once today's daily word is finished, the headline and the highlighted
+  // button point at Infinite instead.
+  const dailyDone = playedDailyToday(user?.stats.lastPlayedDate);
+  const headline = dailyDone ? (
+    <>
+      Daily done. Now
+      <br />
+      <span className="font-bold">go Infinite.</span>
+    </>
+  ) : (
+    <>
+      Today&apos;s word is
+      <br />
+      <span className="font-bold">waiting.</span>
+    </>
+  );
+
   return (
     <div className="flex flex-1 flex-col">
       {/* mobile-only top strip */}
@@ -187,15 +250,13 @@ export default function HomeScreen({
           {/* desktop headline */}
           <div className="hidden animate-fade-in-up flex-col gap-4 md:flex">
             <span className="text-xs font-semibold uppercase tracking-[0.18em] text-foreground/50">
-              {todayLabel()} · Daily word
+              {todayLabel()} · {dailyDone ? "Daily complete" : "Daily word"}
             </span>
-            <h1 className="max-w-lg text-[56px] font-light leading-[1.05] tracking-tight lg:text-[64px]">
-              Today&apos;s word is
-              <br />
-              <span className="font-bold">waiting.</span>
-            </h1>
+            <h1 className="max-w-lg text-[56px] font-light leading-[1.05] tracking-tight lg:text-[64px]">{headline}</h1>
             <p className="max-w-md text-base leading-relaxed text-foreground/65">
-              Five letters, six tries, a new word at midnight. Play alone or race the groups you&apos;re in.
+              {dailyDone
+                ? "A new daily word lands at midnight. Until then, Infinite has endless words: earn points and climb the tiers."
+                : "Five letters, six tries, a new word at midnight. Play alone or race the groups you're in."}
             </p>
           </div>
 
@@ -213,38 +274,14 @@ export default function HomeScreen({
               ))}
             </div>
             <h1 className="animate-fade-in-up text-4xl font-light leading-tight tracking-tight" style={{ animationDelay: "120ms" }}>
-              Today&apos;s word is
-              <br />
-              <span className="font-bold">waiting.</span>
+              {headline}
             </h1>
           </div>
 
           {/* play buttons */}
           <div className="flex animate-fade-in-up flex-col gap-3 sm:flex-row" style={{ animationDelay: "180ms" }}>
-            <button
-              type="button"
-              onClick={onPlay}
-              className="flex flex-1 items-center gap-3.5 rounded-2xl bg-accent px-6 py-5 text-background shadow-lg shadow-accent/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-accent/35 active:translate-y-0 active:scale-[0.98]"
-            >
-              <CalendarIcon />
-              <span className="text-[17px] font-bold tracking-tight">Play Daily</span>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" className="ml-auto size-4 opacity-80">
-                <path d="m9 18 6-6-6-6" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              onClick={onPlayInfinite}
-              className="flex flex-1 items-center gap-3.5 rounded-2xl border border-border bg-surface px-6 py-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-accent/30 hover:shadow-md active:translate-y-0 active:scale-[0.98]"
-            >
-              <span className="text-accent">
-                <InfinityIcon />
-              </span>
-              <span className="text-[17px] font-semibold tracking-tight">Play Infinite</span>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" className="ml-auto size-4 text-foreground/40">
-                <path d="m9 18 6-6-6-6" />
-              </svg>
-            </button>
+            <PlayButton icon={<CalendarIcon />} label="Play Daily" primary={!dailyDone} onClick={onPlay} />
+            <PlayButton icon={<InfinityIcon />} label="Play Infinite" primary={dailyDone} onClick={onPlayInfinite} />
           </div>
 
           {/* stats */}

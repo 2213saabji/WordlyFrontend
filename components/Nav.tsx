@@ -30,6 +30,13 @@ function PencilIcon() {
   );
 }
 
+function StreakIcon() {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- tiny static SVG, no optimisation needed
+    <img src="/icons/streak-fire.svg" alt="" aria-hidden="true" className="h-4 w-4 flex-none" />
+  );
+}
+
 function BurgerIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
@@ -163,17 +170,19 @@ export default function Nav() {
                   type="button"
                   onClick={() => setEditNameOpen(true)}
                   title="Edit your name"
-                  className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors duration-150 ${
+                  className={`inline-flex cursor-pointer whitespace-nowrap items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors duration-150 ${
                     user.stats.currentStreak > 0
                       ? "bg-accent/12 text-accent hover:bg-accent/20"
                       : "bg-white/8 text-foreground/60 hover:bg-white/14"
                   }`}
                 >
-                  {user.username} · {user.stats.currentStreak} streak
+                  {user.username} ·
+                  <StreakIcon />
+                  {user.stats.currentStreak} streak
                 </button>
                 <button
                   onClick={handleLogout}
-                  className="rounded-md border border-border px-2.5 py-1.5 text-foreground/70 transition-all duration-150 hover:border-danger/40 hover:bg-danger/10 hover:text-danger active:scale-95"
+                  className="rounded-md whitespace-nowrap border border-border px-2.5 py-1.5 text-foreground/70 transition-all duration-150 hover:border-danger/40 hover:bg-danger/10 hover:text-danger active:scale-95"
                 >
                   Log out
                 </button>
@@ -191,7 +200,7 @@ export default function Nav() {
                 </button>
 
                 <div
-                  className={`absolute right-0 top-[calc(100%+10px)] w-56 origin-top rounded-xl border border-border bg-background/95 p-1.5 shadow-lg backdrop-blur-md transition-all duration-500 ease-out ${
+                  className={`absolute right-0 top-[calc(100%+10px)] w-fit origin-top rounded-xl border border-border bg-background/95 p-1.5 shadow-lg backdrop-blur-md transition-all duration-500 ease-out ${
                     mobileMenuOpen
                       ? "pointer-events-auto translate-y-0 scale-y-100 opacity-100"
                       : "pointer-events-none -translate-y-3 scale-y-90 opacity-0"
@@ -205,15 +214,16 @@ export default function Nav() {
                     }}
                     className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-[13.5px] font-semibold text-foreground/80 transition-colors hover:bg-white/8"
                   >
-                    <span className="flex items-center gap-2">
+                    <span className="flex items-center gap-2 whitespace-nowrap">
                       <PencilIcon />
                       {user.username}
                     </span>
                     <span
-                      className={`rounded-full px-2 py-0.5 text-[11.5px] font-bold ${
+                      className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[11.5px] font-bold ${
                         user.stats.currentStreak > 0 ? "bg-accent/15 text-accent" : "bg-white/8 text-foreground/50"
                       }`}
                     >
+                      <StreakIcon />
                       {user.stats.currentStreak} streak
                     </span>
                   </button>

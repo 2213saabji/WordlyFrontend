@@ -16,6 +16,10 @@ const CHECKOUT_SCRIPT = "https://checkout.razorpay.com/v1/checkout.js";
 const POLL_ATTEMPTS = 5;
 const POLL_INTERVAL_MS = 2_000;
 
+/** Coin purchases aren't open yet: every Buy button shows "coming soon"
+ * without calling the backend or opening Razorpay. Set to true to launch. */
+const PURCHASES_OPEN = false;
+
 /** unavailable: store not open (503 PAYMENTS_NOT_CONFIGURED) · cancelled:
  * Checkout closed without a payment attempt · failed: a payment attempt
  * failed or didn't verify (nothing charged) · pending: paid, but the credit
@@ -36,7 +40,7 @@ export class PurchaseError extends Error {
 }
 
 export const PURCHASE_ERROR_COPY: Record<PurchaseErrorKind, string> = {
-  unavailable: "Buying coins is coming soon.",
+  unavailable: "This feature will come soon.",
   cancelled: "Payment cancelled. You weren't charged.",
   failed: "Payment didn't go through. You weren't charged.",
   pending: "We're confirming your payment. Your coins will appear shortly.",
@@ -101,6 +105,7 @@ export async function buyCoinPack(
   pack: CoinPack,
   { email }: { email?: string } = {},
 ): Promise<PurchaseResult> {
+  if (!PURCHASES_OPEN) throw new PurchaseError("unavailable");
   let order;
   try {
     // A fresh key per tap: apiFetch's one retry can't create a second order.

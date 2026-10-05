@@ -98,13 +98,20 @@ export default function HistoryScreen({ onBack }: { onBack: () => void }) {
             style={{ animationDelay: `${i * 50}ms` }}
             className={`flex animate-fade-in-up items-center justify-between gap-4 rounded-xl border border-l-4 border-border bg-surface p-3 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${statusBorder(game.status)}`}
           >
-            <div>
+            <div className="min-w-0">
               <p className="text-sm font-medium">{game.date}</p>
               <p className="text-xs text-foreground/60">
                 {statusLabel(game.status)}
                 {game.word && <> · word: {game.word.toUpperCase()}</>} ·{" "}
                 {game.attemptsUsed}/6 guesses
               </p>
+              {game.word && game.wordMeaning?.meaning && (
+                <p className="mt-1 line-clamp-2 text-xs text-foreground/50" title={game.wordMeaning.meaning}>
+                  <span className="font-semibold">Meaning: </span>
+                  {game.wordMeaning.partOfSpeech && <span className="italic">({game.wordMeaning.partOfSpeech}) </span>}
+                  {game.wordMeaning.meaning}
+                </p>
+              )}
             </div>
             <div className="flex flex-col gap-0.5 text-xs leading-none">
               {game.guesses.map((g, gi) => (

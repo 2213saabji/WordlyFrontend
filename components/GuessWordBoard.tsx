@@ -9,6 +9,17 @@ const SHAKE_DURATION_MS = 550;
 const WORD_LENGTH = 5;
 const MAX_ATTEMPTS = 6;
 
+// Clearing wave (Next word): row by row, left to right.
+const CLEAR_ROW_STEP_MS = 60;
+const CLEAR_COL_STEP_MS = 30;
+const CLEAR_FLIP_MS = 380;
+
+/** How long `clearing` takes to empty a board with `filledRows` rows. */
+export function clearDurationMs(filledRows: number): number {
+  if (filledRows <= 0) return 0;
+  return (filledRows - 1) * CLEAR_ROW_STEP_MS + (WORD_LENGTH - 1) * CLEAR_COL_STEP_MS + CLEAR_FLIP_MS;
+}
+
 type TileTheme = { bg: string; border: string; fg: string };
 
 const EMPTY_THEME: TileTheme = {
@@ -49,6 +60,7 @@ export default function GuessWordBoard({
   shakeSignal,
   celebrate,
   interactive = true,
+  clearing = false,
 }: {
   guesses: Guess[];
   currentGuess: string;
@@ -57,6 +69,9 @@ export default function GuessWordBoard({
   /** false once the game is over — suppresses the "next cell to type" cursor
    * highlight on the first empty row, which otherwise implies play is still live. */
   interactive?: boolean;
+  /** Flip every filled tile back to empty (the Next word transition). The
+   * tiles stay empty for as long as this is true. */
+  clearing?: boolean;
 }) {
   const activeRowIndex = guesses.length;
   const winningRowIndex = celebrate ? guesses.length - 1 : -1;
@@ -106,6 +121,38 @@ export default function GuessWordBoard({
 
           const flipDelay = colIndex * 90;
           const bounceDelay = 480 + colIndex * 80;
+          const clearDelay = rowIndex * CLEAR_ROW_STEP_MS + colIndex * CLEAR_COL_STEP_MS;
+          const filled = hasLetter || result !== undefined;
+          const clearTile = clearing && filled;
+
+          if (clearTile) {
+            // From what the tile shows now to the empty theme; the inline
+            // colours hold the current look until this tile's turn.
+            const clearStyle: CSSProperties = {
+              ...tileVars(endTheme, "start"),
+              ...tileVars(EMPTY_THEME, "end"),
+              backgroundColor: endTheme.bg,
+              borderColor: endTheme.border,
+              color: endTheme.fg,
+              animation: `tile-flip ${CLEAR_FLIP_MS}ms ease ${clearDelay}ms both`,
+            };
+            return (
+              <div key={colIndex} className="perspective-tile">
+                <div
+                  style={clearStyle}
+                  className="flex h-15 w-15 items-center justify-center rounded-xl border-2 text-2xl font-bold uppercase md:rounded-[14px]"
+                >
+                  <span
+                    style={{ animation: `tile-letter-out ${CLEAR_FLIP_MS}ms linear ${clearDelay}ms both` }}
+                    className="inline-block"
+                  >
+                    {hasLetter ? letter : ""}
+                  </span>
+                </div>
+              </div>
+            );
+          }
+
           const animation = isRevealRow
             ? isWinningRow
               ? `tile-flip 0.55s ease ${flipDelay}ms both, tile-bounce 0.7s ease ${bounceDelay}ms both`

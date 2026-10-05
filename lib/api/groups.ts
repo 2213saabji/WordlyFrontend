@@ -25,3 +25,9 @@ export function getMyGroups(options: PageOptions = {}): Promise<{ groups: Group[
 export function leaveGroup(id: string): Promise<{ message: string }> {
   return apiFetch(`/groups/${id}/leave`, { method: "POST" });
 }
+
+// Owner only, and the group must have no members — the owner included, so
+// leave first. 409 means someone is still in (or just joined) the group.
+export function deleteGroup(id: string): Promise<{ message: string }> {
+  return apiFetch(`/groups/${id}`, { method: "DELETE" });
+}

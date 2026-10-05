@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import GuessWordBoard from "@/components/GuessWordBoard";
+import GuessWordBoard, { clearDurationMs } from "@/components/GuessWordBoard";
+import WordMeaning from "@/components/WordMeaning";
+import Reveal from "@/components/Reveal";
 import Keyboard from "@/components/Keyboard";
 import Loader from "@/components/Loader";
 import {
@@ -40,6 +42,38 @@ import type { Game, GameDifficulty, Guess, LetterResult, User } from "@/types";
 
 const WORD_LENGTH = 5;
 const MAX_ATTEMPTS = 6;
+// Next word transition: clear the tiles, slide the board out, slide the
+// new one in (keyframes in globals.css).
+const BOARD_OUT_MS = 220;
+const BOARD_IN_MS = 340;
+// Toast over the board: eases in, holds, eases out.
+const TOAST_DELAY_MS = 800;
+const TOAST_HOLD_MS = 2_000;
+const TOAST_IN_MS = 800;
+const TOAST_OUT_MS = 380;
+
+// The result UI waits for the last guess's tiles to finish flipping
+// (GuessWordBoard: 90 ms stagger x 4 + 550 ms flip) before easing in.
+const RESULT_SETTLE_MS = 900;
+
+type BoardPhase = "idle" | "clearing" | "leaving" | "entering";
+
+// On Next word the old round's difficulty/hint row stays up this long
+// (from the click), then fades out and the new round's row eases in.
+const HELD_ROW_MS = 2_000;
+const ROW_FADE_MS = 450;
+
+/** The difficulty/hint row as it looked when Next word was pressed. */
+interface HeldRow {
+  key: number;
+  fading: boolean;
+  difficulty: GameDifficulty | undefined;
+  hintAvailable: boolean;
+  hintUnlocked: boolean;
+  hintRevealed: boolean;
+}
+
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const GROUP_DAILY_CACHE_KEY = "play:group-daily";
 
 /** Today's daily board is only valid until UTC midnight — reads of the
@@ -247,6 +281,17 @@ function DifficultyBadge({ difficulty }: { difficulty?: GameDifficulty }) {
  * or, for Infinite, is fetched on first reveal (see
  * toggleHint in PlayScreen). Stays locked (shows a lock icon instead) until
  * HINT_UNLOCK_ATTEMPT guesses are in. */
+function RepeatIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-4">
+      <path d="M3 12a9 9 0 0 1 15.5-6.2L21 8" />
+      <path d="M21 3v5h-5" />
+      <path d="M21 12a9 9 0 0 1-15.5 6.2L3 16" />
+      <path d="M3 21v-5h5" />
+    </svg>
+  );
+}
+
 function HintButton({
   available,
   unlocked,
@@ -317,6 +362,8 @@ function ProgressBar({ used, total = MAX_ATTEMPTS, active }: { used: number; tot
         return (
           <span
             key={i}
+            // Emptying (Next word) runs right to left; filling stays quick.
+            style={filled || isCurrent ? undefined : { transitionDuration: "450ms", transitionDelay: `${(total - 1 - i) * 60}ms` }}
             className={`h-1 flex-1 rounded-full transition-colors duration-150 ${
               filled ? "bg-present" : isCurrent ? "bg-accent" : "bg-white/10"
             }`}
@@ -348,11 +395,15 @@ function ResultProgressBar({ count, won }: { count: number; won: boolean }) {
   );
 }
 
+function hasKnownLetters(known: KnownLetters) {
+  return known.correct.length > 0 || known.present.length > 0 || known.absent.length > 0;
+}
+
 function KnownLettersPanel({ known }: { known: KnownLetters }) {
-  if (known.correct.length === 0 && known.present.length === 0 && known.absent.length === 0) return null;
+  if (!hasKnownLetters(known)) return null;
 
   return (
-    <div className="flex animate-fade-in-up-slow flex-col gap-3 border-t border-border pt-5.5">
+    <div className="flex flex-col gap-3 border-t border-border pt-5.5">
       <span className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground/50">Known so far</span>
       {(known.correct.length > 0 || known.present.length > 0) && (
         <div className="flex flex-wrap gap-1.75">
@@ -563,6 +614,8 @@ function DailyRevealScreen({
           </span>
         </div>
 
+        <WordMeaning meaning={game.wordMeaning} />
+
         <ResultProgressBar count={game.guesses.length} won={won} />
 
         <div className="flex items-center justify-between gap-4 rounded-[18px] bg-white/5 px-4.5 py-4">
@@ -624,6 +677,7 @@ function DailyRevealScreen({
               {eyebrow}
             </span>
             <span className="text-[64px] font-bold uppercase leading-none tracking-[0.06em]">{game.word}</span>
+            <WordMeaning meaning={game.wordMeaning} className="max-w-md" />
             <span className="flex items-center gap-2.5 text-[15px] text-foreground/65">
               Word no. {wordNumber} · {formattedDate}
               <DifficultyBadge difficulty={game.difficulty} />
@@ -731,6 +785,40 @@ export default function PlayScreen({
   // response) — shown as a bottom sheet on mobile, a sidebar card on desktop.
   const [tierResult, setTierResult] = useState<TierRoundResult | null>(null);
   const [resultSheetOpen, setResultSheetOpen] = useState(false);
+  const [boardPhase, setBoardPhase] = useState<BoardPhase>("idle");
+  const nextWordBusy = useRef(false);
+  const [heldRow, setHeldRow] = useState<HeldRow | null>(null);
+  const [toast, setToast] = useState<{ id: number; title: string; word?: string } | null>(null);
+  const [toastClosing, setToastClosing] = useState(false);
+
+  const showToast = useCallback((title: string, word?: string) => {
+    setToast({ id: Date.now(), title, word });
+    setToastClosing(false);
+  }, []);
+
+  // Each new toast restarts the cycle: show, hold, ease out, remove.
+  useEffect(() => {
+    if (!toast) return;
+    const hold = setTimeout(() => setToastClosing(true), TOAST_DELAY_MS + TOAST_IN_MS + TOAST_HOLD_MS);
+    const done = setTimeout(() => {
+      setToast(null);
+      setToastClosing(false);
+    }, TOAST_DELAY_MS + TOAST_IN_MS + TOAST_HOLD_MS + TOAST_OUT_MS);
+    return () => {
+      clearTimeout(hold);
+      clearTimeout(done);
+    };
+  }, [toast]);
+
+  // Held row: fade its content out in place after HELD_ROW_MS, then swap in
+  // the live row (which fades in) once that fade is done.
+  useEffect(() => {
+    if (!heldRow) return;
+    const id = heldRow.fading
+      ? setTimeout(() => setHeldRow(null), ROW_FADE_MS)
+      : setTimeout(() => setHeldRow((h) => (h && h.key === heldRow.key ? { ...h, fading: true } : h)), HELD_ROW_MS);
+    return () => clearTimeout(id);
+  }, [heldRow]);
   // Rank going into the next round, for the result's ↑/↓ delta.
   const prevRankRef = useRef<number | null | undefined>(undefined);
   useEffect(() => {
@@ -751,7 +839,7 @@ export default function PlayScreen({
   // freed-up space instead of snapping up the instant this flips to false.
   useEffect(() => {
     if (!hintLockedMsgOpen) return;
-    const id = setTimeout(() => setHintLockedMsgOpen(false), 10_000);
+    const id = setTimeout(() => setHintLockedMsgOpen(false), 5_000);
     return () => clearTimeout(id);
   }, [hintLockedMsgOpen]);
 
@@ -835,28 +923,64 @@ export default function PlayScreen({
   const handleNextWord = useCallback(async () => {
     // Also doubles as "skip this round" while one is still in progress —
     // /infinite/new abandons whatever's active and hands back a fresh round.
+    if (nextWordBusy.current) return;
+    nextWordBusy.current = true;
+    const animate = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // Fetch while the old board animates out; settled into a result so a
+    // failure doesn't surface as an unhandled rejection mid-animation.
+    const request = startNewInfiniteRound().then(
+      (res) => ({ ok: true as const, res }),
+      (err: unknown) => ({ ok: false as const, err }),
+    );
     try {
-      const { game, today: next } = await startNewInfiniteRound();
-      setGame(game);
-      // Starting a round credits the time since the last guess.
-      if (next) setToday(next);
-      setCurrentGuess("");
-      setError(null);
-      setHintRevealed(false);
-      setHintLockedMsgOpen(false);
-      setFetchedHint(null);
-      setHintsRejected(false);
-      setTierResult(null);
-      setResultSheetOpen(false);
-    } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : "Something went wrong");
+      if (animate) {
+        setBoardPhase("clearing");
+        await wait(clearDurationMs(game?.guesses.length ?? 0) + 120);
+        setBoardPhase("leaving");
+        await wait(BOARD_OUT_MS);
+      }
+      const outcome = await request;
+      if (outcome.ok) {
+        const { game: nextGame, today: next } = outcome.res;
+        setGame(nextGame);
+        // Starting a round credits the time since the last guess.
+        if (next) setToday(next);
+        setCurrentGuess("");
+        setError(null);
+        setHintRevealed(false);
+        setHintLockedMsgOpen(false);
+        setFetchedHint(null);
+        setHintsRejected(false);
+        setTierResult(null);
+        setResultSheetOpen(false);
+      } else {
+        // The old round slides back in under the error.
+        setHeldRow(null);
+        const err = outcome.err;
+        setError(err instanceof ApiRequestError ? err.message : "Something went wrong");
+      }
+      if (animate) {
+        setBoardPhase("entering");
+        await wait(BOARD_IN_MS);
+      }
+    } finally {
+      setBoardPhase("idle");
+      nextWordBusy.current = false;
     }
-  }, [setToday]);
+  }, [game, setToday]);
 
   const handleSubmitGuess = useCallback(async () => {
     if (submitting) return;
     if (currentGuess.length !== WORD_LENGTH) {
       setShakeSignal((n) => n + 1);
+      return;
+    }
+
+    // A word already played this round would just waste a row: refuse it
+    // and say why in a toast over the board.
+    if (game?.guesses.some((g) => g.guess.toLowerCase() === currentGuess.toLowerCase())) {
+      setShakeSignal((n) => n + 1);
+      showToast("Already tried", currentGuess);
       return;
     }
 
@@ -927,11 +1051,11 @@ export default function PlayScreen({
     } finally {
       setSubmitting(false);
     }
-  }, [mode, currentGuess, submitting, refreshUser, setToday, refreshMe]);
+  }, [game, mode, currentGuess, submitting, refreshUser, setToday, refreshMe, showToast]);
 
   const handleKey = useCallback(
     (key: string) => {
-      if (!game || game.status !== "in-progress" || submitting) return;
+      if (!game || game.status !== "in-progress" || submitting || nextWordBusy.current) return;
       setError(null);
 
       if (key === "Enter") {
@@ -1009,6 +1133,7 @@ export default function PlayScreen({
   const guessesLeft = MAX_ATTEMPTS - game.guesses.length;
   const known = buildKnownLetters(game.guesses);
   const hintUnlocked = game.guesses.length >= HINT_UNLOCK_ATTEMPT;
+  const clearingBoard = boardPhase === "clearing" || boardPhase === "leaving";
 
   // --- hints: from the payload (Daily, finished rounds, free or already
   // bought) or, for Infinite, from POST /game/infinite/hint. Free tiers use
@@ -1019,6 +1144,18 @@ export default function PlayScreen({
   const hintsOff = tierMode && !finished && !game.hint && (hintCost === null || hintsRejected);
   const hintAvailable =
     !hintsOff && !paidTier && (!!hintText || (tierMode && !finished && hintCost === 0 && !paidHint.noClue));
+
+  // Every Next word / New word button: hold this round's difficulty/hint
+  // row on screen, then start the transition.
+  function nextWord() {
+    if (nextWordBusy.current) return;
+    setHeldRow((h) =>
+      h && !h.fading
+        ? { ...h, key: Date.now() }
+        : { key: Date.now(), fading: false, difficulty: game?.difficulty, hintAvailable, hintUnlocked, hintRevealed },
+    );
+    void handleNextWord();
+  }
 
   async function toggleHint() {
     if (hintText) {
@@ -1075,7 +1212,7 @@ export default function PlayScreen({
             {!finished && (
               <button
                 type="button"
-                onClick={handleNextWord}
+                onClick={nextWord}
                 className="flex-none whitespace-nowrap rounded-full bg-white/8 px-3.5 py-2 text-xs font-semibold text-foreground/75 transition-colors hover:text-accent"
               >
                 New word
@@ -1097,29 +1234,51 @@ export default function PlayScreen({
         </div>
       )}
 
-      {(game.difficulty || hintAvailable) && (
-        <div className="mt-3 flex flex-col gap-1.5 md:hidden">
-          <div className="flex items-center gap-2">
-            <DifficultyBadge difficulty={game.difficulty} />
-            <HintButton
-              available={hintAvailable}
-              unlocked={hintUnlocked}
-              revealed={hintRevealed}
-              onToggle={toggleHint}
-              onLockedClick={() => setHintLockedMsgOpen(true)}
-            />
-          </div>
-          {hintAvailable && !hintUnlocked && (
+      <Reveal
+        show={!!heldRow || ((!!game.difficulty || hintAvailable) && !clearingBoard)}
+        durationMs={ROW_FADE_MS}
+        className="md:hidden"
+      >
+        <div className="mt-3 flex flex-col gap-1.5">
+          {heldRow ? (
+            // The previous round's row, display only. It fades out in place
+            // (same height as the live row), so nothing below moves.
+            <div
+              style={{ transitionDuration: `${ROW_FADE_MS}ms` }}
+              className={`flex items-center gap-2 transition-opacity ${heldRow.fading ? "opacity-0" : "opacity-100"}`}
+            >
+              <DifficultyBadge difficulty={heldRow.difficulty} />
+              <HintButton
+                available={heldRow.hintAvailable}
+                unlocked={heldRow.hintUnlocked}
+                revealed={heldRow.hintRevealed}
+                onToggle={() => {}}
+                onLockedClick={() => {}}
+              />
+            </div>
+          ) : (
+            <div className="flex animate-fade-in items-center gap-2">
+              <DifficultyBadge difficulty={game.difficulty} />
+              <HintButton
+                available={hintAvailable}
+                unlocked={hintUnlocked}
+                revealed={hintRevealed}
+                onToggle={toggleHint}
+                onLockedClick={() => setHintLockedMsgOpen(true)}
+              />
+            </div>
+          )}
+          {!heldRow && hintAvailable && !hintUnlocked && (
             <HintLockedMessage show={hintLockedMsgOpen} className="text-[13px] text-foreground/50" />
           )}
-          {hintText && hintUnlocked && hintRevealed && (
-            <p className="animate-fade-in text-[13px] text-foreground/65">{hintText}</p>
-          )}
+          <Reveal show={!!hintText && hintUnlocked && hintRevealed && boardPhase === "idle"} gap={6}>
+            <p className="text-[13px] text-foreground/65">{hintText}</p>
+          </Reveal>
         </div>
-      )}
+      </Reveal>
 
       <div className="mt-4 md:hidden">
-        <ProgressBar used={game.guesses.length} active={!finished} />
+        <ProgressBar used={clearingBoard ? 0 : game.guesses.length} active={!finished && !clearingBoard} />
       </div>
 
       <div className="mt-6 grid flex-1 items-start gap-8 md:mt-0 md:grid-cols-[260px_minmax(0,1fr)_300px] md:gap-12">
@@ -1146,29 +1305,51 @@ export default function PlayScreen({
             />
           )}
 
-          {(game.difficulty || hintAvailable) && (
+          <Reveal
+            show={!!heldRow || ((!!game.difficulty || hintAvailable) && !clearingBoard)}
+            durationMs={ROW_FADE_MS}
+            gap={26}
+          >
             <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <DifficultyBadge difficulty={game.difficulty} />
-                <HintButton
-                  available={hintAvailable}
-                  unlocked={hintUnlocked}
-                  revealed={hintRevealed}
-                  onToggle={toggleHint}
-                  onLockedClick={() => setHintLockedMsgOpen(true)}
-                />
-              </div>
-              {hintAvailable && !hintUnlocked && (
+              {heldRow ? (
+                // The previous round's row, display only. It fades out in place
+                // (same height as the live row), so nothing below moves.
+                <div
+                  style={{ transitionDuration: `${ROW_FADE_MS}ms` }}
+                  className={`flex items-center gap-2 transition-opacity ${heldRow.fading ? "opacity-0" : "opacity-100"}`}
+                >
+                  <DifficultyBadge difficulty={heldRow.difficulty} />
+                  <HintButton
+                    available={heldRow.hintAvailable}
+                    unlocked={heldRow.hintUnlocked}
+                    revealed={heldRow.hintRevealed}
+                    onToggle={() => {}}
+                    onLockedClick={() => {}}
+                  />
+                </div>
+              ) : (
+                <div className="flex animate-fade-in items-center gap-2">
+                  <DifficultyBadge difficulty={game.difficulty} />
+                  <HintButton
+                    available={hintAvailable}
+                    unlocked={hintUnlocked}
+                    revealed={hintRevealed}
+                    onToggle={toggleHint}
+                    onLockedClick={() => setHintLockedMsgOpen(true)}
+                  />
+                </div>
+              )}
+              {!heldRow && hintAvailable && !hintUnlocked && (
                 <HintLockedMessage show={hintLockedMsgOpen} className="text-[13px] leading-relaxed text-foreground/50" />
               )}
-              {hintText && hintUnlocked && hintRevealed && (
-                <p className="animate-fade-in text-[13px] leading-relaxed text-foreground/65">{hintText}</p>
-              )}
+              <Reveal show={!!hintText && hintUnlocked && hintRevealed && boardPhase === "idle"} gap={8}>
+                <p className="text-[13px] leading-relaxed text-foreground/65">{hintText}</p>
+              </Reveal>
             </div>
-          )}
+          </Reveal>
 
           <div className="flex flex-col gap-2.5">
-            <ProgressBar used={game.guesses.length} active={!finished} />
+            <ProgressBar used={clearingBoard ? 0 : game.guesses.length} active={!finished && !clearingBoard} />
             <span className="text-[13px] text-foreground/50">
               {finished
                 ? "Round over"
@@ -1176,7 +1357,9 @@ export default function PlayScreen({
             </span>
           </div>
 
-          <KnownLettersPanel known={known} />
+          <Reveal show={hasKnownLetters(known) && boardPhase === "idle"} durationMs={550} gap={26}>
+            <KnownLettersPanel known={known} />
+          </Reveal>
         </aside>
 
         {/* center column */}
@@ -1184,11 +1367,18 @@ export default function PlayScreen({
           {/* With a tier result, that replaces this card: desktop shows it in
               the sidebar, mobile as a sheet — this reappears on mobile only
               once the sheet is dismissed, so there's always a Next word. */}
-          {finished && !(tierResult && resultSheetOpen) && (
+          <Reveal
+            gap={24}
+            show={finished && boardPhase === "idle" && !(tierResult && resultSheetOpen)}
+            // Right after the round: once the tiles settle. After closing
+            // the mobile tier sheet: straight away.
+            delayMs={tierResult ? 0 : RESULT_SETTLE_MS}
+            className={`w-full max-w-xl ${tierResult ? "md:hidden" : ""}`}
+          >
             <div
-              className={`w-full max-w-xl animate-fade-in-up rounded-[20px] border p-4 text-center shadow-sm ${
+              className={`rounded-[20px] border p-4 text-center shadow-sm ${
                 won ? "border-correct/40 bg-correct/10 shadow-correct/10" : "border-border bg-surface"
-              } ${tierResult ? "md:hidden" : ""}`}
+              }`}
             >
               <p className="text-lg font-bold">
                 {won ? (
@@ -1204,10 +1394,11 @@ export default function PlayScreen({
                   The word was <span className="font-semibold uppercase">{game.word}</span>
                 </p>
               )}
+              <WordMeaning meaning={game.wordMeaning} align="center" className="mx-auto mt-2 max-w-md" />
               <div className="mt-3 flex flex-wrap justify-center gap-2">
                 <button
                   type="button"
-                  onClick={handleNextWord}
+                  onClick={nextWord}
                   className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-background shadow-sm shadow-accent/30 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 active:scale-[0.98]"
                 >
                   Next word
@@ -1223,7 +1414,7 @@ export default function PlayScreen({
                 )}
               </div>
             </div>
-          )}
+          </Reveal>
 
           {error && (
             <p key={shakeSignal} className="animate-fade-in text-sm font-medium text-danger">
@@ -1231,41 +1422,90 @@ export default function PlayScreen({
             </p>
           )}
 
-          <GuessWordBoard
-            guesses={game.guesses}
-            currentGuess={currentGuess}
-            shakeSignal={shakeSignal}
-            celebrate={won}
-            interactive={!finished}
+          <div
+            className="relative"
+            style={
+              boardPhase === "leaving"
+                ? { animation: `board-out ${BOARD_OUT_MS}ms ease-in both` }
+                : boardPhase === "entering"
+                  ? { animation: `board-in ${BOARD_IN_MS}ms cubic-bezier(0.16, 1, 0.3, 1) both` }
+                  : undefined
+            }
+          >
+            <GuessWordBoard
+              guesses={game.guesses}
+              currentGuess={currentGuess}
+              shakeSignal={shakeSignal}
+              celebrate={won && boardPhase === "idle"}
+              interactive={!finished && boardPhase === "idle"}
+              clearing={boardPhase === "clearing" || boardPhase === "leaving"}
+            />
+            {toast && (
+              <div
+                key={toast.id}
+                role="status"
+                aria-live="polite"
+                style={{
+                  animation: toastClosing
+                    ? `toast-out ${TOAST_OUT_MS}ms cubic-bezier(0.4, 0, 1, 1) both`
+                    : // Hidden (fill: both) until the delay is up.
+                      `toast-in ${TOAST_IN_MS}ms cubic-bezier(0.22, 1, 0.36, 1) ${TOAST_DELAY_MS}ms both`,
+                }}
+                className="pointer-events-none absolute inset-x-0 top-3 z-10 mx-auto flex w-fit max-w-[92%] items-center gap-2.5 rounded-full bg-linear-to-r from-[#f3d27a] to-[#e2a948] py-1.5 pl-1.5 pr-2 text-background shadow-lg shadow-black/35 ring-1 ring-black/10"
+              >
+                <span className="flex size-7.5 flex-none items-center justify-center rounded-full bg-background text-present">
+                  <RepeatIcon />
+                </span>
+                <span className="whitespace-nowrap text-[13px] font-bold tracking-tight">{toast.title}</span>
+                {toast.word && (
+                  <span className="flex gap-0.75" aria-label={toast.word.toUpperCase()}>
+                    {toast.word.split("").map((letter, i) => (
+                      <span
+                        key={i}
+                        style={{ animationDelay: `${TOAST_DELAY_MS + 320 + i * 70}ms`, animationDuration: "0.45s" }}
+                        className="flex size-6 animate-pop items-center justify-center rounded-md bg-background text-[11.5px] font-bold uppercase text-present"
+                      >
+                        {letter}
+                      </span>
+                    ))}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          <Reveal show={!!hintsOffNotice && boardPhase === "idle"} gap={24} className="w-full max-w-lg md:hidden">
+            {hintsOffNotice}
+          </Reveal>
+          <Reveal show={paidTier && boardPhase === "idle"} gap={24} className="w-full max-w-lg md:hidden">
+            <PaidHintRow hint={hintText} unlocked={hintUnlocked} unlockAfter={HINT_UNLOCK_ATTEMPT} state={paidHint} />
+          </Reveal>
+
+          {/* Keys lose their colours as the board clears. */}
+          <Keyboard
+            guesses={boardPhase === "clearing" || boardPhase === "leaving" ? [] : game.guesses}
+            onKey={handleKey}
+            disabled={finished || submitting || boardPhase !== "idle"}
           />
-
-          {hintsOffNotice && <div className="w-full max-w-lg md:hidden">{hintsOffNotice}</div>}
-          {paidTier && (
-            <div className="w-full max-w-lg md:hidden">
-              <PaidHintRow hint={hintText} unlocked={hintUnlocked} unlockAfter={HINT_UNLOCK_ATTEMPT} state={paidHint} />
-            </div>
-          )}
-
-          <Keyboard guesses={game.guesses} onKey={handleKey} disabled={finished || submitting} />
         </div>
 
         {/* right sidebar */}
         <aside className="hidden flex-col gap-4.5 md:flex">
-          {finished && tierResult && (
-            <div className="animate-fade-in-up">
+          <Reveal show={finished && !!tierResult && boardPhase === "idle"} delayMs={RESULT_SETTLE_MS} from="right" gap={18}>
+            {tierResult && (
               <TierResultCard
                 variant="card"
                 game={game}
                 result={tierResult}
                 me={tierMe}
                 tiers={tiers}
-                onNext={handleNextWord}
+                onNext={nextWord}
                 onBoard={onOpenTierLeaderboard}
               />
-            </div>
-          )}
-          {hintsOffNotice}
-          {paidTier && (
+            )}
+          </Reveal>
+          <Reveal show={!!hintsOffNotice && boardPhase === "idle"} gap={18}>{hintsOffNotice}</Reveal>
+          <Reveal show={paidTier && boardPhase === "idle"} gap={18}>
             <PaidHintCard
               hint={hintText}
               unlocked={hintUnlocked}
@@ -1273,7 +1513,7 @@ export default function PlayScreen({
               fromName={paidHintsFrom?.name}
               state={paidHint}
             />
-          )}
+          </Reveal>
           {mode === "daily" ? (
             <div className="flex items-center justify-between gap-4 rounded-3xl border border-border bg-white/4.5 p-5">
               <span className="flex flex-col gap-0.75">
@@ -1293,7 +1533,7 @@ export default function PlayScreen({
               {!finished && (
                 <button
                   type="button"
-                  onClick={handleNextWord}
+                  onClick={nextWord}
                   className="whitespace-nowrap rounded-xl bg-white/8 px-3.5 py-2 text-xs font-semibold text-foreground/80 transition-colors hover:bg-white/14 hover:text-foreground"
                 >
                   New word
@@ -1318,22 +1558,23 @@ export default function PlayScreen({
           outside to dismiss (the regular result card then shows instead). */}
       {paidTier && <PaidHintSheets state={paidHint} tierName={tierMe?.tierName} />}
 
-      {finished && tierResult && resultSheetOpen && (
+      {finished && tierResult && resultSheetOpen && boardPhase === "idle" && (
         <div className="fixed inset-0 z-30 flex flex-col justify-end md:hidden">
           <button
             type="button"
             aria-label="Close result"
             onClick={() => setResultSheetOpen(false)}
+            style={{ animationDelay: `${RESULT_SETTLE_MS}ms` }}
             className="absolute inset-0 animate-fade-in bg-[#09060b]/55"
           />
-          <div className="relative animate-fade-in-up">
+          <div className="relative animate-fade-in-up" style={{ animationDelay: `${RESULT_SETTLE_MS}ms` }}>
             <TierResultCard
               variant="sheet"
               game={game}
               result={tierResult}
               me={tierMe}
               tiers={tiers}
-              onNext={handleNextWord}
+              onNext={nextWord}
               onBoard={onOpenTierLeaderboard}
             />
           </div>

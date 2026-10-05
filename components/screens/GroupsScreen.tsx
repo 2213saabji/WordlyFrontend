@@ -5,6 +5,7 @@ import Loader from "@/components/Loader";
 import ScreenHeader from "@/components/ScreenHeader";
 import {
   createGroup,
+  deleteGroup,
   getGroupWeeklyLeaderboard,
   getMyGroups,
   joinGroup,
@@ -68,30 +69,56 @@ function CopyIcon({ copied }: { copied: boolean }) {
   );
 }
 
+function TrashIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="size-4">
+      <path d="M3 6h18" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+    </svg>
+  );
+}
+
 function GroupCard({
   group,
   index,
   rank,
   canLeave,
+  canDelete,
   copied,
   onCopy,
   onOpenLeaderboard,
   onLeave,
+  onDelete,
 }: {
   group: Group;
   index: number;
   rank: number | undefined;
   canLeave: boolean;
+  canDelete: boolean;
   copied: boolean;
   onCopy: () => void;
   onOpenLeaderboard: () => void;
   onLeave: () => void;
+  onDelete: () => Promise<void>;
 }) {
   const solo = group.members.length === 1;
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      await onDelete();
+    } finally {
+      setDeleting(false);
+      setConfirmingDelete(false);
+    }
+  }
 
   return (
     <div
-      className={`flex animate-fade-in-up flex-col gap-4 rounded-3xl border p-5 transition-all duration-200 sm:flex-row sm:items-center md:p-6 ${
+      className={`flex animate-fade-in-up flex-col gap-4 rounded-3xl border p-5 transition-all duration-200 sm:flex-row sm:flex-wrap sm:items-center md:p-6 ${
         solo
           ? "border-dashed border-white/15 bg-white/3"
           : "border-border bg-surface hover:-translate-y-0.5 hover:shadow-md"
@@ -153,7 +180,39 @@ function GroupCard({
             Leave
           </button>
         )}
+        {canDelete && !confirmingDelete && (
+          <button
+            type="button"
+            onClick={() => setConfirmingDelete(true)}
+            title="Delete group"
+            aria-label="Delete group"
+            className="flex size-8 items-center justify-center rounded-lg text-foreground/40 transition-colors hover:bg-danger/10 hover:text-danger"
+          >
+            <TrashIcon />
+          </button>
+        )}
       </div>
+      {canDelete && confirmingDelete && (
+        <div className="flex animate-fade-in items-center gap-3 sm:basis-full">
+          <span className="text-xs text-foreground/60">Are you sure, want to delete this group?</span>
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={deleting}
+            className="ml-auto whitespace-nowrap rounded-lg bg-danger/15 px-3 py-1.5 text-xs font-semibold text-danger transition-colors hover:bg-danger/25 disabled:pointer-events-none disabled:opacity-50"
+          >
+            {deleting ? "Deleting…" : "Delete"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirmingDelete(false)}
+            disabled={deleting}
+            className="whitespace-nowrap text-xs text-foreground/50 transition-colors hover:text-foreground disabled:opacity-50"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -187,7 +246,7 @@ export default function GroupsScreen({
   // The first page is synced: shown from cache, reloaded only when missing
   // or when /sync reports `mine` changed (e.g. another member renamed a
   // group). Load-more pages are fetched on demand.
-  useSyncedLoader({
+  const reloadGroups = useSyncedLoader({
     flag: "mine",
     key: GROUPS_CACHE_KEY,
     load: async () => {
@@ -306,6 +365,41 @@ export default function GroupsScreen({
     }
   }
 
+  // The API only deletes a group with no members, owner included, so the
+  // owner (its last member) leaves first. If the delete then fails, e.g. 409
+  // because someone joined in between, rejoin with the invite code so the
+  // owner isn't left outside their own group, then reload the list.
+  async function handleDelete(group: Group) {
+    setError(null);
+    try {
+      await leaveGroup(group._id);
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : "Something went wrong");
+      return;
+    }
+    try {
+      await deleteGroup(group._id);
+    } catch (err) {
+      // 404: already gone, which is what we wanted.
+      if (!(err instanceof ApiRequestError && err.status === 404)) {
+        await joinGroup(group.inviteCode).catch(() => {});
+        invalidate("mine", "me");
+        await reloadGroups();
+        setError(
+          err instanceof ApiRequestError && err.status === 409
+            ? "Someone just joined this group, so it wasn't deleted."
+            : err instanceof ApiRequestError
+              ? err.message
+              : "Something went wrong",
+        );
+        return;
+      }
+    }
+    invalidate("mine", "me");
+    setGroups((prev) => (prev ?? []).filter((g) => g._id !== group._id));
+    setTotal((t) => Math.max(0, t - 1));
+  }
+
   async function handleCopy(code: string, groupId: string) {
     try {
       await navigator.clipboard.writeText(code);
@@ -358,9 +452,9 @@ export default function GroupsScreen({
           {groups === null ? (
             <Loader label="Loading groups…" />
           ) : groups.length === 0 ? (
-            <p className="animate-fade-in text-sm text-foreground/60">You&apos;re not in any groups yet.</p>
+            <p className="animate-fade-in text-sm text-foreground/60 pl-13">You&apos;re not in any groups yet.</p>
           ) : filteredGroups.length === 0 ? (
-            <p className="animate-fade-in text-sm text-foreground/60">
+            <p className="animate-fade-in text-sm text-foreground/60 pl-4">
               No groups match &ldquo;{search.trim()}&rdquo;
               {canLoadMore ? " among those loaded so far — try loading more below." : "."}
             </p>
@@ -372,10 +466,12 @@ export default function GroupsScreen({
                 index={i}
                 rank={ranks[group._id]}
                 canLeave={group.owner !== user?.id}
+                canDelete={group.owner === user?.id && group.members.length === 1 && group.members[0] === user?.id}
                 copied={copiedId === group._id}
                 onCopy={() => handleCopy(group.inviteCode, group._id)}
                 onOpenLeaderboard={() => onOpenLeaderboard(group._id)}
                 onLeave={() => handleLeave(group._id)}
+                onDelete={() => handleDelete(group)}
               />
             ))
           )}

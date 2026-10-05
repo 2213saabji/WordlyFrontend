@@ -58,6 +58,14 @@ export type GameStatus = "in-progress" | "won" | "lost" | "abandoned";
 
 export type GameDifficulty = "easy" | "medium" | "hard";
 
+/** The answer's dictionary entry. `partOfSpeech` is free text ("noun",
+ * "noun (plural)") — shown as is. `meaning` can hold several senses
+ * separated by ";". */
+export interface WordMeaning {
+  partOfSpeech: string;
+  meaning: string;
+}
+
 export interface Game {
   mode?: "daily" | "infinite";
   date: string;
@@ -66,6 +74,9 @@ export interface Game {
   attemptsRemaining: number;
   guesses: Guess[];
   word?: string;
+  /** Only on a finished (or skipped) game, like `word`. null when no
+   * meaning is stored for the word — show the word alone then. */
+  wordMeaning?: WordMeaning | null;
   difficulty?: GameDifficulty;
   /** Only present once the round is over — see the hint-button note in
    * PlayScreen for how an in-progress hint is fetched instead. Infinite
