@@ -76,14 +76,20 @@ const SECTIONS: LegalSection[] = [
     ),
   },
   {
-    id: "keeping-your-data",
+    id: "children",
     number: "06",
+    heading: "Children",
+    body: "GuessWord is a general-audience game and isn't directed at children under 13. We don't knowingly collect personal information from children under 13, and children under 13 shouldn't create an account. If you believe a child under 13 has given us personal information, contact support@guessword.games and we'll delete it.",
+  },
+  {
+    id: "keeping-your-data",
+    number: "07",
     heading: "Keeping your data",
     body: "We keep your account and game data while your account is active. There's no self-serve deletion in the app yet — email support and we'll delete your account and data.",
   },
   {
     id: "your-choices",
-    number: "07",
+    number: "08",
     heading: "Your choices",
     body: "You can update your display name at any time in the app, and can contact support with any question, correction, or deletion request.",
   },
@@ -94,9 +100,9 @@ export default function PrivacyPolicyPage() {
     <LegalPage
       eyebrow="Legal"
       title="Privacy policy"
-      lastUpdated="3 October 2026"
+      lastUpdated="7 October 2026"
       readTime="4 min read"
-      intro="This page explains what information GuessWord collects, why we collect it and the choices you have."
+      intro="GuessWord is owned and run by Gurpreet Singh, an individual developer in India. This page explains what information GuessWord collects, why we collect it and the choices you have."
       sections={SECTIONS}
     />
   );

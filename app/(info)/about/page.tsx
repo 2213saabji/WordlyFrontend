@@ -127,6 +127,25 @@ export default function AboutPage() {
         />
       </Section>
 
+      <Section heading="Who runs GuessWord">
+        <p>
+          GuessWord is owned, built and run by <strong className="font-semibold text-foreground">Gurpreet Singh</strong>,
+          an individual developer in India. It&apos;s an independent project, not affiliated with any other word game
+          or publisher. The answer lists are curated for GuessWord, and the guides are written from our own analysis of them.
+        </p>
+        <p>
+          Questions, ideas and bug reports go straight to the person who builds the game — write to{" "}
+          <a href="mailto:support@guessword.games" className="text-accent underline hover:no-underline">
+            support@guessword.games
+          </a>{" "}
+          or use the{" "}
+          <Link href="/contact" className="text-accent underline hover:no-underline">
+            contact page
+          </Link>
+          .
+        </p>
+      </Section>
+
       <Section heading="Free to play">
         <p>
           GuessWord is free. You can play Infinite on the home page without an account; a free account adds the

@@ -119,6 +119,7 @@ const structuredData = {
       url: SITE_URL,
       logo: `${SITE_URL}/icon`,
       email: "support@guessword.games",
+      founder: { "@type": "Person", name: "Gurpreet Singh" },
       contactPoint: {
         "@type": "ContactPoint",
         contactType: "customer support",
