@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import ContentPage from "@/components/ContentPage";
+import ContentPage, { BulletList, Section } from "@/components/ContentPage";
 import { JsonLd, SITE_URL, breadcrumbJsonLd, pageMetadata } from "@/lib/seo";
 
 const PATH = "/about";
@@ -47,7 +47,7 @@ const FEATURES = [
   {
     number: "03",
     heading: "Quiet by design",
-    body: "No ads between guesses and no timers. Play at your own pace, any time before midnight.",
+    body: "No pop-ups between guesses and no countdown on your board. Play at your own pace, any time before midnight.",
   },
 ];
 
@@ -82,6 +82,61 @@ export default function AboutPage() {
           </div>
         ))}
       </div>
+
+      <Section heading="What GuessWord is">
+        <p>
+          GuessWord is a browser word game built around one simple puzzle: find a secret five-letter word in six
+          guesses, using coloured tiles that tell you which letters are right, which are in the wrong place and
+          which aren&apos;t in the word at all. It runs on any phone, tablet or computer with a modern browser —
+          there&apos;s nothing to download.
+        </p>
+        <p>
+          Around that puzzle we&apos;ve built three ways to play. The <strong className="font-semibold text-foreground">Daily word</strong>{" "}
+          is the same for everyone and changes at midnight UTC. <strong className="font-semibold text-foreground">Infinite</strong>{" "}
+          gives you a new word the moment you finish the last one, with eight tiers to climb from Stone to Diamond.
+          And <strong className="font-semibold text-foreground">groups</strong> turn the Daily word into a private
+          competition with friends, family or coworkers.
+        </p>
+      </Section>
+
+      <Section heading="Our word lists">
+        <p>
+          Every answer comes from lists we curate ourselves rather than a raw dictionary, so you get real, familiar
+          words instead of obscure ones. The Daily list has 728 words, Infinite has 1,456, and play without an
+          account draws on a separate list of 2,844 — so playing as a guest never spoils a Daily or Infinite word.
+        </p>
+        <p>
+          When a round ends we show the word&apos;s meaning, so even a lost game teaches you something. We also
+          publish what we&apos;ve learned from analysing these lists — letter frequencies, common patterns and the
+          best opening words — in our{" "}
+          <Link href="/guides" className="text-accent underline hover:no-underline">
+            guides
+          </Link>
+          .
+        </p>
+      </Section>
+
+      <Section heading="Fair for everyone">
+        <BulletList
+          items={[
+            "Every guess is checked on our server, and the answer is never sent to your browser before the round ends.",
+            "Leaderboards rank by results — wins, guesses and time for the Daily word; points and qualifying days in Infinite — never by how much anyone has spent.",
+            "Shared results show coloured squares, never the word, so nobody's game gets spoiled.",
+            "Coins are optional. They only buy hints in the higher Infinite tiers, and you earn 10 for every word you solve.",
+          ]}
+        />
+      </Section>
+
+      <Section heading="Free to play">
+        <p>
+          GuessWord is free. You can play Infinite on the home page without an account; a free account adds the
+          Daily word, streaks, hints, groups and the leaderboards. The game is supported by advertising — see our{" "}
+          <Link href="/privacy-policy" className="text-accent underline hover:no-underline">
+            privacy policy
+          </Link>{" "}
+          for how ads and your data are handled.
+        </p>
+      </Section>
 
       <div className="flex flex-wrap items-center gap-5 rounded-3xl border border-white/8 bg-white/4 p-7">
         <div className="flex flex-1 flex-col gap-1.5 basis-70">

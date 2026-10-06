@@ -63,6 +63,46 @@ export function breadcrumbJsonLd(name: string, path: string) {
   };
 }
 
+/** Same as breadcrumbJsonLd, for deeper pages: Home → each of `trail`
+ * (e.g. Guides → one guide). */
+export function breadcrumbTrailJsonLd(trail: { name: string; path: string }[]) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+      ...trail.map((step, i) => ({ "@type": "ListItem", position: i + 2, name: step.name, item: `${SITE_URL}${step.path}` })),
+    ],
+  };
+}
+
+/** schema.org Article for a guide page. */
+export function articleJsonLd({
+  title,
+  description,
+  path,
+  dateModified,
+}: {
+  title: string;
+  description: string;
+  path: string;
+  /** ISO date (YYYY-MM-DD). */
+  dateModified: string;
+}) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: title,
+    description,
+    url: `${SITE_URL}${path}`,
+    dateModified,
+    author: { "@id": `${SITE_URL}/#organization` },
+    publisher: { "@id": `${SITE_URL}/#organization` },
+    isPartOf: { "@id": `${SITE_URL}/#website` },
+    about: { "@id": `${SITE_URL}/#game` },
+  };
+}
+
 export function JsonLd({ data }: { data: object | object[] }) {
   return (
     <script

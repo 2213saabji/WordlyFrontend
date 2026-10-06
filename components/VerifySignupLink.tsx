@@ -30,7 +30,7 @@ export default function VerifySignupLink({ token }: { token: string }) {
         savePendingSignup(null);
         setState("done");
         reset({ name: "home" });
-        setTimeout(() => router.push("/home"), 1500);
+        setTimeout(() => router.push("/"), 1500);
       })
       .catch((err) => {
         const code = err instanceof ApiRequestError ? err.data?.code : undefined;

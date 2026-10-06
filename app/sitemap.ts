@@ -1,10 +1,11 @@
 import type { MetadataRoute } from "next";
+import { GUIDES, GUIDES_PATH, GUIDES_UPDATED_ISO, guidePath } from "@/lib/guides";
 
 const SITE_URL = "https://www.guessword.games";
 
-// The rest of the app is client-side "screens" behind two routes ("/" for
-// visitors, /home once signed in), not separate server pages. /home is
-// per-player and noindex, and /reset-password/[token] is deliberately
+// The rest of the app is client-side "screens" behind "/" (the guest home
+// for visitors, the signed-in app once logged in), not separate server
+// pages. /reset-password/[token] is deliberately
 // excluded, since each link is single-use and tied to one person's reset
 // request, not a page worth search engines indexing.
 export default function sitemap(): MetadataRoute.Sitemap {
@@ -20,5 +21,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${SITE_URL}/terms`, lastModified, changeFrequency: "yearly", priority: 0.3 },
     // Public Infinite tier board.
     { url: `${SITE_URL}/leaderboard/infinite`, lastModified, changeFrequency: "daily", priority: 0.6 },
+    // Strategy guides (lib/guides.ts).
+    { url: `${SITE_URL}${GUIDES_PATH}`, lastModified: GUIDES_UPDATED_ISO, changeFrequency: "monthly", priority: 0.8 },
+    ...GUIDES.map((guide) => ({
+      url: `${SITE_URL}${guidePath(guide.slug)}`,
+      lastModified: GUIDES_UPDATED_ISO,
+      changeFrequency: "monthly" as const,
+      priority: 0.7,
+    })),
   ];
 }

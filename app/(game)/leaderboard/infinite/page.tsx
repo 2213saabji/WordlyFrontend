@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import AdSenseScript from "@/components/AdSenseScript";
 import PublicTierBoard from "@/components/PublicTierBoard";
 import { JsonLd, breadcrumbJsonLd, pageMetadata } from "@/lib/seo";
 
@@ -18,6 +19,7 @@ export const metadata: Metadata = pageMetadata({
 export default function InfiniteLeaderboardPage() {
   return (
     <>
+      <AdSenseScript />
       <JsonLd data={breadcrumbJsonLd("Infinite Leaderboard", PATH)} />
       <PublicTierBoard />
       <Intro />

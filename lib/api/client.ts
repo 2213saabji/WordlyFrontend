@@ -131,9 +131,8 @@ function clearSession(): void {
 }
 
 function redirectToLogin(): void {
-  // To the public page on "/", where the login screen lives (part of the
-  // public app, not a separate route) — the signed-in app on /home would
-  // send them there anyway. "/" itself only makes token-free calls.
+  // To "/", which shows the guest home (and its login screen) once the
+  // session is gone. "/" itself handles a dropped session without a reload.
   if (typeof window !== "undefined" && window.location.pathname !== "/") {
     // Plain module outside the React tree (no useRouter here); a hard
     // navigation also clears any in-memory state left over from the expired

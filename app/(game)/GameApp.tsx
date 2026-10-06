@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useLayoutEffect, useState, type ReactNode } from "react";
 import Leaderboard from "@/components/Leaderboard";
 import TierLeaderboard from "@/components/TierLeaderboard";
 import TierPromotionAnnouncer from "@/components/TierPromotionModal";
@@ -20,8 +19,10 @@ import { useAuth } from "@/lib/auth-context";
 import { PRE_AUTH_SCREENS, useScreen } from "@/lib/screen-context";
 import { parseReplayParam, type ReplayInvite } from "@/lib/share";
 import { runSync } from "@/lib/sync";
+import PublicApp from "./PublicApp";
 
-function AppShell() {
+/** `intro`: the crawlable intro from page.tsx, shown under the home screen. */
+function AppShell({ intro }: { intro: ReactNode }) {
   const { screen, push, back, replace, backTo } = useScreen();
   const [invite, setInvite] = useState<ReplayInvite | null>(() =>
     typeof window === "undefined" ? null : parseReplayParam(window.location.search),
@@ -91,13 +92,16 @@ function AppShell() {
       )}
       <div key={screenKey} className={`flex flex-1 flex-col ${hasNavigated ? "animate-fade-in-up" : ""}`}>
         {screen.name === "home" && (
-          <HomeScreen
-            onPlay={() => push({ name: "play", mode: "daily" })}
-            onPlayInfinite={() => push({ name: "infinite-hub" })}
-            onHistory={() => push({ name: "history" })}
-            onGroups={() => push({ name: "groups" })}
-            onOpenLeaderboard={(groupId?: string) => push({ name: "leaderboard", groupId })}
-          />
+          <>
+            <HomeScreen
+              onPlay={() => push({ name: "play", mode: "daily" })}
+              onPlayInfinite={() => push({ name: "infinite-hub" })}
+              onHistory={() => push({ name: "history" })}
+              onGroups={() => push({ name: "groups" })}
+              onOpenLeaderboard={(groupId?: string) => push({ name: "leaderboard", groupId })}
+            />
+            {intro}
+          </>
         )}
         {screen.name === "infinite-hub" && (
           <InfiniteHubScreen
@@ -153,36 +157,26 @@ function AppShell() {
   );
 }
 
-/** The signed-in app on "/home". Without a session — no saved credentials,
- * a device session the server no longer accepts, or a logout — it sends the
- * visitor to the public page on "/". */
-export default function GameApp() {
-  const { user, loading } = useAuth();
+/** The whole game on "/". A player with a session gets the signed-in app —
+ * straight from the cached session on a reload, while /auth/refresh confirms
+ * it in the background — and everyone else the guest app (PublicApp: guest
+ * home, guest Infinite and the sign-in screens). Logging in or out swaps
+ * between the two in place; there's no redirect.
+ *
+ * `intro` is the server-rendered crawlable intro from page.tsx, shown under
+ * the home screen whether or not the player is logged in. */
+export default function GameApp({ intro }: { intro: ReactNode }) {
+  const { user } = useAuth();
   const { screen, reset } = useScreen();
-  const router = useRouter();
 
-  useEffect(() => {
-    if (!loading && !user) router.replace("/");
-  }, [loading, user, router]);
-
-  // Sign-in screens belong to "/" — a stack left on one lands on home.
+  // Sign-in screens are the guest app's — a signed-in stack left on one
+  // (right after logging in) lands on home.
   const preAuth = PRE_AUTH_SCREENS.includes(screen.name);
   useEffect(() => {
     if (user && preAuth) reset();
   }, [user, preAuth, reset]);
 
-  if (loading) {
-    // .auth-pending is hidden before first paint for a returning player with
-    // a cached session (see the inline script in app/layout.tsx) — they go
-    // straight to their cached screen instead of seeing this.
-    return (
-      <div className="auth-pending contents">
-        <Loader label="Loading…" />
-      </div>
-    );
-  }
-
-  if (!user || preAuth) return <Loader label="Loading…" />;
-
-  return <AppShell />;
+  if (!user) return <PublicApp intro={intro} />;
+  if (preAuth) return <Loader label="Loading…" />;
+  return <AppShell intro={intro} />;
 }

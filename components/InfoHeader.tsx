@@ -18,6 +18,7 @@ const LOGO_TILES = [
 
 const NAV_LINKS = [
   { href: "/how-to-play", label: "How to play" },
+  { href: "/guides", label: "Guides" },
   { href: "/about", label: "About" },
   { href: "/faq", label: "FAQ" },
   { href: "/contact", label: "Contact" },
@@ -63,7 +64,7 @@ export default function InfoHeader() {
 
         <nav className="ml-4.5 hidden items-center gap-6.5 md:flex">
           {NAV_LINKS.map((link) => {
-            const active = pathname === link.href;
+            const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
             return (
               <Link
                 key={link.href}
@@ -85,7 +86,7 @@ export default function InfoHeader() {
             href="/"
             className="hidden whitespace-nowrap rounded-xl bg-accent px-4 py-2.5 text-[13.5px] font-bold text-background transition-transform duration-150 hover:-translate-y-0.5 md:inline-flex"
           >
-            Play today&apos;s word
+            Play now
           </Link>
           <button
             type="button"
@@ -101,7 +102,7 @@ export default function InfoHeader() {
       {menuOpen && (
         <nav className="flex flex-col gap-1 border-t border-white/8 px-5 py-3 md:hidden">
           {NAV_LINKS.map((link) => {
-            const active = pathname === link.href;
+            const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
             return (
               <Link
                 key={link.href}
@@ -120,7 +121,7 @@ export default function InfoHeader() {
             onClick={() => setMenuOpen(false)}
             className="mt-1.5 rounded-xl bg-accent px-4 py-3 text-center text-[14px] font-bold text-background"
           >
-            Play today&apos;s word
+            Play now
           </Link>
         </nav>
       )}

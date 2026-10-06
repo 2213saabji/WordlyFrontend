@@ -32,10 +32,6 @@ const REFRESH_WAIT_MS = 4_000;
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
-  /** false until the app-start session check is over (the stored device
-   * session refreshed or turned out to be gone). Until then `user` may be
-   * the cached one, which a revoked/expired session will drop. */
-  sessionChecked: boolean;
   login: (email: string, password: string) => Promise<void>;
   /** Step 1 of signup: emails a code + link, creates nothing and logs no
    * one in. Resolves with the (lowercased) email to verify. */
@@ -67,7 +63,6 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [sessionChecked, setSessionChecked] = useState(false);
 
   // Re-fetches the current user without touching the session itself — used
   // after actions that change stats (finishing a game, etc), not for login.
@@ -158,7 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       setLoading(false);
     }
-    bootstrap().finally(() => setSessionChecked(true));
+    bootstrap();
   }, []);
 
   // Keeps the cache in step with the session: the latest user is what the
@@ -249,7 +244,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         loading,
-        sessionChecked,
         login,
         signup,
         verifySignupCode,

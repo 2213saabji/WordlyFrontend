@@ -1,5 +1,6 @@
 import InfoHeader from "@/components/InfoHeader";
 import InfoFooter from "@/components/InfoFooter";
+import AdSenseScript from "@/components/AdSenseScript";
 
 // The public info pages get their own header/footer, matching the
 // "GuessWord Info Pages" design — separate from the game's Nav/Footer,
@@ -8,6 +9,7 @@ import InfoFooter from "@/components/InfoFooter";
 export default function InfoLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-full flex-1 flex-col bg-background text-foreground">
+      <AdSenseScript />
       <InfoHeader />
       <main className="flex flex-1 flex-col">{children}</main>
       <InfoFooter />

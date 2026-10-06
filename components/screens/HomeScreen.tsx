@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { getMyGroups, getGlobalWeeklyLeaderboard, getPublicInfiniteLeaderboard } from "@/lib/api";
 import { PUBLIC_BOARD_TIER } from "@/lib/tiers";
@@ -24,6 +24,15 @@ const LOGO_TILES = [
 
 function todayLabel() {
   return new Date().toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+}
+
+const noSubscribe = () => () => {};
+
+/** Today's date in the viewer's locale and timezone. Empty in the server
+ * render and while hydrating — the guest home is server-rendered on "/", and
+ * the server's locale/timezone would otherwise mismatch the browser's. */
+function useTodayLabel(): string {
+  return useSyncExternalStore(noSubscribe, todayLabel, () => "");
 }
 
 /** The daily word is per UTC day, and `stats.lastPlayedDate` is set to that
@@ -231,6 +240,7 @@ export default function HomeScreen({
   guest?: boolean;
 }) {
   const { user } = useAuth();
+  const today = useTodayLabel();
   // Cached from the last visit and only refetched when /sync reports a
   // change (lib/use-synced.ts).
   const groupsRes = useSyncedResource({
@@ -307,7 +317,7 @@ export default function HomeScreen({
     <div className="flex flex-1 flex-col">
       {/* mobile-only top strip */}
       <div className="flex items-center justify-between px-5 pt-6 md:hidden">
-        <span className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground/50">{todayLabel()}</span>
+        <span className="min-h-4 text-xs font-semibold uppercase tracking-[0.16em] text-foreground/50">{today}</span>
       </div>
 
       <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-10 px-5 py-8 md:grid md:grid-cols-[1.15fr_0.85fr] md:items-start md:gap-16 md:px-8 md:py-16">
@@ -316,7 +326,8 @@ export default function HomeScreen({
           {/* desktop headline */}
           <div className="hidden animate-fade-in-up flex-col gap-4 md:flex">
             <span className="text-xs font-semibold uppercase tracking-[0.18em] text-foreground/50">
-              {todayLabel()} · {guest ? "Free to play" : dailyDone ? "Daily complete" : "Daily word"}
+              {today && `${today} · `}
+              {guest ? "Free to play" : dailyDone ? "Daily complete" : "Daily word"}
             </span>
             <h1 className="max-w-lg text-[56px] font-light leading-[1.05] tracking-tight lg:text-[64px]">{headline}</h1>
             <p className="max-w-md text-base leading-relaxed text-foreground/65">

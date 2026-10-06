@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useScreen, type Screen } from "@/lib/screen-context";
 import EditNameModal from "@/components/EditNameModal";
@@ -78,19 +78,30 @@ const NAV_LINKS: { label: string; screen: Screen; isActive: (s: Screen) => boole
   },
 ];
 
+// Signed out: real links to the public pages, so every page — the guest
+// game on "/" included — has the same site navigation (and crawlers find
+// them in the server HTML).
+const GUEST_LINKS = [
+  { href: "/how-to-play", label: "How to play" },
+  { href: "/guides", label: "Guides" },
+  { href: "/leaderboard/infinite", label: "Leaderboard" },
+  { href: "/faq", label: "FAQ" },
+  { href: "/about", label: "About" },
+];
+
 export default function Nav() {
   const { user, logout, loading } = useAuth();
   const { screen, push, reset } = useScreen();
   const [editNameOpen, setEditNameOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const router = useRouter();
+  const pathname = usePathname();
+  const isGuestLinkActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
-  // Back to the public page; /home would send them there anyway.
+  // "/" swaps to the guest home by itself.
   const handleLogout = () => {
     logout();
     reset();
-    router.replace("/");
   };
 
   useEffect(() => {
@@ -109,10 +120,9 @@ export default function Nav() {
       <div className="mx-auto flex max-w-5xl items-center gap-8 px-4 py-3 md:px-8 md:py-4">
         {/* The href covers the other routes (/leaderboard/infinite,
             /reset-password/[token], ...); the reset() call is what actually
-            matters when already on it. Signed in: the app on /home; signed
-            out: the public page on "/". */}
+            matters when already on it. */}
         <Link
-          href={user ? "/home" : "/"}
+          href="/"
           onClick={() => reset()}
           className="group flex shrink-0 items-center gap-2"
         >
@@ -138,7 +148,7 @@ export default function Nav() {
                 // clicked from another route like /leaderboard/infinite.
                 <Link
                   key={link.label}
-                  href="/home"
+                  href="/"
                   onClick={() => push(link.screen)}
                   className={`text-[14.5px] font-medium transition-colors duration-150 ${
                     active
@@ -153,6 +163,30 @@ export default function Nav() {
           </nav>
         )}
 
+        {/* .auth-pending: hidden for a returning player with a cached
+            session until hydration (see app/layout.tsx) — they get the
+            signed-in header instead. */}
+        {!user && (
+          <nav
+            aria-label="Site"
+            className={`hidden items-center gap-7 lg:flex ${loading ? "auth-pending" : "animate-fade-in"}`}
+          >
+            {GUEST_LINKS.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={`whitespace-nowrap text-[14.5px] font-medium transition-colors duration-150 ${
+                  isGuestLinkActive(link.href)
+                    ? "border-b-2 border-accent pb-0.5 text-foreground"
+                    : "text-foreground/55 hover:text-foreground"
+                }`}
+              >
+                {link.label}
+              </Link>
+            ))}
+          </nav>
+        )}
+
         <div className="ml-auto flex items-center gap-3 text-sm">
           {user ? (
             <>
@@ -163,7 +197,7 @@ export default function Nav() {
                     (after the player's first completed Infinite game). */}
                 {user.infinite && (
                   <Link
-                    href="/home"
+                    href="/"
                     onClick={() => push({ name: "infinite-hub" })}
                     title="Your Infinite tier"
                     className="rounded-full transition-opacity duration-150 hover:opacity-80"
@@ -197,7 +231,7 @@ export default function Nav() {
                 </button>
 
                 <div
-                  className={`absolute right-0 top-[calc(100%+10px)] w-fit origin-top rounded-xl border border-border bg-background/95 p-1.5 shadow-lg backdrop-blur-md transition-all duration-500 ease-out ${
+                  className={`absolute right-0 top-[calc(100%+10px)] w-fit origin-top rounded-xl border border-border bg-background/95 p-1.5 shadow-lg backdrop-blur-md transition-all duration-500 ease-out min-w-44 ${
                     menuOpen
                       ? "pointer-events-auto translate-y-0 scale-y-100 opacity-100"
                       : "pointer-events-none -translate-y-3 scale-y-90 opacity-0"
@@ -239,12 +273,12 @@ export default function Nav() {
                 </div>
               </div>
             </>
-          ) : !loading ? (
+          ) : (
             // The only way into the (optional) sign-in screens besides the
             // login-only actions, so shown on every screen size. Signed-out
             // copy says "Log in" everywhere; new players reach signup from
             // the login screen's "No account? Sign up".
-            <span className="flex animate-fade-in items-center gap-3">
+            <span className={`flex items-center gap-2.5 ${loading ? "auth-pending" : "animate-fade-in"}`}>
               <Link
                 href="/"
                 onClick={() => reset({ name: "login" })}
@@ -252,8 +286,43 @@ export default function Nav() {
               >
                 Log in
               </Link>
+
+              {/* Below lg the site links move into this menu. */}
+              <div ref={menuRef} className="relative lg:hidden">
+                <button
+                  type="button"
+                  onClick={() => setMenuOpen((v) => !v)}
+                  aria-label="Open menu"
+                  aria-expanded={menuOpen}
+                  className="flex h-8 w-8 flex-none cursor-pointer items-center justify-center rounded-md border border-border text-foreground/70 transition-colors hover:border-accent/40 hover:text-accent"
+                >
+                  <BurgerIcon />
+                </button>
+
+                <nav
+                  aria-label="Site"
+                  className={`absolute right-0 top-[calc(100%+10px)] flex w-44 origin-top flex-col rounded-xl border border-border bg-background/95 p-1.5 shadow-lg backdrop-blur-md transition-all duration-500 ease-out ${
+                    menuOpen
+                      ? "pointer-events-auto visible translate-y-0 scale-y-100 opacity-100"
+                      : "pointer-events-none invisible -translate-y-3 scale-y-90 opacity-0"
+                  }`}
+                >
+                  {GUEST_LINKS.map((link) => (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      onClick={() => setMenuOpen(false)}
+                      className={`rounded-lg px-3 py-2.5 text-[13.5px] font-semibold transition-colors hover:bg-white/8 ${
+                        isGuestLinkActive(link.href) ? "bg-white/7 text-foreground" : "text-foreground/75"
+                      }`}
+                    >
+                      {link.label}
+                    </Link>
+                  ))}
+                </nav>
+              </div>
             </span>
-          ) : null}
+          )}
         </div>
       </div>
 

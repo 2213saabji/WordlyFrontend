@@ -2,7 +2,6 @@
 
 import { useEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import Loader from "@/components/Loader";
 import HomeScreen from "@/components/screens/HomeScreen";
 import PlayScreen from "@/components/screens/PlayScreen";
 import LoginScreen from "@/components/screens/LoginScreen";
@@ -14,29 +13,17 @@ import { useScreen, type Screen } from "@/lib/screen-context";
 
 const PUBLIC_BOARD = "/leaderboard/infinite";
 
-/** The public app on "/": the guest home, guest Infinite rounds (public
- * API, no token) and the sign-in screens, which open only when asked for —
- * the Log in button, or any login-only action (Play Daily,
- * groups, history), which then lands there once signed in. A signed-in
- * player is sent to the app on "/home".
+/** The guest side of "/" (see GameApp): the guest home, guest Infinite
+ * rounds (public API, no token) and the sign-in screens, which open only
+ * when asked for — the Log in button, or any login-only action (Play Daily,
+ * groups, history), which then lands there once signed in.
  *
  * `intro` is the server-rendered crawlable intro from page.tsx, shown under
  * the guest home (crawlers never sign in). */
 export default function PublicApp({ intro }: { intro: ReactNode }) {
-  const { user, loading, sessionChecked } = useAuth();
+  const { user, loading } = useAuth();
   const { screen, push, back, reset } = useScreen();
   const router = useRouter();
-
-  // Only once the server has confirmed the session: a cached user whose
-  // session is gone (revoked, expired, another backend) would otherwise be
-  // shown the signed-in app until the refresh fails — a signed-out visitor
-  // must only ever see the guest home.
-  const signedIn = !!user && sessionChecked;
-  useEffect(() => {
-    // Keeps the query, e.g. a ?replay= invite (lib/share.ts) — the
-    // signed-in app reads it.
-    if (signedIn) router.replace(`/home${window.location.search}`);
-  }, [signedIn, router]);
 
   // A refresh mid-signup (waiting for the emailed code) resumes the
   // enter-code step instead of dropping the visitor on the home page.
@@ -45,23 +32,8 @@ export default function PublicApp({ intro }: { intro: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, user]);
 
-  if (loading) {
-    // .auth-pending is hidden before first paint for a returning player with
-    // a cached session (see the inline script in app/layout.tsx) — they're
-    // on their way to "/home".
-    return (
-      <div className="auth-pending contents">
-        <Loader label="Loading…" />
-        {intro}
-      </div>
-    );
-  }
-
-  // Checking a cached session, or on the way to /home.
-  if (user) return <Loader label="Loading…" />;
-
-  // The "/home" stack once signed in: home, then `then` on top (so its Back
-  // leads home).
+  // The signed-in stack once logged in: home, then `then` on top (so its
+  // Back leads home). GameApp switches to the signed-in app by itself.
   const onSignedIn = (then?: Screen) => () => {
     reset();
     if (then) push(then);
@@ -106,8 +78,14 @@ export default function PublicApp({ intro }: { intro: ReactNode }) {
   }
 
   // "home", and any signed-in screen left on the stack (e.g. after a logout).
+  // Also the server render (auth is still `loading` there), so crawlers and
+  // first paint get the real guest home, not a loader. .auth-pending hides
+  // it before first paint for a returning player with a cached session
+  // (see the inline script in app/layout.tsx) — their signed-in screen
+  // replaces it on hydration. The wrapper stays the same element either
+  // way, so the screen isn't remounted when loading ends.
   return (
-    <>
+    <div className={loading ? "auth-pending contents" : "contents"}>
       <HomeScreen
         guest
         onPlay={toLogin({ name: "play", mode: "daily" })}
@@ -117,6 +95,6 @@ export default function PublicApp({ intro }: { intro: ReactNode }) {
         onOpenLeaderboard={() => router.push(PUBLIC_BOARD)}
       />
       {intro}
-    </>
+    </div>
   );
 }

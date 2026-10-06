@@ -95,7 +95,7 @@ const FAQS: FaqItem[] = [
   {
     question: "Do I need an account to play?",
     answer:
-      "Yes — a free account (email and password, or Google sign-in) is required so your progress, streak, and group memberships are saved between visits.",
+      "No — you can play unlimited Infinite words on the home page without an account. A free account (email and password, or Google sign-in) adds the Daily word, streaks, hints, coins, groups and the leaderboards, and saves your progress between visits.",
   },
   {
     question: "Can I play GuessWord on mobile?",
@@ -109,7 +109,12 @@ const FAQS: FaqItem[] = [
   {
     question: "Are hints available?",
     answer:
-      "Yes — after four guesses without solving the word, a hint becomes available with a short clue. It never reveals the word itself. In Infinite mode, hints are free in the Stone and Iron tiers; from Copper up, a hint costs 1,000 coins.",
+      "Yes — after four guesses without solving the word, a hint becomes available with a short clue. It never reveals the word itself. In Infinite mode, hints are free in the Stone and Iron tiers; from Copper up, a hint costs 1,000 coins. Hints need an account, so they aren't available when you play without logging in.",
+  },
+  {
+    question: "What's the best starting word?",
+    answer:
+      "It depends on the mode. Tested against GuessWord's own answer lists, IRATE, ARISE and RAISE are the strongest openers for the Daily word, RAISE and AROSE for Infinite, and TALES or TARES when you play without an account. Our best starting words guide at guessword.games/guides/best-starting-words has the full results.",
   },
 ];
 

@@ -5,17 +5,17 @@ import type { TierNumber } from "@/types";
 
 export type PlayMode = "daily" | "infinite";
 
-// One stack for both apps in the (game) route group: the public one on "/"
-// (PublicApp: guest home, guest Infinite and the sign-in screens) and the
-// signed-in one on "/home" (GameApp). Each renders only its own screens.
+// One stack for both sides of "/" (GameApp): the guest app (PublicApp:
+// guest home, guest Infinite and the sign-in screens) and the signed-in app.
+// Each renders only its own screens.
 export type Screen =
-  // pre-auth — on "/". `then` is where to land on "/home" once signed in
-  // (e.g. Play Daily from the guest home); omitted = home.
+  // pre-auth — the guest app. `then` is where to land once signed in (e.g.
+  // Play Daily from the guest home); omitted = home.
   | { name: "login"; then?: Screen }
   | { name: "signup"; then?: Screen }
   | { name: "forgot-password" }
-  // post-auth — the app itself on "/home". On "/", "home" is the guest home
-  // and "play" (infinite) the guest board.
+  // post-auth — the signed-in app. For a guest, "home" is the guest home and
+  // "play" (infinite) the guest board.
   | { name: "home" }
   | { name: "infinite-hub" } // Infinite mode's home: tier status + today's progress
   | { name: "how-tiers" } // the tier ladder and rules

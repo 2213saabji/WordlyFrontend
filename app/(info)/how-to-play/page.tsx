@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import ContentPage, { Eyebrow } from "@/components/ContentPage";
+import { Walkthrough } from "@/components/GuideParts";
 import { JsonLd, SITE_URL, breadcrumbJsonLd, pageMetadata } from "@/lib/seo";
 
 const PATH = "/how-to-play";
@@ -42,7 +43,7 @@ const howToJsonLd = {
       position: 3,
       name: "Narrow it down",
       text:
-        "Use the feedback to choose your next guess. After four guesses without solving it, a hint with a short clue becomes available. From Copper up in Infinite mode, a hint costs 1,000 coins.",
+        "Use the feedback to choose your next guess. After four guesses without solving it, signed-in players can reveal a hint with a short clue. From Copper up in Infinite mode, a hint costs 1,000 coins.",
     },
     {
       "@type": "HowToStep",
@@ -168,6 +169,44 @@ export default function HowToPlayPage() {
       </div>
 
       <div className="flex flex-col gap-5">
+        <Eyebrow>A game, step by step</Eyebrow>
+        <div className="flex flex-col gap-5 rounded-3xl border border-white/8 bg-white/4 p-6.5 text-[#c9bfcc] md:p-7">
+          <Walkthrough
+            steps={[
+              {
+                word: "slate",
+                tones: "xxgxg",
+                note: "A is in the middle and E is at the end. S, L and T aren't in the word at all.",
+              },
+              {
+                word: "brake",
+                tones: "xggxg",
+                note: "R is second. B and K are out — so the word looks like _RA_E.",
+              },
+              {
+                word: "grave",
+                tones: "gggxg",
+                note: "G starts it. Only the fourth letter is left, and V isn't it.",
+              },
+              { word: "grape", tones: "ggggg", note: "Solved in four. P was the last piece." },
+            ]}
+          />
+          <span className="text-[14.5px] leading-relaxed">
+            Each guess keeps the green letters in place and tries new letters everywhere else. Want to solve faster?
+            Our{" "}
+            <Link href="/guides/best-starting-words" className="text-accent underline hover:no-underline">
+              best starting words
+            </Link>{" "}
+            and{" "}
+            <Link href="/guides/solving-strategy" className="text-accent underline hover:no-underline">
+              solving strategy
+            </Link>{" "}
+            guides go further.
+          </span>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-5">
         <Eyebrow>Ways to play</Eyebrow>
         <div className="grid grid-cols-1 gap-px overflow-hidden rounded-3xl border border-white/8 bg-white/8 sm:grid-cols-3">
           {WAYS_TO_PLAY.map((way) => (
@@ -200,14 +239,16 @@ export default function HowToPlayPage() {
 
       <div className="flex flex-wrap items-center gap-5 rounded-3xl border border-accent/28 bg-accent/8 p-7">
         <div className="flex flex-1 flex-col gap-1.5 basis-70">
-          <span className="text-lg font-semibold">Ready for today&apos;s word?</span>
-          <span className="text-[14.5px] text-[#c9bfcc]">Your first guess is the hardest. Try a word with common vowels.</span>
+          <span className="text-lg font-semibold">Ready to play?</span>
+          <span className="text-[14.5px] text-[#c9bfcc]">
+            Infinite is free with no account. Log in any time for the Daily word, streaks and groups.
+          </span>
         </div>
         <Link
           href="/"
           className="whitespace-nowrap rounded-2xl bg-accent px-6 py-3.75 text-[15px] font-bold text-background transition-transform duration-150 hover:-translate-y-0.5"
         >
-          Play Daily
+          Play now
         </Link>
       </div>
     </ContentPage>
