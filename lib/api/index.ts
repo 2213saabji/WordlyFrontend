@@ -7,6 +7,7 @@
 //   daily-game      Daily mode (UTC day, stats/streaks)
 //   infinite-game   Infinite mode rounds and the hint endpoint
 //   infinite-tiers  Infinite tier leaderboard: tiers, status, board
+//   public-game     signed-out rounds on "/" (no token, nothing recorded)
 //   groups          create/join/leave/delete, my groups
 //   leaderboards    Daily-mode global and group leaderboards
 //   notifications   tier, coin and decay notifications
@@ -33,6 +34,7 @@ export * from "./passkeys";
 export * from "./daily-game";
 export * from "./infinite-game";
 export * from "./infinite-tiers";
+export * from "./public-game";
 export * from "./groups";
 export * from "./leaderboards";
 export * from "./notifications";

@@ -21,9 +21,10 @@ export function setCoinBalance(balance: number): void {
   for (const listener of listeners) listener(wallet);
 }
 
-/** null until the first fetch (or cached value). */
-export function useCoinBalance(): number | null {
-  const { data, setData } = useSyncedResource({ flag: "wallet", key: WALLET_CACHE_KEY, fetcher: getWallet });
+/** null until the first fetch (or cached value), and always when
+ * `enabled` is false (a signed-out visitor has no wallet). */
+export function useCoinBalance(enabled = true): number | null {
+  const { data, setData } = useSyncedResource({ flag: "wallet", key: WALLET_CACHE_KEY, fetcher: getWallet, enabled });
   useEffect(() => {
     listeners.add(setData);
     return () => {

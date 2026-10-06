@@ -58,7 +58,7 @@ const TIER_FAQS: FaqItem[] = [
   {
     question: "Where can I see the Infinite leaderboard?",
     answer:
-      "Anyone can view it at guessword.games/leaderboard/infinite, no account needed. Sign in to see your own rank and tier.",
+      "Anyone can view it at guessword.games/leaderboard/infinite, no account needed. Log in to see your own rank and tier.",
   },
   {
     question: "What are coins?",

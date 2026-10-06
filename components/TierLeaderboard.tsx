@@ -26,6 +26,7 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { readCache, writeCache } from "@/lib/cache";
+import { PUBLIC_BOARD_TIER } from "@/lib/tiers";
 import { useSyncedLoader, useSyncedResource } from "@/lib/use-synced";
 import type {
   Group,
@@ -63,12 +64,12 @@ export default function TierLeaderboard({
   /** Leave for the Daily-mode leaderboard (Global, or a group). */
   onSwitchScope?: (groupId?: string) => void;
   /** The signed-out /leaderboard/infinite page: public endpoints only, no
-   * pinned row or scope switcher, and a "Sign in to play" call to action. */
+   * pinned row or scope switcher, and a "Log in to play" call to action. */
   publicView?: { signedIn: boolean; onCta: () => void };
 }) {
   const { user } = useAuth();
   const isPublic = !!publicView;
-  const startTier = initialTier ?? (isPublic ? 1 : undefined);
+  const startTier = initialTier ?? (isPublic ? PUBLIC_BOARD_TIER : undefined);
   const cacheKeyFor = (t: TierNumber | undefined) => (isPublic ? `infinite:public-board:${t}` : boardCacheKey(t));
   const [tier, setTier] = useState<TierNumber | undefined>(startTier);
   const [board, setBoard] = useState<InfiniteLeaderboardResponse | null>(() =>
@@ -100,7 +101,7 @@ export default function TierLeaderboard({
 
   function fetchBoard(t: TierNumber | undefined, page: number) {
     return isPublic
-      ? getPublicInfiniteLeaderboard({ tier: t ?? 1, page, limit: PAGE_SIZE })
+      ? getPublicInfiniteLeaderboard({ tier: t ?? PUBLIC_BOARD_TIER, page, limit: PAGE_SIZE })
       : getInfiniteLeaderboard({ tier: t, page, limit: PAGE_SIZE });
   }
 
@@ -193,7 +194,7 @@ export default function TierLeaderboard({
         <span className="text-[13px] leading-normal text-[#c9bfcc] md:text-sm">
           {publicView.signedIn
             ? "Every completed Infinite game counts toward your tier."
-            : `Everyone starts in ${tiers?.tiers.find((t) => t.tier === 8)?.name ?? "Stone"}. Sign in and complete a game to join.`}
+            : `Everyone starts in ${tiers?.tiers.find((t) => t.tier === 8)?.name ?? "Stone"}. Log in and complete a game to join.`}
         </span>
       </span>
       <button
@@ -201,7 +202,7 @@ export default function TierLeaderboard({
         onClick={publicView.onCta}
         className="whitespace-nowrap rounded-[14px] bg-accent p-3.5 text-[15px] font-bold text-background transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-accent/25 md:px-[26px]"
       >
-        {publicView.signedIn ? "Play Infinite" : "Sign in to play"}
+        {publicView.signedIn ? "Play Infinite" : "Log in to play"}
       </button>
     </div>
   );
@@ -230,6 +231,9 @@ export default function TierLeaderboard({
   const sentinelIndex = Math.max(0, entries.length - 1 - LOAD_MORE_LOOKAHEAD);
   const podium = entries.length >= 3 ? entries.slice(0, 3).map(toNormalized) : [];
   const top = entries[0];
+  // Signed out: the call to action sits between the top-rank cards and the
+  // list, where a visitor still sees it; otherwise it closes the board.
+  const ctaAboveList = !!publicView && !publicView.signedIn && entries.length > 0;
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-5 py-6 md:gap-10 md:px-8 md:py-14">
@@ -275,6 +279,7 @@ export default function TierLeaderboard({
               <PodiumCard entry={podium[2]} rank={3} isMe={podium[2].userId === user?.id} delayMs={160} />
             </div>
           )}
+          {ctaAboveList && <div className="hidden md:block">{cta}</div>}
 
           <div className="hidden animate-fade-in-up overflow-hidden rounded-3xl border border-white/8 bg-white/[0.043] md:block">
             <div
@@ -331,8 +336,10 @@ export default function TierLeaderboard({
               <span className="ml-auto text-xs font-semibold uppercase tracking-[0.14em] text-accent">Top</span>
             </div>
           )}
+          {ctaAboveList && <div className="md:hidden">{cta}</div>}
 
-          <div className="-mt-4 flex flex-col md:hidden">
+          {/* Tucked under the hero card — unless the call to action is between them. */}
+          <div className={`flex flex-col md:hidden ${ctaAboveList ? "" : "-mt-4"}`}>
             {entries.slice(1).map((entry, i) => (
               <ListRow
                 key={entry.userId}
@@ -362,7 +369,7 @@ export default function TierLeaderboard({
         </>
       )}
 
-      {board && cta}
+      {board && !ctaAboveList && cta}
 
       {/* mobile footer */}
       {board && (

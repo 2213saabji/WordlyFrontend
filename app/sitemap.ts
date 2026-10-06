@@ -2,10 +2,11 @@ import type { MetadataRoute } from "next";
 
 const SITE_URL = "https://www.guessword.games";
 
-// The rest of the app is client-side "screens" behind one route, not
-// separate server pages — /reset-password/[token] is deliberately excluded,
-// since each link is single-use and tied to one person's reset request, not
-// a page worth search engines indexing.
+// The rest of the app is client-side "screens" behind two routes ("/" for
+// visitors, /home once signed in), not separate server pages. /home is
+// per-player and noindex, and /reset-password/[token] is deliberately
+// excluded, since each link is single-use and tied to one person's reset
+// request, not a page worth search engines indexing.
 export default function sitemap(): MetadataRoute.Sitemap {
   const lastModified = new Date();
 

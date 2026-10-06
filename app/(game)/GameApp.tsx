@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Leaderboard from "@/components/Leaderboard";
 import TierLeaderboard from "@/components/TierLeaderboard";
 import TierPromotionAnnouncer from "@/components/TierPromotionModal";
@@ -15,12 +16,8 @@ import { NotificationsScreen } from "@/components/Notifications";
 import PlayScreen from "@/components/screens/PlayScreen";
 import HistoryScreen from "@/components/screens/HistoryScreen";
 import GroupsScreen from "@/components/screens/GroupsScreen";
-import LoginScreen from "@/components/screens/LoginScreen";
-import SignupScreen from "@/components/screens/SignupScreen";
-import ForgotPasswordScreen from "@/components/screens/ForgotPasswordScreen";
 import { useAuth } from "@/lib/auth-context";
-import { readPendingSignup } from "@/lib/pending-signup";
-import { useScreen } from "@/lib/screen-context";
+import { PRE_AUTH_SCREENS, useScreen } from "@/lib/screen-context";
 import { parseReplayParam, type ReplayInvite } from "@/lib/share";
 import { runSync } from "@/lib/sync";
 
@@ -156,60 +153,36 @@ function AppShell() {
   );
 }
 
-/** `intro` is the server-rendered crawlable intro from page.tsx. Crawlers
- * never sign in, so it's shown only where they land — the first (server)
- * render and the login screen — and never to signed-in players. */
-export default function GameApp({ intro }: { intro: ReactNode }) {
+/** The signed-in app on "/home". Without a session — no saved credentials,
+ * a device session the server no longer accepts, or a logout — it sends the
+ * visitor to the public page on "/". */
+export default function GameApp() {
   const { user, loading } = useAuth();
   const { screen, reset } = useScreen();
+  const router = useRouter();
 
-  // A refresh mid-signup (waiting for the emailed code) resumes the
-  // enter-code step instead of dropping the player on the login screen.
   useEffect(() => {
-    if (!loading && !user && readPendingSignup()) reset({ name: "signup" });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, user]);
+    if (!loading && !user) router.replace("/");
+  }, [loading, user, router]);
+
+  // Sign-in screens belong to "/" — a stack left on one lands on home.
+  const preAuth = PRE_AUTH_SCREENS.includes(screen.name);
+  useEffect(() => {
+    if (user && preAuth) reset();
+  }, [user, preAuth, reset]);
 
   if (loading) {
     // .auth-pending is hidden before first paint for a returning player with
     // a cached session (see the inline script in app/layout.tsx) — they go
-    // straight to their cached screen instead of seeing this, then the intro.
+    // straight to their cached screen instead of seeing this.
     return (
       <div className="auth-pending contents">
         <Loader label="Loading…" />
-        {intro}
       </div>
     );
   }
 
-  if (!user) {
-    // Falls through to LoginScreen for "login" and for any stale post-auth
-    // screen.name (e.g. right after a logout/failed refresh) — this branch
-    // never renders authenticated content, regardless of what screen.name
-    // currently is.
-    if (screen.name === "signup") {
-      return (
-        <SignupScreen
-          onSuccess={() => reset({ name: "home" })}
-          onLogin={() => reset({ name: "login" })}
-          onForgotPassword={() => reset({ name: "forgot-password" })}
-        />
-      );
-    }
-    if (screen.name === "forgot-password") {
-      return <ForgotPasswordScreen onBack={() => reset({ name: "login" })} />;
-    }
-    return (
-      <>
-        <LoginScreen
-          onSuccess={() => reset({ name: "home" })}
-          onSignup={() => reset({ name: "signup" })}
-          onForgotPassword={() => reset({ name: "forgot-password" })}
-        />
-        {intro}
-      </>
-    );
-  }
+  if (!user || preAuth) return <Loader label="Loading…" />;
 
   return <AppShell />;
 }

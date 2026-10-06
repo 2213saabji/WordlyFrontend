@@ -5,12 +5,17 @@ import type { TierNumber } from "@/types";
 
 export type PlayMode = "daily" | "infinite";
 
+// One stack for both apps in the (game) route group: the public one on "/"
+// (PublicApp: guest home, guest Infinite and the sign-in screens) and the
+// signed-in one on "/home" (GameApp). Each renders only its own screens.
 export type Screen =
-  // pre-auth — shown when logged out
-  | { name: "login" }
-  | { name: "signup" }
+  // pre-auth — on "/". `then` is where to land on "/home" once signed in
+  // (e.g. Play Daily from the guest home); omitted = home.
+  | { name: "login"; then?: Screen }
+  | { name: "signup"; then?: Screen }
   | { name: "forgot-password" }
-  // post-auth — the app itself
+  // post-auth — the app itself on "/home". On "/", "home" is the guest home
+  // and "play" (infinite) the guest board.
   | { name: "home" }
   | { name: "infinite-hub" } // Infinite mode's home: tier status + today's progress
   | { name: "how-tiers" } // the tier ladder and rules
@@ -24,7 +29,9 @@ export type Screen =
   | { name: "leaderboard"; groupId?: string } // groupId omitted = Global leaderboard
   | { name: "tier-leaderboard"; tier?: TierNumber }; // tier omitted = the caller's own
 
-export const POST_AUTH_SCREENS: Screen["name"][] = ["home", "infinite-hub", "how-tiers", "tier-history", "diamond", "coins", "notifications", "play", "history", "groups", "leaderboard", "tier-leaderboard"];
+export const PRE_AUTH_SCREENS: Screen["name"][] = ["login", "signup", "forgot-password"];
+
+export const POST_AUTH_SCREENS: Screen["name"][] =["home", "infinite-hub", "how-tiers", "tier-history", "diamond", "coins", "notifications", "play", "history", "groups", "leaderboard", "tier-leaderboard"];
 
 interface ScreenContextValue {
   screen: Screen;

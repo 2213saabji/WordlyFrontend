@@ -36,9 +36,11 @@ import { invalidate, runSync } from "@/lib/sync";
 import { useSyncedLoader } from "@/lib/use-synced";
 import { isKnownGuess, preloadWordLists } from "@/lib/word-check";
 import HubBackLink from "@/components/HubBackLink";
+import { formatDuration } from "@/components/Leaderboard";
+import { guessPublicRound, newPublicRound, restorePublicGame } from "@/lib/public-round";
 import { wordNumberForDate } from "@/lib/share";
 import type { PlayMode } from "@/lib/screen-context";
-import type { Game, GameDifficulty, Guess, LetterResult, User } from "@/types";
+import type { Game, GameDifficulty, Guess, LetterResult, TodayProgress, User } from "@/types";
 
 const WORD_LENGTH = 5;
 const MAX_ATTEMPTS = 6;
@@ -84,6 +86,8 @@ function gameCacheKey(mode: PlayMode): string {
 // The hint stays locked until this many guesses have been submitted — it's
 // a fallback for once you're stuck, not a shortcut from guess one.
 const HINT_UNLOCK_ATTEMPT = 4;
+// Guests never get the hint — the locked icon says this instead.
+const GUEST_HINT_MESSAGE = "Log in to get hints";
 const NUMBER_WORDS = ["No", "One", "Two", "Three", "Four", "Five", "Six"];
 const NUMBER_WORDS_FULL = [
   "zero",
@@ -298,12 +302,15 @@ function HintButton({
   revealed,
   onToggle,
   onLockedClick,
+  lockedLabel = `Hint unlocks after guess ${HINT_UNLOCK_ATTEMPT}`,
 }: {
   available: boolean;
   unlocked: boolean;
   revealed: boolean;
   onToggle: () => void;
   onLockedClick: () => void;
+  /** Why it's locked — a guest's is "Log in to get hints". */
+  lockedLabel?: string;
 }) {
   if (!available) return null;
   if (!unlocked) {
@@ -311,8 +318,8 @@ function HintButton({
       <button
         type="button"
         onClick={onLockedClick}
-        aria-label={`Hint unlocks after guess ${HINT_UNLOCK_ATTEMPT}`}
-        title={`Hint unlocks after guess ${HINT_UNLOCK_ATTEMPT}`}
+        aria-label={lockedLabel}
+        title={lockedLabel}
         className="flex h-5.5 w-5.5 flex-none items-center justify-center rounded-full bg-white/5 text-foreground/30 transition-colors hover:bg-white/9"
       >
         <HintIcon />
@@ -335,19 +342,32 @@ function HintButton({
 /** Animates its own height (via a grid-template-rows transition, the
  * standard trick for animating to/from an unknown content height) rather
  * than just mounting/unmounting the text — so whatever sits below it eases
- * into the freed-up space instead of snapping up the instant this closes. */
-function HintLockedMessage({ show, className }: { show: boolean; className: string }) {
+ * into the freed-up space instead of snapping up the instant this closes.
+ * `gap` is the parent's flex gap in px: while closed, a matching negative
+ * margin cancels it, so the row is the same height whether this is mounted
+ * or not (e.g. the held row on Next word, which leaves it out). */
+function HintLockedMessage({
+  show,
+  className,
+  gap,
+  text = `Hint unlocks after guess ${HINT_UNLOCK_ATTEMPT}`,
+}: {
+  show: boolean;
+  className: string;
+  gap: number;
+  text?: string;
+}) {
   return (
     <div
-      className="grid overflow-hidden transition-[grid-template-rows] duration-[900ms] ease-in-out"
-      style={{ gridTemplateRows: show ? "1fr" : "0fr" }}
+      className="grid overflow-hidden transition-[grid-template-rows,margin] duration-[900ms] ease-in-out"
+      style={{ gridTemplateRows: show ? "1fr" : "0fr", marginBottom: show ? 0 : -gap }}
     >
       <p
         className={`min-h-0 overflow-hidden transition-all duration-[900ms] ease-in-out ${
           show ? "translate-y-0 opacity-100" : "-translate-y-3.5 opacity-0"
         } ${className}`}
       >
-        Hint unlocks after guess {HINT_UNLOCK_ATTEMPT}
+        {text}
       </p>
     </div>
   );
@@ -435,6 +455,25 @@ function KnownLettersPanel({ known }: { known: KnownLetters }) {
           Ruled out: {known.absent.map((l) => l.toUpperCase()).join(", ")}
         </span>
       )}
+    </div>
+  );
+}
+
+/** Guest board: the nudge to log in — on the result card, and in the
+ * desktop sidebar while a round is on. */
+function LoginPrompt({ onLogin, className = "" }: { onLogin: () => void; className?: string }) {
+  return (
+    <div className={`flex items-center gap-3 rounded-2xl border border-accent/25 bg-accent/10 px-4 py-3 ${className}`}>
+      <span className="flex-1 text-[13px] leading-snug text-foreground/80">
+        Log in to earn coins and climb the leaderboard
+      </span>
+      <button
+        type="button"
+        onClick={onLogin}
+        className="flex-none whitespace-nowrap rounded-lg bg-accent px-3.5 py-2 text-xs font-bold text-background transition-transform active:scale-[0.97]"
+      >
+        Log in
+      </button>
     </div>
   );
 }
@@ -748,6 +787,8 @@ export default function PlayScreen({
   onPlayInfinite,
   onOpenTierLeaderboard,
   onOpenInfiniteHub,
+  guest = false,
+  onLogin,
 }: {
   mode: PlayMode;
   onBack: () => void;
@@ -757,12 +798,21 @@ export default function PlayScreen({
   onOpenTierLeaderboard?: () => void;
   /** Infinite: Back leads to the Infinite hub. */
   onOpenInfiniteHub?: () => void;
+  /** Signed-out Infinite on "/": public rounds (lib/public-round.ts), no
+   * token sent, no tiers, coins or stats. Its leaderboard link is
+   * onOpenLeaderboard (the public board). */
+  guest?: boolean;
+  /** Guest: the "Log in to earn coins" prompts. */
+  onLogin?: () => void;
 }) {
   const { user, refreshUser } = useAuth();
   // Seeded from the last-seen board (lib/cache.ts) so a reload renders it
   // straight away instead of a loader; the fetch below revalidates it, and
-  // the server stays the authority on every guess regardless.
-  const [game, setGame] = useState<Game | null>(() => readCache<Game>(gameCacheKey(mode), { sameDay: mode === "daily" }));
+  // the server stays the authority on every guess regardless. A guest's
+  // round is restored from this tab's session instead.
+  const [game, setGame] = useState<Game | null>(() =>
+    guest ? restorePublicGame() : readCache<Game>(gameCacheKey(mode), { sameDay: mode === "daily" }),
+  );
   const [currentGuess, setCurrentGuess] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(() => game === null);
@@ -778,8 +828,8 @@ export default function PlayScreen({
 
   // Infinite tier leaderboard: tier status and today's progress. Active time
   // is counted server-side from round starts and guesses — no heartbeat.
-  // Inert for Daily.
-  const tierMode = mode === "infinite";
+  // Inert for Daily and for guests.
+  const tierMode = mode === "infinite" && !guest;
   const { me: tierMe, tiers, today, setToday, refreshMe, hintsOffFrom, paidHintsFrom } = useInfiniteTier(tierMode);
   // The tier summary for the round that just ended (from its final guess
   // response) — shown as a bottom sheet on mobile, a sidebar card on desktop.
@@ -870,18 +920,26 @@ export default function PlayScreen({
     },
   });
   useEffect(() => {
-    if (mode !== "infinite") return;
+    if (mode !== "infinite" || guest) return;
     getInfiniteCurrent()
       .then(({ game }) => setGame(game))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [mode]);
+  }, [mode, guest]);
+  // A guest picks up the round saved in this tab, else starts one.
+  useEffect(() => {
+    if (!guest || restorePublicGame()) return;
+    newPublicRound()
+      .then(setGame)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [guest]);
 
   // Every board change (initial fetch, each guess, a new infinite round) is
-  // what the next reload shows first.
+  // what the next reload shows first. (A guest's round saves itself.)
   useEffect(() => {
-    if (game) writeCache(gameCacheKey(mode), game);
-  }, [game, mode]);
+    if (game && !guest) writeCache(gameCacheKey(mode), game);
+  }, [game, mode, guest]);
 
   const hasGroup = mode === "daily" && !!user && user.groups.length > 0;
   // Only "won"/"lost" (not the null -> "in-progress" transition on initial
@@ -926,9 +984,12 @@ export default function PlayScreen({
     if (nextWordBusy.current) return;
     nextWordBusy.current = true;
     const animate = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const startRound: () => Promise<{ game: Game; today?: TodayProgress }> = guest
+      ? async () => ({ game: await newPublicRound() })
+      : startNewInfiniteRound;
     // Fetch while the old board animates out; settled into a result so a
     // failure doesn't surface as an unhandled rejection mid-animation.
-    const request = startNewInfiniteRound().then(
+    const request = startRound().then(
       (res) => ({ ok: true as const, res }),
       (err: unknown) => ({ ok: false as const, err }),
     );
@@ -967,7 +1028,7 @@ export default function PlayScreen({
       setBoardPhase("idle");
       nextWordBusy.current = false;
     }
-  }, [game, setToday]);
+  }, [game, guest, setToday]);
 
   const handleSubmitGuess = useCallback(async () => {
     if (submitting) return;
@@ -999,6 +1060,11 @@ export default function PlayScreen({
     setSubmitting(true);
     setError(null);
     try {
+      if (guest) {
+        setGame(await guessPublicRound(currentGuess));
+        setCurrentGuess("");
+        return;
+      }
       const submit = mode === "daily" ? submitGuess : submitInfiniteGuess;
       const res = await submit(currentGuess);
       const { game } = res;
@@ -1044,6 +1110,10 @@ export default function PlayScreen({
       if (err instanceof ApiRequestError) {
         // A rejected guess (too short, not a real word, etc.) is a normal
         // part of play — the shake is the feedback, no need to also show text.
+        if (guest && err.data?.code === "NOT_A_WORD") showToast("Not in word list", currentGuess);
+        // The guest round's token is missing or broken (now cleared): start over.
+        if (guest && err.data?.code === "INVALID_GAME_TOKEN") void handleNextWord();
+        // Carried by e.g. GAME_OVER: the round as the server has it.
         if (err.data?.game) setGame(err.data.game);
       } else {
         setError("Something went wrong");
@@ -1051,7 +1121,7 @@ export default function PlayScreen({
     } finally {
       setSubmitting(false);
     }
-  }, [game, mode, currentGuess, submitting, refreshUser, setToday, refreshMe, showToast]);
+  }, [game, mode, guest, currentGuess, submitting, refreshUser, setToday, refreshMe, showToast, handleNextWord]);
 
   const handleKey = useCallback(
     (key: string) => {
@@ -1104,6 +1174,7 @@ export default function PlayScreen({
       setHintRevealed(true);
     },
     onHintsOff: () => setHintsRejected(true),
+    enabled: !guest,
   });
 
   if (loading || !game) {
@@ -1142,8 +1213,13 @@ export default function PlayScreen({
   const hintText = game.hint ?? fetchedHint ?? undefined;
   const paidTier = tierMode && !finished && !hintsRejected && (hintCost ?? 0) > 0 && !paidHint.noClue;
   const hintsOff = tierMode && !finished && !game.hint && (hintCost === null || hintsRejected);
-  const hintAvailable =
-    !hintsOff && !paidTier && (!!hintText || (tierMode && !finished && hintCost === 0 && !paidHint.noClue));
+  // Guests can't use hints (even though the public round carries one): the
+  // icon stays locked for the whole round, and tapping it says why.
+  const hintAvailable = guest
+    ? !finished
+    : !hintsOff && !paidTier && (!!hintText || (tierMode && !finished && hintCost === 0 && !paidHint.noClue));
+  const hintIconUnlocked = !guest && hintUnlocked;
+  const hintLockedText = guest ? GUEST_HINT_MESSAGE : undefined;
 
   // Every Next word / New word button: hold this round's difficulty/hint
   // row on screen, then start the transition.
@@ -1152,7 +1228,7 @@ export default function PlayScreen({
     setHeldRow((h) =>
       h && !h.fading
         ? { ...h, key: Date.now() }
-        : { key: Date.now(), fading: false, difficulty: game?.difficulty, hintAvailable, hintUnlocked, hintRevealed },
+        : { key: Date.now(), fading: false, difficulty: game?.difficulty, hintAvailable, hintUnlocked: hintIconUnlocked, hintRevealed },
     );
     void handleNextWord();
   }
@@ -1180,7 +1256,7 @@ export default function PlayScreen({
   const handleBack = toHub ?? onBack;
   // The finished-round card's leaderboard link (the tier result card has
   // its own) — the board refetches, so it shows the updated rank/points.
-  const boardLink = tierMode ? onOpenTierLeaderboard : undefined;
+  const boardLink = tierMode ? onOpenTierLeaderboard : guest ? () => onOpenLeaderboard() : undefined;
   const hintsOffNotice = hintsOff && (
     <HintsOffNotice fromName={hintsOffFrom?.name} fromTier={hintsOffFrom?.tier} />
   );
@@ -1261,15 +1337,16 @@ export default function PlayScreen({
               <DifficultyBadge difficulty={game.difficulty} />
               <HintButton
                 available={hintAvailable}
-                unlocked={hintUnlocked}
+                unlocked={hintIconUnlocked}
                 revealed={hintRevealed}
                 onToggle={toggleHint}
+                lockedLabel={hintLockedText}
                 onLockedClick={() => setHintLockedMsgOpen(true)}
               />
             </div>
           )}
-          {!heldRow && hintAvailable && !hintUnlocked && (
-            <HintLockedMessage show={hintLockedMsgOpen} className="text-[13px] text-foreground/50" />
+          {!heldRow && hintAvailable && !hintIconUnlocked && (
+            <HintLockedMessage show={hintLockedMsgOpen} gap={6} className="text-[13px] text-foreground/50" text={hintLockedText} />
           )}
           <Reveal show={!!hintText && hintUnlocked && hintRevealed && boardPhase === "idle"} gap={6}>
             <p className="text-[13px] text-foreground/65">{hintText}</p>
@@ -1332,15 +1409,21 @@ export default function PlayScreen({
                   <DifficultyBadge difficulty={game.difficulty} />
                   <HintButton
                     available={hintAvailable}
-                    unlocked={hintUnlocked}
+                    unlocked={hintIconUnlocked}
                     revealed={hintRevealed}
                     onToggle={toggleHint}
+                    lockedLabel={hintLockedText}
                     onLockedClick={() => setHintLockedMsgOpen(true)}
                   />
                 </div>
               )}
-              {!heldRow && hintAvailable && !hintUnlocked && (
-                <HintLockedMessage show={hintLockedMsgOpen} className="text-[13px] leading-relaxed text-foreground/50" />
+              {!heldRow && hintAvailable && !hintIconUnlocked && (
+                <HintLockedMessage
+                  show={hintLockedMsgOpen}
+                  gap={8}
+                  className="text-[13px] leading-relaxed text-foreground/50"
+                  text={hintLockedText}
+                />
               )}
               <Reveal show={!!hintText && hintUnlocked && hintRevealed && boardPhase === "idle"} gap={8}>
                 <p className="text-[13px] leading-relaxed text-foreground/65">{hintText}</p>
@@ -1392,6 +1475,7 @@ export default function PlayScreen({
               {game.word && (
                 <p className="text-sm text-foreground/70">
                   The word was <span className="font-semibold uppercase">{game.word}</span>
+                  {guest && game.timeTakenMs != null && <> · {formatDuration(game.timeTakenMs)}</>}
                 </p>
               )}
               <WordMeaning meaning={game.wordMeaning} align="center" className="mx-auto mt-2 max-w-md" />
@@ -1413,6 +1497,7 @@ export default function PlayScreen({
                   </button>
                 )}
               </div>
+              {guest && onLogin && <LoginPrompt onLogin={onLogin} className="mt-3.5 text-left" />}
             </div>
           </Reveal>
 
@@ -1549,6 +1634,8 @@ export default function PlayScreen({
           >
             How to play
           </button>
+
+          {guest && onLogin && !finished && <LoginPrompt onLogin={onLogin} />}
         </aside>
       </div>
 

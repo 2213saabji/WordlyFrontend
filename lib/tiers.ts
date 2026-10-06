@@ -4,6 +4,11 @@
 
 import type { DemotionRule, InfiniteTiersResponse, TierNumber } from "@/types";
 
+/** The tier signed-out visitors see first — the guest home's board card and
+ * the public /leaderboard/infinite page. Stone (Tier 8): everyone starts
+ * there and most players are there; the top tiers are still nearly empty. */
+export const PUBLIC_BOARD_TIER: TierNumber = 8;
+
 // From the Figma ("How tiers work" ladder).
 export const TIER_COLORS: Record<TierNumber, string> = {
   1: "#9fd4e6", // Diamond

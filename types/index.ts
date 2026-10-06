@@ -67,7 +67,9 @@ export interface WordMeaning {
 }
 
 export interface Game {
-  mode?: "daily" | "infinite";
+  /** "public": a signed-out round (lib/api/public-game.ts) — it has no
+   * `date`, and none of the Infinite tier fields below. */
+  mode?: "daily" | "infinite" | "public";
   date: string;
   status: GameStatus;
   attemptsUsed: number;
@@ -215,7 +217,12 @@ export type ApiErrorCode =
   // cursor-paged lists (wallet transactions, score events)
   | "INVALID_CURSOR"
   // removed endpoints (verification, rewards) during their 410 release
-  | "GONE";
+  | "GONE"
+  // public game (no login)
+  | "INVALID_GUESS"
+  | "NOT_A_WORD"
+  | "INVALID_GAME_TOKEN"
+  | "GAME_OVER";
 
 export interface ApiErrorBody {
   message: string;

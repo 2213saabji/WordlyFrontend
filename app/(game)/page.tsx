@@ -1,5 +1,5 @@
 import Link from "next/link";
-import GameApp from "./GameApp";
+import PublicApp from "./PublicApp";
 
 const HIGHLIGHTS = [
   {
@@ -17,15 +17,15 @@ const HIGHLIGHTS = [
 ];
 
 export default function HomePage() {
-  return <GameApp intro={<Intro />} />;
+  return <PublicApp intro={<Intro />} />;
 }
 
-// The game itself is client-only (auth state decides which screen shows, and
-// the first server render is just a loader), so on its own this route would
-// give crawlers — which never sign in — only a loader and a login form. This
-// visible intro is rendered on the server and handed to GameApp, which shows
-// it under the login screen only; home-page metadata comes from the root
-// layout. Headings start at <h2> since the login screen already has the <h1>.
+// The public page is client-rendered (auth state decides whether to send a
+// signed-in player on to /home, and the first server render is just a
+// loader), so on its own it would give crawlers only a loader. This visible
+// intro is rendered on the server and handed to PublicApp, which shows it
+// under the guest home; home-page metadata comes from the root layout.
+// Headings start at <h2> since the home screen already has the <h1>.
 function Intro() {
   return (
     <section

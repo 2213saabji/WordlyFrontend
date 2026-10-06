@@ -35,14 +35,17 @@ export function usePaidHint({
   hintCost,
   onRevealed,
   onHintsOff,
+  enabled = true,
 }: {
   gameId?: string;
   hintCost: number;
   onRevealed: (hint: string) => void;
   /** 403 HINTS_DISABLED_FOR_TIER — show the hints-off notice instead. */
   onHintsOff: () => void;
+  /** false on the signed-out board: no wallet to load. */
+  enabled?: boolean;
 }) {
-  const balance = useCoinBalance();
+  const balance = useCoinBalance(enabled);
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);

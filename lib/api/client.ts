@@ -131,9 +131,9 @@ function clearSession(): void {
 }
 
 function redirectToLogin(): void {
-  // The login screen lives at "/" (it's part of the single-page app, not a
-  // separate route). Of the other real routes, /reset-password/[token] never
-  // makes an authenticated call.
+  // To the public page on "/", where the login screen lives (part of the
+  // public app, not a separate route) — the signed-in app on /home would
+  // send them there anyway. "/" itself only makes token-free calls.
   if (typeof window !== "undefined" && window.location.pathname !== "/") {
     // Plain module outside the React tree (no useRouter here); a hard
     // navigation also clears any in-memory state left over from the expired

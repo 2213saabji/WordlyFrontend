@@ -1,8 +1,9 @@
 "use client";
 
-import { type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { getMyGroups, getGlobalWeeklyLeaderboard } from "@/lib/api";
+import { getMyGroups, getGlobalWeeklyLeaderboard, getPublicInfiniteLeaderboard } from "@/lib/api";
+import { PUBLIC_BOARD_TIER } from "@/lib/tiers";
 import { useSyncedResource } from "@/lib/use-synced";
 import type { Group, WeeklyLeaderboardEntry } from "@/types";
 
@@ -103,6 +104,40 @@ function SkeletonRows({ count = 4 }: { count?: number }) {
   );
 }
 
+/** One row of the desktop leaderboard card. */
+interface BoardRow {
+  userId: string;
+  rank: number;
+  username: string;
+  meta: string;
+}
+
+/** Guest: the top 4 of the public Infinite board's starting tier (Stone —
+ * the same tier /leaderboard/infinite opens on), sent without a token. Not
+ * synced or cached — both are per signed-in player. undefined while
+ * loading, null if it failed. */
+function usePublicTierBoard(enabled: boolean) {
+  const [board, setBoard] = useState<{ rows: BoardRow[] } | null | undefined>(undefined);
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    getPublicInfiniteLeaderboard({ tier: PUBLIC_BOARD_TIER, limit: 4 })
+      .then((res) => {
+        if (cancelled) return;
+        setBoard({
+          rows: res.leaderboard.map((e) => ({ userId: e.userId, rank: e.rank, username: e.username, meta: `${e.score} pts` })),
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setBoard(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled]);
+  return board;
+}
+
 function Stat({ value, label }: { value: string | number; label: string }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -182,12 +217,18 @@ export default function HomeScreen({
   onHistory,
   onGroups,
   onOpenLeaderboard,
+  guest = false,
 }: {
   onPlay: () => void;
   onPlayInfinite: () => void;
   onHistory: () => void;
   onGroups: () => void;
   onOpenLeaderboard: (groupId?: string) => void;
+  /** Signed-out visitor on "/": same screen, but Play Infinite is the
+   * highlighted button, nothing personal is fetched (the board card shows
+   * the public Stone tier board, fetched without a token), and the parent
+   * routes every login-only action to the login screen. */
+  guest?: boolean;
 }) {
   const { user } = useAuth();
   // Cached from the last visit and only refetched when /sync reports a
@@ -195,6 +236,7 @@ export default function HomeScreen({
   const groupsRes = useSyncedResource({
     flag: "mine",
     key: GROUPS_CACHE_KEY,
+    enabled: !guest,
     // Only the top 4 are ever shown here (see the .slice(0, 4) below), but
     // `pagination.total` still reports the true count across all of the
     // user's groups regardless of the requested limit — used for the "N
@@ -209,9 +251,26 @@ export default function HomeScreen({
   const weekly: WeeklyLeaderboardEntry[] | null = useSyncedResource({
     flag: "weekly",
     key: WEEKLY_CACHE_KEY,
+    enabled: !guest,
     // Only the top 4 are shown, so request just that.
     fetcher: async () => (await getGlobalWeeklyLeaderboard({ limit: 4 })).leaderboard,
   }).data;
+  // The desktop board card: the global weekly board when signed in, the
+  // Stone tier board for a guest. Rows are null while loading.
+  const publicBoard = usePublicTierBoard(guest);
+  const boardRows: BoardRow[] | null = guest
+    ? (publicBoard?.rows ?? null)
+    : (weekly?.map((e) => ({
+        userId: e.userId,
+        rank: e.rank,
+        username: e.username,
+        meta: e.avgAttempts != null ? `avg ${e.avgAttempts.toFixed(1)}g` : `${e.gamesWon} wins`,
+      })) ?? null);
+  const boardFailed = guest && publicBoard === null;
+  // A guest's card is still headed "Global" (the user's call) — without
+  // "this week", since tier points aren't a weekly count.
+  const boardTitle = guest ? "🌍 Global" : "🌍 Global · this week";
+  const boardEmpty = guest ? "Nobody is on the board yet." : "Nobody has finished a game this week yet.";
 
   const winRate =
     user && user.stats.gamesPlayed > 0
@@ -223,7 +282,14 @@ export default function HomeScreen({
   // Once today's daily word is finished, the headline and the highlighted
   // button point at Infinite instead.
   const dailyDone = playedDailyToday(user?.stats.lastPlayedDate);
-  const headline = dailyDone ? (
+  // A guest's one thing to do without an account is Infinite.
+  const headline = guest ? (
+    <>
+      Play Infinite.
+      <br />
+      <span className="font-bold">No login.</span>
+    </>
+  ) : dailyDone ? (
     <>
       Daily done. Now
       <br />
@@ -250,13 +316,15 @@ export default function HomeScreen({
           {/* desktop headline */}
           <div className="hidden animate-fade-in-up flex-col gap-4 md:flex">
             <span className="text-xs font-semibold uppercase tracking-[0.18em] text-foreground/50">
-              {todayLabel()} · {dailyDone ? "Daily complete" : "Daily word"}
+              {todayLabel()} · {guest ? "Free to play" : dailyDone ? "Daily complete" : "Daily word"}
             </span>
             <h1 className="max-w-lg text-[56px] font-light leading-[1.05] tracking-tight lg:text-[64px]">{headline}</h1>
             <p className="max-w-md text-base leading-relaxed text-foreground/65">
-              {dailyDone
-                ? "A new daily word lands at midnight. Until then, Infinite has endless words: earn points and climb the tiers."
-                : "Five letters, six tries, a new word at midnight. Play alone or race the groups you're in."}
+              {guest
+                ? "Five letters, six tries, as many words as you like. Log in for the Daily word, streaks, groups and the tier leaderboard."
+                : dailyDone
+                  ? "A new daily word lands at midnight. Until then, Infinite has endless words: earn points and climb the tiers."
+                  : "Five letters, six tries, a new word at midnight. Play alone or race the groups you're in."}
             </p>
           </div>
 
@@ -280,8 +348,9 @@ export default function HomeScreen({
 
           {/* play buttons */}
           <div className="flex animate-fade-in-up flex-col gap-3 sm:flex-row" style={{ animationDelay: "180ms" }}>
-            <PlayButton icon={<CalendarIcon />} label="Play Daily" primary={!dailyDone} onClick={onPlay} />
-            <PlayButton icon={<InfinityIcon />} label="Play Infinite" primary={dailyDone} onClick={onPlayInfinite} />
+            {/* A guest can only play Infinite without logging in. */}
+            <PlayButton icon={<CalendarIcon />} label="Play Daily" primary={!guest && !dailyDone} onClick={onPlay} />
+            <PlayButton icon={<InfinityIcon />} label="Play Infinite" primary={guest || dailyDone} onClick={onPlayInfinite} />
           </div>
 
           {/* stats */}
@@ -298,17 +367,22 @@ export default function HomeScreen({
 
           {/* mobile-only menu rows */}
           <div className="flex animate-fade-in-up flex-col md:hidden" style={{ animationDelay: "300ms" }}>
-            <MenuRow icon={<UsersIcon />} label="Groups" meta={groups ? `${groupsTotal} active` : "…"} onClick={onGroups} />
+            <MenuRow
+              icon={<UsersIcon />}
+              label="Groups"
+              meta={guest ? "Log in" : groups ? `${groupsTotal} active` : "…"}
+              onClick={onGroups}
+            />
             <MenuRow
               icon={<TrophyIcon />}
               label="Leaderboard"
-              meta="Global · weekly"
+              meta={guest ? "Infinite · tiers" : "Global · weekly"}
               onClick={goToGlobalLeaderboard}
             />
             <MenuRow
               icon={<HistoryIcon />}
               label="History"
-              meta={user ? `${user.stats.gamesPlayed} words` : "…"}
+              meta={guest ? "Log in" : user ? `${user.stats.gamesPlayed} words` : "…"}
               onClick={onHistory}
             />
           </div>
@@ -318,7 +392,7 @@ export default function HomeScreen({
         <div className="hidden animate-fade-in-up flex-col gap-4 md:flex" style={{ animationDelay: "320ms" }}>
           <div className="flex flex-col gap-4 rounded-[26px] border border-border bg-surface p-7">
             <div className="flex items-center justify-between">
-              <span className="text-[15.5px] font-semibold">🌍 Global · this week</span>
+              <span className="text-[15.5px] font-semibold">{boardTitle}</span>
               <button
                 type="button"
                 onClick={goToGlobalLeaderboard}
@@ -328,8 +402,8 @@ export default function HomeScreen({
               </button>
             </div>
             <div className="flex flex-col">
-              {weekly && weekly.length > 0 ? (
-                weekly.slice(0, 4).map((entry, i) => {
+              {boardRows && boardRows.length > 0 ? (
+                boardRows.slice(0, 4).map((entry, i) => {
                   const isMe = entry.userId === user?.id;
                   return (
                     <div
@@ -341,14 +415,14 @@ export default function HomeScreen({
                     >
                       <span className={`w-5 text-xs ${isMe ? "text-accent" : "text-foreground/50"}`}>{entry.rank}</span>
                       <span className={`text-[15px] font-semibold ${isMe ? "text-accent" : ""}`}>{entry.username}</span>
-                      <span className={`ml-auto text-sm ${isMe ? "text-accent" : "text-foreground/65"}`}>
-                        {entry.avgAttempts != null ? `avg ${entry.avgAttempts.toFixed(1)}g` : `${entry.gamesWon} wins`}
-                      </span>
+                      <span className={`ml-auto text-sm ${isMe ? "text-accent" : "text-foreground/65"}`}>{entry.meta}</span>
                     </div>
                   );
                 })
-              ) : weekly ? (
-                <p className="animate-fade-in py-2 text-sm text-foreground/55">Nobody has finished a game this week yet.</p>
+              ) : boardRows ? (
+                <p className="animate-fade-in py-2 text-sm text-foreground/55">{boardEmpty}</p>
+              ) : boardFailed ? (
+                <p className="animate-fade-in py-2 text-sm text-foreground/55">The leaderboard couldn&apos;t load right now.</p>
               ) : (
                 <SkeletonRows />
               )}
@@ -358,7 +432,9 @@ export default function HomeScreen({
           <div className="flex flex-col gap-3.5 rounded-[26px] border border-border bg-surface p-7">
             <span className="text-[15.5px] font-semibold">Your groups</span>
             <div className="flex flex-col">
-              {groups === null ? (
+              {guest ? (
+                <p className="animate-fade-in py-1 text-sm text-foreground/55">Log in to see your groups.</p>
+              ) : groups === null ? (
                 <SkeletonRows />
               ) : groups.length > 0 ? (
                 groups.slice(0, 4).map((group, i) => (

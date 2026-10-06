@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Sora, Geist_Mono, Space_Grotesk } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import { JsonLd, SITE_NAME, SITE_URL } from "@/lib/seo";
 
@@ -52,6 +53,11 @@ export const metadata: Metadata = {
     "word game tiers",
   ],
   category: "games",
+  // AdSense site verification — the ad script itself isn't in the server
+  // HTML any more (it loads after hydration; see RootLayout).
+  other: {
+    "google-adsense-account": ADSENSE_CLIENT,
+  },
   formatDetection: {
     telephone: false,
   },
@@ -156,30 +162,34 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       suppressHydrationWarning
     >
       <head>
-        {/* The server can't see localStorage, so the game's server HTML is
-            always its "checking your session" loader. A returning player
-            with a cached session (lib/cache.ts) gets that placeholder hidden
-            before first paint instead of flashing it until hydration, when
-            AuthProvider swaps in the cached user. Must match the check in
-            AuthProvider's bootstrap. */}
+        {/* The server can't see localStorage, so the game's server HTML (on
+            "/" and "/home") is always its "checking your session" loader. A
+            returning player with a cached session (lib/cache.ts) gets that
+            placeholder hidden before first paint instead of flashing it
+            until hydration, when AuthProvider swaps in the cached user. Must
+            match the check in AuthProvider's bootstrap. */}
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){try{if(localStorage.getItem("guessword_device_id")&&localStorage.getItem("guessword_cache:user"))document.documentElement.setAttribute("data-cached-session","")}catch(e){}})()`,
           }}
-        />
-        {/* Google AdSense — site verification and ads. The root layout wraps
-            every URL, and the game's screens all live on "/", so this one
-            tag covers every page. Publisher ID matches public/ads.txt. */}
-        <script
-          async
-          src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}`}
-          crossOrigin="anonymous"
         />
       </head>
       {/* Third-party scripts (AdSense, its consent message) and browser
           extensions add attributes to <body> before React hydrates. This only
           ignores <body>'s own attributes — its children are still checked. */}
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
+        {/* Google AdSense ads. The root layout wraps every URL, so this one
+            tag covers every page. Publisher ID matches public/ads.txt.
+            Loaded after hydration (next/script's default): as a plain <head>
+            tag it could run first and insert its own <script> into <head>,
+            which React then hit in place of the inline script above — a
+            hydration mismatch that re-rendered the whole page. Site
+            verification is the google-adsense-account meta tag instead. */}
+        <Script
+          src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}`}
+          crossOrigin="anonymous"
+          strategy="afterInteractive"
+        />
         <JsonLd data={structuredData} />
         {children}
       </body>
