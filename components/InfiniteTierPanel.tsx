@@ -207,6 +207,7 @@ export function TierResultCard({
 
   return (
     <div
+      data-tour="tier-result"
       className={`flex flex-col ${
         card
           ? "gap-[22px] rounded-[26px] border border-white/10 bg-[#1f1725] p-[30px]"

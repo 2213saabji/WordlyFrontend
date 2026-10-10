@@ -164,16 +164,20 @@ function PlayButton({
   label,
   primary,
   onClick,
+  tour,
 }: {
   icon: ReactNode;
   label: string;
   primary: boolean;
   onClick: () => void;
+  /** Training spotlight target (components/Training.tsx). */
+  tour?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      data-tour={tour}
       className={`flex flex-1 items-center gap-3.5 rounded-2xl px-6 py-5 transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] ${
         primary
           ? "bg-accent text-background shadow-lg shadow-accent/25 hover:shadow-xl hover:shadow-accent/35"
@@ -361,13 +365,14 @@ export default function HomeScreen({
           {/* play buttons */}
           <div className="flex animate-fade-in-up flex-col gap-3 sm:flex-row" style={{ animationDelay: "180ms" }}>
             {/* A guest can only play Infinite without logging in. */}
-            <PlayButton icon={<CalendarIcon />} label="Play Daily" primary={!guest && !dailyDone} onClick={onPlay} />
-            <PlayButton icon={<InfinityIcon />} label="Play Infinite" primary={guest || dailyDone} onClick={onPlayInfinite} />
+            <PlayButton icon={<CalendarIcon />} label="Play Daily" primary={!guest && !dailyDone} onClick={onPlay} tour="home-daily" />
+            <PlayButton icon={<InfinityIcon />} label="Play Infinite" primary={guest || dailyDone} onClick={onPlayInfinite} tour="home-infinite" />
           </div>
 
           {/* stats */}
           {user && (
             <div
+              data-tour="home-stats"
               className="grid animate-fade-in-up grid-cols-3 gap-4 border-t border-border pt-6"
               style={{ animationDelay: "240ms" }}
             >
@@ -378,7 +383,7 @@ export default function HomeScreen({
           )}
 
           {/* mobile-only menu rows */}
-          <div className="flex animate-fade-in-up flex-col md:hidden" style={{ animationDelay: "300ms" }}>
+          <div data-tour="home-more" className="flex animate-fade-in-up flex-col md:hidden" style={{ animationDelay: "300ms" }}>
             <MenuRow
               icon={<UsersIcon />}
               label="Groups"
@@ -401,7 +406,7 @@ export default function HomeScreen({
         </div>
 
         {/* right column — desktop only */}
-        <div className="hidden animate-fade-in-up flex-col gap-4 md:flex" style={{ animationDelay: "320ms" }}>
+        <div data-tour="home-more" className="hidden animate-fade-in-up flex-col gap-4 md:flex" style={{ animationDelay: "320ms" }}>
           <div className="flex flex-col gap-4 rounded-[26px] border border-border bg-surface p-7">
             <div className="flex items-center justify-between">
               <span className="text-[15.5px] font-semibold">{boardTitle}</span>

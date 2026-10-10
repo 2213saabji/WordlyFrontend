@@ -52,6 +52,7 @@ export default function InfiniteHubScreen({
       <button
         type="button"
         onClick={onPlay}
+        data-tour="hub-play"
         className="rounded-2xl bg-accent px-6 py-4 text-[15.5px] font-bold text-background transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-accent/25 active:translate-y-0 active:scale-[0.98] md:order-2 md:rounded-[14px] md:px-[26px] md:py-[13px] md:text-[14.5px]"
       >
         Play next word
@@ -194,7 +195,7 @@ export default function InfiniteHubScreen({
             </span>
           } />
 
-        <div className={`mt-4 flex flex-col gap-[18px] p-[22px] ${CARD}`}>
+        <div data-tour="hub-tier" className={`mt-4 flex flex-col gap-[18px] p-[22px] ${CARD}`}>
           <div className="flex items-center gap-3.5">
             <TierBadge tier={me.tier} size="lg" />
             <span className="flex flex-col gap-[3px]">
@@ -215,7 +216,7 @@ export default function InfiniteHubScreen({
           </div>
         </div>
 
-        <div className={`mt-3.5 flex flex-col gap-4 px-[22px] py-5 ${CARD}`}>
+        <div data-tour="hub-today" className={`mt-3.5 flex flex-col gap-4 px-[22px] py-5 ${CARD}`}>
           <div className="flex items-baseline justify-between">
             <span className="text-sm font-semibold">Today</span>
             <span className={`text-xs ${MUTED}`}>{resetLabel}</span>
@@ -250,7 +251,7 @@ export default function InfiniteHubScreen({
       </div>
 
       <div className="hidden grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] gap-5 md:grid">
-        <div className={`flex flex-col gap-5 p-[30px] ${CARD}`}>
+        <div data-tour="hub-tier" className={`flex flex-col gap-5 p-[30px] ${CARD}`}>
           <CounterHeading stickDays={me.counter.stickDays} daysToStick={me.counter.daysToStick} large />
           <StickBar stickDays={me.counter.stickDays} daysToStick={me.counter.daysToStick} large />
           <span className={`text-sm ${MUTED}`}>{counterText}</span>
@@ -265,7 +266,7 @@ export default function InfiniteHubScreen({
           </div>
         </div>
 
-        <div className={`flex flex-col gap-5 p-[30px] ${CARD}`}>
+        <div data-tour="hub-today" className={`flex flex-col gap-5 p-[30px] ${CARD}`}>
           <div className="flex items-baseline justify-between">
             <span className="text-[17px] font-semibold">Today</span>
             <span className={`text-[13px] ${MUTED}`}>{resetLabel}</span>
@@ -485,6 +486,7 @@ function AtRiskView({
     <button
       type="button"
       onClick={onPlay}
+      data-tour="hub-play"
       className="rounded-2xl bg-accent p-4 text-[15.5px] font-bold text-background transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-accent/25 active:translate-y-0 active:scale-[0.98] md:whitespace-nowrap md:rounded-[14px] md:px-[26px] md:py-[13px] md:text-[14.5px]"
     >
       Play now

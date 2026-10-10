@@ -69,6 +69,13 @@ export function updateUsername(username: string): Promise<{ user: User }> {
   return apiFetch("/auth/username", { method: "PATCH", body: { username } });
 }
 
+/** `true` once the player finishes the in-app training, `false` to show it
+ * again. Returns the updated user — apply that object. 400 if `completed`
+ * isn't a boolean. */
+export function setTrainingCompleted(completed: boolean): Promise<{ user: User }> {
+  return apiFetch("/auth/training", { method: "PATCH", body: { completed } });
+}
+
 /** idToken is the signed JWT credential from Google Identity Services — the
  * backend verifies it against Google itself, so nothing decoded from it
  * client-side (email, name, ...) is ever sent instead. Same deviceId scheme

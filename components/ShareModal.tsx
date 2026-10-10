@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { buildReplayLink, buildShareText, resultRows } from "@/lib/share";
 import { canvasToPngBlob, IMAGE_DIMENSIONS, renderShareImage, type ImageFormat } from "@/lib/share-image";
+import { useReportShareOpen } from "@/lib/training";
 import type { Game, User } from "@/types";
 
 type Tab = "text" | "image" | "link";
@@ -83,6 +84,7 @@ export default function ShareModal({
   const [imageFormat, setImageFormat] = useState<ImageFormat>("square");
   const [replayEnabled, setReplayEnabled] = useState(true);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  useReportShareOpen();
 
   const rows = resultRows(game);
   const shareText = buildShareText(game, wordNumber);
@@ -154,13 +156,16 @@ export default function ShareModal({
   const dims = IMAGE_DIMENSIONS[imageFormat];
 
   return (
-    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center overflow-y-auto scrollbar-none bg-background/95 p-4 backdrop-blur-sm [&::-webkit-scrollbar]:hidden">
+    <div
+      data-tour="share-modal"
+      className="absolute inset-0 z-20 flex flex-col items-center justify-center overflow-y-auto scrollbar-none bg-background/95 p-4 backdrop-blur-sm [&::-webkit-scrollbar]:hidden">
       <div className="flex w-full max-w-xl animate-fade-in-up flex-col gap-6 rounded-[26px] border border-white/10 bg-surface p-7.5 shadow-sm">
         <div className="flex items-center gap-3.5">
           <span className="text-xl font-semibold tracking-tight">Share your result</span>
           <button
             type="button"
             onClick={onClose}
+            data-tour="share-close"
             aria-label="Close"
             className="ml-auto flex h-8 w-8 flex-none items-center justify-center rounded-[11px] bg-white/7 text-foreground/60 transition-colors hover:bg-white/12 hover:text-foreground"
           >
@@ -168,7 +173,7 @@ export default function ShareModal({
           </button>
         </div>
 
-        <div className="flex gap-1 rounded-[14px] border border-white/8 bg-white/5 p-1">
+        <div data-tour="share-tabs" className="flex gap-1 rounded-[14px] border border-white/8 bg-white/5 p-1">
           {(["text", "image", "link"] as const).map((t) => (
             <button
               key={t}

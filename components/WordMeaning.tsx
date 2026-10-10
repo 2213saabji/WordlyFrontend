@@ -15,11 +15,14 @@ export default function WordMeaning({
   lines = 3,
   align = "start",
   className = "",
+  tour,
 }: {
   meaning: WordMeaningData | null | undefined;
   lines?: keyof typeof CLAMP;
   align?: "start" | "center";
   className?: string;
+  /** `data-tour` marker for the training spotlight. */
+  tour?: string;
 }) {
   const textRef = useRef<HTMLParagraphElement>(null);
   const [expanded, setExpanded] = useState(false);
@@ -38,7 +41,7 @@ export default function WordMeaning({
   if (!meaning?.meaning) return null;
 
   return (
-    <div className={`flex flex-col gap-1 ${align === "center" ? "items-center text-center" : "items-start"} ${className}`}>
+    <div data-tour={tour} className={`flex flex-col gap-1 ${align === "center" ? "items-center text-center" : "items-start"} ${className}`}>
       <span className="text-xs text-foreground/50">
         <span className="font-semibold uppercase tracking-[0.14em]">Word meaning</span>
         {meaning.partOfSpeech && <span className="italic"> · {meaning.partOfSpeech}</span>}

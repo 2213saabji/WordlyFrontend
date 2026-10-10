@@ -547,7 +547,7 @@ export default function Leaderboard({
             {groupId ? title : "🌍 Worldwide"} {data ? `· ${data.subtitle}` : ""}
           </span>
         </div>
-        <div className="flex flex-wrap items-center gap-2 pl-12 md:pl-0">
+        <div data-tour="lb-controls" className="flex flex-wrap items-center gap-2 pl-12 md:pl-0">
           <PeriodToggle
             options={PERIOD_OPTIONS}
             value={period}
@@ -583,6 +583,7 @@ export default function Leaderboard({
               )}
 
               <div
+                data-tour="lb-list"
                 className="hidden animate-fade-in-up overflow-hidden rounded-3xl border border-border bg-surface md:block"
                 style={{ animationDelay: "80ms" }}
               >
@@ -632,7 +633,7 @@ export default function Leaderboard({
 
               {/* mobile: hero card for #1 + flat list from #2 */}
               {top && (
-                <div className="animate-fade-in-up md:hidden">
+                <div data-tour="lb-list" className="animate-fade-in-up md:hidden">
                   <div className="flex items-center gap-3.5 rounded-[22px] border border-accent/35 bg-accent/10 p-5">
                     <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-accent text-lg font-bold text-background">
                       {initial(top.username)}

@@ -39,6 +39,7 @@ export default function Keyboard({
 
   return (
     <div
+      data-tour="keyboard"
       className="mx-auto flex w-full max-w-lg animate-fade-in-up flex-col gap-1.5"
       style={{ animationDelay: "150ms" }}
     >

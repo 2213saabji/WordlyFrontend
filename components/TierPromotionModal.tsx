@@ -229,11 +229,14 @@ function PromotionScreen({
       ? `${from.daysToStick} qualifying days in a row in ${fromName}. `
       : "";
 
+  // data-tour-allow: this opens by itself, so it stays usable during the
+  // training's click lock (components/Training.tsx).
   return (
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="promotion-title"
+      data-tour-allow
       className="fixed inset-0 z-40 flex animate-fade-in flex-col bg-background md:items-center md:justify-center md:bg-[#09060b]/55 md:p-14"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();

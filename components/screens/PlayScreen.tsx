@@ -32,6 +32,7 @@ import { hintCostOf } from "@/lib/tiers";
 import { useAuth } from "@/lib/auth-context";
 import { readCache, writeCache } from "@/lib/cache";
 import { setCoinBalance } from "@/lib/coins";
+import { PlayStateReporter } from "@/lib/training";
 import { invalidate, runSync } from "@/lib/sync";
 import { useSyncedLoader } from "@/lib/use-synced";
 import { isKnownGuess, preloadWordLists } from "@/lib/word-check";
@@ -318,6 +319,7 @@ function HintButton({
       <button
         type="button"
         onClick={onLockedClick}
+        data-tour="hint-locked"
         aria-label={lockedLabel}
         title={lockedLabel}
         className="flex h-5.5 w-5.5 flex-none items-center justify-center rounded-full bg-white/5 text-foreground/30 transition-colors hover:bg-white/9"
@@ -330,6 +332,7 @@ function HintButton({
     <button
       type="button"
       onClick={onToggle}
+      data-tour="hint-bulb"
       aria-label={revealed ? "Hide hint" : "Show hint"}
       title={revealed ? "Hide hint" : "Show hint"}
       className="flex h-5.5 w-5.5 flex-none items-center justify-center rounded-full bg-white/8 text-foreground/60 transition-colors hover:bg-white/14 hover:text-accent"
@@ -592,11 +595,11 @@ function DailyRevealScreen({
   );
 
   const primaryAction = won
-    ? { label: "Share result", onClick: () => setShareOpen(true), icon: <ShareIcon /> }
-    : { label: "Play Infinite", onClick: onPlayInfinite, icon: null };
+    ? { label: "Share result", onClick: () => setShareOpen(true), icon: <ShareIcon />, tour: "daily-share" }
+    : { label: "Play Infinite", onClick: onPlayInfinite, icon: null, tour: undefined };
   const secondaryAction = won
-    ? { label: "Play Infinite", onClick: onPlayInfinite }
-    : { label: "Share result", onClick: () => setShareOpen(true) };
+    ? { label: "Play Infinite", onClick: onPlayInfinite, tour: undefined }
+    : { label: "Share result", onClick: () => setShareOpen(true), tour: "daily-share" };
 
   return (
     <div className="relative mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-4 md:px-10 md:py-10">
@@ -637,7 +640,7 @@ function DailyRevealScreen({
             <span className="text-[34px] font-bold uppercase leading-none tracking-[0.06em]">{game.word}</span>
             <DifficultyBadge difficulty={game.difficulty} />
           </div>
-          <span className="ml-auto flex flex-none flex-col items-end gap-1.5">
+          <span data-tour="daily-streak" className="ml-auto flex flex-none flex-col items-end gap-1.5">
             {won ? (
               <span className="whitespace-nowrap rounded-full bg-accent/15 px-3.25 py-1.75 text-[13px] font-bold text-accent">
                 {user.stats.currentStreak} day streak
@@ -653,7 +656,7 @@ function DailyRevealScreen({
           </span>
         </div>
 
-        <WordMeaning meaning={game.wordMeaning} />
+        <WordMeaning meaning={game.wordMeaning} tour="daily-meaning" />
 
         <ResultProgressBar count={game.guesses.length} won={won} />
 
@@ -680,6 +683,7 @@ function DailyRevealScreen({
           <button
             type="button"
             onClick={primaryAction.onClick}
+            data-tour={primaryAction.tour}
             className="flex-1 rounded-2xl bg-accent py-4 text-center text-[15.5px] font-bold text-background shadow-sm shadow-accent/30 transition-transform active:scale-[0.98]"
           >
             {primaryAction.label}
@@ -687,6 +691,7 @@ function DailyRevealScreen({
           <button
             type="button"
             onClick={secondaryAction.onClick}
+            data-tour={secondaryAction.tour}
             className="whitespace-nowrap rounded-2xl border border-border bg-white/7 px-5 py-4 text-[15.5px] font-semibold transition-colors hover:bg-white/12"
           >
             {secondaryAction.label}
@@ -694,6 +699,7 @@ function DailyRevealScreen({
           <button
             type="button"
             onClick={() => onOpenLeaderboard(groupDaily?.groupId)}
+            data-tour="daily-leaderboard"
             aria-label="Leaderboard"
             className="flex flex-none items-center justify-center rounded-2xl border border-border bg-white/7 px-4.5 py-4 text-foreground/80 transition-colors hover:bg-white/12"
           >
@@ -716,14 +722,14 @@ function DailyRevealScreen({
               {eyebrow}
             </span>
             <span className="text-[64px] font-bold uppercase leading-none tracking-[0.06em]">{game.word}</span>
-            <WordMeaning meaning={game.wordMeaning} className="max-w-md" />
+            <WordMeaning meaning={game.wordMeaning} className="max-w-md" tour="daily-meaning" />
             <span className="flex items-center gap-2.5 text-[15px] text-foreground/65">
               Word no. {wordNumber} · {formattedDate}
               <DifficultyBadge difficulty={game.difficulty} />
             </span>
           </div>
 
-          <div className="grid grid-cols-3 gap-4.5 border-y border-white/10 py-6">
+          <div data-tour="daily-streak" className="grid grid-cols-3 gap-4.5 border-y border-white/10 py-6">
             {stats.map((s) => (
               <span key={s.label} className="flex flex-col gap-1.25">
                 <span
@@ -742,6 +748,7 @@ function DailyRevealScreen({
             <button
               type="button"
               onClick={primaryAction.onClick}
+              data-tour={primaryAction.tour}
               className="flex items-center gap-2.5 whitespace-nowrap rounded-2xl bg-accent px-6.5 py-4 text-[15.5px] font-bold text-background shadow-sm shadow-accent/30 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 active:scale-[0.98]"
             >
               {primaryAction.icon}
@@ -750,6 +757,7 @@ function DailyRevealScreen({
             <button
               type="button"
               onClick={secondaryAction.onClick}
+              data-tour={secondaryAction.tour}
               className="whitespace-nowrap rounded-2xl border border-border bg-white/7 px-6.5 py-4 text-[15.5px] font-semibold transition-colors hover:bg-white/12"
             >
               {secondaryAction.label}
@@ -757,6 +765,7 @@ function DailyRevealScreen({
             <button
               type="button"
               onClick={() => onOpenLeaderboard(groupDaily?.groupId)}
+              data-tour="daily-leaderboard"
               className="flex items-center gap-2.5 whitespace-nowrap rounded-2xl border border-border bg-white/7 px-6.5 py-4 text-[15.5px] font-semibold transition-colors hover:bg-white/12"
             >
               <LeaderboardIcon />
@@ -1187,16 +1196,26 @@ export default function PlayScreen({
 
   if (mode === "daily" && finished && user && wordNumber !== null) {
     return (
-      <DailyRevealScreen
-        game={game}
-        user={user}
-        won={won}
-        wordNumber={wordNumber}
-        groupDaily={groupDaily}
-        onBack={onBack}
-        onPlayInfinite={onPlayInfinite}
-        onOpenLeaderboard={onOpenLeaderboard}
-      />
+      <>
+        <PlayStateReporter
+          mode={mode}
+          status={game.status}
+          guesses={game.guesses.length}
+          tierResult={false}
+          hintBulb={false}
+          hintRevealed={false}
+        />
+        <DailyRevealScreen
+          game={game}
+          user={user}
+          won={won}
+          wordNumber={wordNumber}
+          groupDaily={groupDaily}
+          onBack={onBack}
+          onPlayInfinite={onPlayInfinite}
+          onOpenLeaderboard={onOpenLeaderboard}
+        />
+      </>
     );
   }
 
@@ -1263,6 +1282,17 @@ export default function PlayScreen({
 
   return (
     <div className="relative mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-4 md:px-10 md:py-10">
+      {/* The training follows the signed-in player's round (lib/training.ts). */}
+      {!guest && (
+        <PlayStateReporter
+          mode={mode}
+          status={game.status}
+          guesses={game.guesses.length}
+          tierResult={!!tierResult}
+          hintBulb={!finished && hintAvailable && hintIconUnlocked}
+          hintRevealed={hintRevealed}
+        />
+      )}
       {/* mobile top bar */}
       <div className="flex items-center gap-3.5 md:hidden">
         <button
@@ -1508,6 +1538,7 @@ export default function PlayScreen({
           )}
 
           <div
+            data-tour="play-board"
             className="relative"
             style={
               boardPhase === "leaving"

@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useState, type ReactNode } from "react";
 import Leaderboard from "@/components/Leaderboard";
 import TierLeaderboard from "@/components/TierLeaderboard";
 import TierPromotionAnnouncer from "@/components/TierPromotionModal";
+import Training from "@/components/Training";
 import Loader from "@/components/Loader";
 import HomeScreen from "@/components/screens/HomeScreen";
 import InfiniteHubScreen from "@/components/screens/InfiniteHubScreen";
@@ -68,6 +69,8 @@ function AppShell({ intro }: { intro: ReactNode }) {
 
   return (
     <div className="flex flex-1 flex-col">
+      {/* First-run tour; nothing once the account has finished it. */}
+      <Training />
       <TierPromotionAnnouncer
         onOpenTierLeaderboard={(tier) => push({ name: "tier-leaderboard", tier })}
         onPlay={() => push({ name: "play", mode: "infinite" })}

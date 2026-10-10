@@ -56,6 +56,11 @@ interface AuthContextValue {
    * (the backend auto-links by email) — one call for both flows, no
    * separate "is this a new user" branch needed here. */
   loginWithGoogle: (idToken: string) => Promise<void>;
+  /** The server has confirmed `user` this session (not just the cached copy
+   * shown while /auth/refresh runs) — e.g. its `trainingCompleted` is current. */
+  userConfirmed: boolean;
+  /** PATCH /auth/training { completed: true } and applies the returned user. */
+  completeTraining: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -63,6 +68,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [userConfirmed, setUserConfirmed] = useState(false);
 
   // Re-fetches the current user without touching the session itself — used
   // after actions that change stats (finishing a game, etc), not for login.
@@ -71,6 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const { user } = await api.getMe();
       setUser(user);
+      setUserConfirmed(true);
       markFresh("me", USER_CACHE_KEY, startedAt);
     } catch {
       setUser(null);
@@ -97,6 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .getMe()
         .then(({ user }) => {
           setUser(user);
+          setUserConfirmed(true);
           markFresh("me", USER_CACHE_KEY, startedAt);
         })
         .catch(() => {});
@@ -131,6 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         window.clearTimeout(giveUp);
         if (result) {
           setUser(result.user);
+          setUserConfirmed(true);
           // /auth/refresh returns the same user as /auth/me.
           markFresh("me", USER_CACHE_KEY, refreshStartedAt);
           setLoading(false);
@@ -144,6 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           const { user } = await api.getMe();
           setUser(user);
+          setUserConfirmed(true);
           setLoading(false);
           return;
         } catch {
@@ -171,6 +181,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Only now is the deviceId stored (see getDeviceId).
     setDeviceId(data.deviceId || getDeviceId());
     setUser(data.user);
+    setUserConfirmed(true);
     // Best-effort, never blocks the login that already succeeded — see
     // silentlyEnrollPasskey below.
     void silentlyEnrollPasskey();
@@ -188,6 +199,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(data.token);
     setDeviceId(data.deviceId);
     setUser(data.user);
+    setUserConfirmed(true);
     void silentlyEnrollPasskey();
   }, []);
 
@@ -210,6 +222,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearToken();
     clearDeviceId();
     setUser(null);
+    setUserConfirmed(false);
   }, []);
 
   const updateUsername = useCallback(async (username: string) => {
@@ -219,12 +232,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     invalidate("daily", "weekly", "infiniteBoard", "mine");
   }, []);
 
+  const completeTraining = useCallback(async () => {
+    const { user } = await api.setTrainingCompleted(true);
+    setUser(user);
+  }, []);
+
   const loginWithGoogle = useCallback(async (idToken: string) => {
     const deviceId = getDeviceId();
     const data = await api.googleAuth({ idToken, deviceId });
     setToken(data.token);
     setDeviceId(data.deviceId);
     setUser(data.user);
+    setUserConfirmed(true);
   }, []);
 
   const loginWithPasskey = useCallback(async () => {
@@ -237,6 +256,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(data.token);
     setDeviceId(data.deviceId);
     setUser(data.user);
+    setUserConfirmed(true);
   }, []);
 
   return (
@@ -254,6 +274,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         passkeySupported: browserSupportsWebAuthn(),
         loginWithPasskey,
         loginWithGoogle,
+        userConfirmed,
+        completeTraining,
       }}
     >
       {children}
