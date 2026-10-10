@@ -10,6 +10,7 @@ import {
   LOAD_MORE_LOOKAHEAD,
   PodiumCard,
   ScopeSwitcher,
+  displayName,
   initial,
   useNearBottomScroll,
   useSentinelRef,
@@ -213,7 +214,7 @@ export default function TierLeaderboard({
   const dayCount = (e: { stickDays: number }) => (daysToStick ? `${e.stickDays} of ${daysToStick} days` : `${e.stickDays} days`);
   const toNormalized = (e: InfiniteLeaderboardEntry): NormalizedEntry => ({
     userId: e.userId,
-    username: e.username,
+    username: displayName(e.username),
     rank: e.rank,
     statLine: `${fmt(e.score)} pts · ${dayCount(e)}`,
     columns: [fmt(e.score), daysToStick ? `${e.stickDays} / ${daysToStick}` : `${e.stickDays}`, `${e.qualifyingDaysInTier} days`],
@@ -298,7 +299,7 @@ export default function TierLeaderboard({
                   key={entry.userId}
                   rowRef={i === sentinelIndex ? sentinelRef : undefined}
                   rank={entry.rank}
-                  username={entry.username}
+                  username={displayName(entry.username)}
                   columns={row.columns}
                   isMe={entry.userId === user?.id}
                 />
@@ -322,11 +323,11 @@ export default function TierLeaderboard({
           {top && (
             <div className="flex animate-fade-in-up items-center gap-3.5 rounded-[22px] border border-accent/35 bg-accent/10 p-5 md:hidden">
               <span className="flex size-11 shrink-0 items-center justify-center rounded-[14px] bg-accent text-[17px] font-bold text-background">
-                {initial(top.username)}
+                {initial(displayName(top.username))}
               </span>
               <span className="flex min-w-0 flex-col gap-[3px]">
                 <span className="truncate text-lg font-bold tracking-[-0.01em]">
-                  {top.username}
+                  {displayName(top.username)}
                   {top.userId === user?.id && <span className="font-normal opacity-70"> · you</span>}
                 </span>
                 <span className="text-[12.5px] opacity-80">
@@ -345,7 +346,7 @@ export default function TierLeaderboard({
                 key={entry.userId}
                 rowRef={i + 1 === sentinelIndex ? sentinelRef : undefined}
                 rank={entry.rank}
-                username={entry.username}
+                username={displayName(entry.username)}
                 sub={dayCount(entry)}
                 score={entry.score}
                 isMe={entry.userId === user?.id}

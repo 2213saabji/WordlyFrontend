@@ -140,7 +140,8 @@ export interface LeaderboardResponse {
 export interface DailyLeaderboardEntry {
   rank: number;
   userId: string;
-  username: string;
+  /** null when the account never set a name. */
+  username: string | null;
   status: "won" | "lost";
   attemptsUsed: number;
   timeTakenMs: number | null;
@@ -149,7 +150,8 @@ export interface DailyLeaderboardEntry {
 export interface WeeklyLeaderboardEntry {
   rank: number;
   userId: string;
-  username: string;
+  /** null when the account never set a name. */
+  username: string | null;
   gamesPlayed: number;
   gamesWon: number;
   avgAttempts: number | null;

@@ -160,7 +160,8 @@ export interface InfiniteGuessTierBlock {
 export interface InfiniteLeaderboardEntry {
   rank: number;
   userId: string;
-  username: string;
+  /** null when the account never set a name. */
+  username: string | null;
   score: number;
   qualifyingDaysInTier: number;
   stickDays: number;

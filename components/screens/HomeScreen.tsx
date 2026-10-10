@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { displayName } from "@/components/Leaderboard";
 import { getMyGroups, getGlobalWeeklyLeaderboard, getPublicInfiniteLeaderboard } from "@/lib/api";
 import { PUBLIC_BOARD_TIER } from "@/lib/tiers";
 import { useSyncedResource } from "@/lib/use-synced";
@@ -134,7 +135,7 @@ function usePublicTierBoard(enabled: boolean) {
       .then((res) => {
         if (cancelled) return;
         setBoard({
-          rows: res.leaderboard.map((e) => ({ userId: e.userId, rank: e.rank, username: e.username, meta: `${e.score} pts` })),
+          rows: res.leaderboard.map((e) => ({ userId: e.userId, rank: e.rank, username: displayName(e.username), meta: `${e.score} pts` })),
         });
       })
       .catch(() => {
@@ -273,7 +274,7 @@ export default function HomeScreen({
     : (weekly?.map((e) => ({
         userId: e.userId,
         rank: e.rank,
-        username: e.username,
+        username: displayName(e.username),
         meta: e.avgAttempts != null ? `avg ${e.avgAttempts.toFixed(1)}g` : `${e.gamesWon} wins`,
       })) ?? null);
   const boardFailed = guest && publicBoard === null;

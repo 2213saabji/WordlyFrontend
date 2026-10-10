@@ -66,8 +66,14 @@ function readFirstPage(groupId: string | undefined, period: Period): NormalizedD
   return readCache<NormalizedData>(firstPageCacheKey(groupId, period), { sameDay: period === "daily" });
 }
 
-export function initial(name: string) {
-  return name.trim().charAt(0).toUpperCase() || "?";
+// The API can send a null username (e.g. an account that never set one),
+// so every leaderboard row goes through this before it's rendered.
+export function displayName(name: string | null | undefined) {
+  return name?.trim() || "Player";
+}
+
+export function initial(name: string | null | undefined) {
+  return name?.trim().charAt(0).toUpperCase() || "?";
 }
 
 export function formatDuration(ms: number | null) {
@@ -85,7 +91,7 @@ function formatDateLabel(iso: string) {
 function toDailyEntry(e: DailyLeaderboardEntry): NormalizedEntry {
   return {
     userId: e.userId,
-    username: e.username,
+    username: displayName(e.username),
     rank: e.rank,
     statLine: `${e.status === "won" ? "Won" : "Lost"} · ${e.attemptsUsed} guesses · ${formatDuration(e.timeTakenMs)}`,
     columns: [e.status === "won" ? "Won" : "Lost", String(e.attemptsUsed), formatDuration(e.timeTakenMs)],
@@ -95,7 +101,7 @@ function toDailyEntry(e: DailyLeaderboardEntry): NormalizedEntry {
 function toWeeklyEntry(e: WeeklyLeaderboardEntry): NormalizedEntry {
   return {
     userId: e.userId,
-    username: e.username,
+    username: displayName(e.username),
     rank: e.rank,
     statLine: `${e.gamesWon}/${e.gamesPlayed} wins${e.avgAttempts != null ? ` · avg ${e.avgAttempts.toFixed(1)}g` : ""}`,
     columns: [
