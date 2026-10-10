@@ -61,6 +61,7 @@ export default function GuessWordBoard({
   celebrate,
   interactive = true,
   clearing = false,
+  pending = false,
 }: {
   guesses: Guess[];
   currentGuess: string;
@@ -72,6 +73,9 @@ export default function GuessWordBoard({
   /** Flip every filled tile back to empty (the Next word transition). The
    * tiles stay empty for as long as this is true. */
   clearing?: boolean;
+  /** The typed row has been sent and the answer is slow to come back: its
+   * tiles pulse, so a slow connection doesn't look like a frozen board. */
+  pending?: boolean;
 }) {
   const activeRowIndex = guesses.length;
   const winningRowIndex = celebrate ? guesses.length - 1 : -1;
@@ -176,15 +180,18 @@ export default function GuessWordBoard({
           const hopStyle: CSSProperties = isShaking
             ? { animation: `letter-hop 0.4s ease-out ${cellDelay + shakeNudge}ms both` }
             : {};
+          const waiting = pending && isCurrentRow && !isShaking;
           const wrapperStyle: CSSProperties = isShaking
             ? { animation: `shake-arc 0.25s ease-in-out 2 ${cellDelay + shakeNudge}ms both` }
-            : {};
+            : waiting
+              ? { animationDelay: `${colIndex * 120}ms` }
+              : {};
 
           return (
             <div
               key={isCurrentRow ? `cur-${colIndex}-${letter}` : colIndex}
               style={wrapperStyle}
-              className="perspective-tile"
+              className={`perspective-tile ${waiting ? "animate-pulse" : ""}`}
             >
               <div
                 style={style}

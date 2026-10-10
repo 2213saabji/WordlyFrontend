@@ -9,7 +9,7 @@ export function getTodayGame(): Promise<{ game: Game }> {
 
 /** `coins` only on the guess that ends the game (+10 for a solve). */
 export function submitGuess(guess: string): Promise<{ result: number[]; game: Game; coins?: CoinsAwarded }> {
-  return apiFetch("/game/guess", { method: "POST", body: { guess } });
+  return apiFetch("/game/guess", { method: "POST", body: { guess }, retry: false });
 }
 
 export function getHistory(): Promise<{ games: Game[] }> {

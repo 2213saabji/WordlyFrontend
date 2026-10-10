@@ -28,6 +28,7 @@ export {
   refreshSession,
   setDeviceId,
   setToken,
+  warmUpBackend,
 } from "./client";
 export * from "./auth";
 export * from "./passkeys";

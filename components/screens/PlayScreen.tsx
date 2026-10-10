@@ -14,6 +14,7 @@ import {
   startNewInfiniteRound,
   submitGuess,
   submitInfiniteGuess,
+  warmUpBackend,
   ApiRequestError,
 } from "@/lib/api";
 import ShareModal from "@/components/ShareModal";
@@ -826,6 +827,9 @@ export default function PlayScreen({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(() => game === null);
   const [submitting, setSubmitting] = useState(false);
+  // A guess still waiting on the server: 1 = the row pulses, 2 = it's been
+  // long enough to say so in words.
+  const [waitStage, setWaitStage] = useState<0 | 1 | 2>(0);
   const [shakeSignal, setShakeSignal] = useState(0);
   const [howToPlayOpen, setHowToPlayOpen] = useState(false);
   const [groupDaily, setGroupDaily] = useState<GroupDailyStats | null>(() =>
@@ -1068,6 +1072,8 @@ export default function PlayScreen({
 
     setSubmitting(true);
     setError(null);
+    const pulseTimer = window.setTimeout(() => setWaitStage(1), 300);
+    const slowTimer = window.setTimeout(() => setWaitStage(2), 4_000);
     try {
       if (guest) {
         setGame(await guessPublicRound(currentGuess));
@@ -1115,7 +1121,9 @@ export default function PlayScreen({
         refreshUser();
       }
     } catch (err) {
-      setShakeSignal((n) => n + 1);
+      // Timed out, dropped or a server error — not the word's fault.
+      const unanswered = !(err instanceof ApiRequestError) || err.status >= 500;
+      if (guest || !unanswered) setShakeSignal((n) => n + 1);
       if (err instanceof ApiRequestError) {
         // A rejected guess (too short, not a real word, etc.) is a normal
         // part of play — the shake is the feedback, no need to also show text.
@@ -1124,10 +1132,32 @@ export default function PlayScreen({
         if (guest && err.data?.code === "INVALID_GAME_TOKEN") void handleNextWord();
         // Carried by e.g. GAME_OVER: the round as the server has it.
         if (err.data?.game) setGame(err.data.game);
-      } else {
+      }
+      // Timed out, dropped or a server error: the guess may still have been
+      // saved (guesses are never resent automatically, so it can't count
+      // twice). Reload the round so the board shows what the server has.
+      if (!guest && unanswered) {
+        const sentGuess = currentGuess;
+        try {
+          const fresh = mode === "daily" ? (await getTodayGame()).game : (await getInfiniteCurrent()).game;
+          setGame(fresh);
+          if (fresh.guesses.some((g) => g.guess.toLowerCase() === sentGuess.toLowerCase())) {
+            setCurrentGuess("");
+            if (mode === "daily" && fresh.status !== "in-progress") refreshUser();
+            if (mode === "infinite") refreshMe();
+          } else {
+            setError("Your connection seems slow. Please press Enter to try again.");
+          }
+        } catch {
+          setError("Your connection seems slow. Please press Enter to try again.");
+        }
+      } else if (!(err instanceof ApiRequestError)) {
         setError("Something went wrong");
       }
     } finally {
+      window.clearTimeout(pulseTimer);
+      window.clearTimeout(slowTimer);
+      setWaitStage(0);
       setSubmitting(false);
     }
   }, [game, mode, guest, currentGuess, submitting, refreshUser, setToday, refreshMe, showToast, handleNextWord]);
@@ -1146,6 +1176,9 @@ export default function PlayScreen({
         return;
       }
       if (/^[a-z]$/i.test(key) && currentGuess.length < WORD_LENGTH) {
+        // First letter of a guess: wake the server now if it's been idle, so
+        // it's ready by the time Enter is pressed (lib/api/client.ts).
+        if (currentGuess.length === 0) warmUpBackend();
         setCurrentGuess((g) => (g + key).toLowerCase());
       }
     },
@@ -1536,6 +1569,11 @@ export default function PlayScreen({
               {error}
             </p>
           )}
+          {waitStage === 2 && !error && (
+            <p role="status" className="animate-fade-in text-sm text-foreground/55">
+              Still checking your guess…
+            </p>
+          )}
 
           <div
             data-tour="play-board"
@@ -1555,6 +1593,7 @@ export default function PlayScreen({
               celebrate={won && boardPhase === "idle"}
               interactive={!finished && boardPhase === "idle"}
               clearing={boardPhase === "clearing" || boardPhase === "leaving"}
+              pending={waitStage > 0}
             />
             {toast && (
               <div

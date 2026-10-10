@@ -25,8 +25,13 @@ export function getToken(): string | null {
   return accessToken;
 }
 
+// When the current token was issued here — warmUpBackend() renews it a bit
+// before the hour is up. null = unknown age (the legacy token).
+let tokenIssuedAt: number | null = null;
+
 export function setToken(token: string): void {
   accessToken = token;
+  tokenIssuedAt = Date.now();
   // Once we have a real device-session token there's no reason to keep the
   // old single-token key around.
   if (typeof window !== "undefined") window.localStorage.removeItem(LEGACY_TOKEN_KEY);
@@ -34,6 +39,7 @@ export function setToken(token: string): void {
 
 export function clearToken(): void {
   accessToken = null;
+  tokenIssuedAt = null;
 }
 
 // NOTE on storage: deviceId is now the device's entire standing credential —
@@ -106,6 +112,10 @@ export interface ApiFetchOptions {
   /** Internal — sat after one refresh-and-retry attempt, so a second 401
    * (refresh itself is somehow not fixing it) doesn't loop forever. */
   isRetry?: boolean;
+  /** false: no automatic second attempt after a timeout or 5xx. For calls
+   * that aren't safe to repeat — a guess that timed out may still have been
+   * saved, and sending it again would add it twice. */
+  retry?: boolean;
 }
 
 const REQUEST_TIMEOUT_MS = 20_000;
@@ -165,6 +175,7 @@ async function performRequest<T>(
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  lastRequestAt = Date.now();
 
   let res: Response;
   try {
@@ -227,9 +238,37 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
   try {
     return await performRequest<T>(path, options);
   } catch (err) {
-    if (!isRetryableFailure(err)) throw err;
+    if (options.retry === false || !isRetryableFailure(err)) throw err;
     return await performRequest<T>(path, options);
   }
+}
+
+// --- Warm-up -----------------------------------------------------------------
+// The backend runs on serverless instances that go to sleep after a few idle
+// minutes; the first request after that waits for a new instance to boot and
+// connect to the database. In a game, that request is a guess — typed after
+// the player sat thinking — so it looked like the board froze on Enter.
+// PlayScreen calls warmUpBackend() on the first letter of each guess: after
+// a quiet spell it sends one cheap request, so the wake-up happens while the
+// word is still being typed. If the access token is near its 1 h expiry, that
+// request is the token refresh itself, which saves the guess a 401 + refresh
+// + resend later.
+
+/** Last time any request started. */
+let lastRequestAt = 0;
+const IDLE_BEFORE_WARM_UP_MS = 60_000;
+const TOKEN_RENEW_AFTER_MS = 50 * 60_000;
+
+export function warmUpBackend(): void {
+  if (typeof window === "undefined" || Date.now() - lastRequestAt < IDLE_BEFORE_WARM_UP_MS) return;
+  lastRequestAt = Date.now();
+  const tokenAgeing = accessToken !== null && tokenIssuedAt !== null && Date.now() - tokenIssuedAt > TOKEN_RENEW_AFTER_MS;
+  if (tokenAgeing && getStoredDeviceId()) {
+    void refreshSession();
+    return;
+  }
+  // Not under /api — the health check also pings the database connection.
+  fetch(`${API_BASE_URL.replace(/\/api\/?$/, "")}/health/db`, { cache: "no-store" }).catch(() => {});
 }
 
 /** The silent-login call: trades the stored deviceId for a fresh access

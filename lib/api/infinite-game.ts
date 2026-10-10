@@ -30,7 +30,7 @@ export function startNewInfiniteRound(): Promise<{ game: Game; today?: TodayProg
 export function submitInfiniteGuess(
   guess: string,
 ): Promise<{ result: number[]; game: Game; tier?: InfiniteGuessTierBlock; today?: TodayProgress; coins?: CoinsAwarded }> {
-  return apiFetch("/game/infinite/guess", { method: "POST", body: { guess } });
+  return apiFetch("/game/infinite/guess", { method: "POST", body: { guess }, retry: false });
 }
 
 export function getInfiniteHistory(): Promise<{ games: Game[] }> {
