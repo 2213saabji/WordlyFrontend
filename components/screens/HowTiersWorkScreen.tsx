@@ -79,8 +79,8 @@ export default function HowTiersWorkScreen({ onBack }: { onBack: () => void }) {
     ) : (
       <>
         Miss your daily targets too often and you drop one tier.{" "}
-        <span className="md:hidden">Each tier&apos;s limit is shown under it</span>
-        <span className="hidden md:inline">
+        <span className="lg:hidden">Each tier&apos;s limit is shown under it</span>
+        <span className="hidden lg:inline">
           The <strong className="font-semibold text-foreground">Drops after</strong> column shows each tier&apos;s limit
         </span>
         {example !== "—" ? `, for example "${example}"` : ""}. {bottomName} can&apos;t drop.
@@ -108,7 +108,7 @@ export default function HowTiersWorkScreen({ onBack }: { onBack: () => void }) {
           {tiers.resetTimeIst} IST.
         </span>
       )}
-      <span className="hidden md:inline">The day resets at {tiers.resetTimeIst} IST.</span>
+      <span className="hidden lg:inline">The day resets at {tiers.resetTimeIst} IST.</span>
       {coinLine && <span className={COIN_TEXT}>{coinLine}</span>}
       {top && (
         <span className={DIAMOND_TEXT}>
@@ -120,8 +120,10 @@ export default function HowTiersWorkScreen({ onBack }: { onBack: () => void }) {
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-5 py-6 md:gap-8 md:px-8 md:py-14">
-      {/* ---------- mobile ---------- */}
-      <div className="flex flex-col md:hidden">
+      {/* ---------- mobile & tablet ---------- */}
+      {/* The six-column table needs about 900px; below lg it'd squeeze the
+          tier names out, so tablets get the phone list too. */}
+      <div className="mx-auto flex w-full max-w-2xl flex-col lg:hidden">
         <ScreenHeader title="How tiers work" onBack={onBack} />
         <p className={`mt-3 text-[13.5px] leading-[1.55] ${SOFT}`}>{intro}</p>
 
@@ -163,17 +165,18 @@ export default function HowTiersWorkScreen({ onBack }: { onBack: () => void }) {
       </div>
 
       {/* ---------- desktop ---------- */}
-      <div className="hidden max-w-180 flex-col gap-3 md:flex">
+      <div className="hidden max-w-180 flex-col gap-3 lg:flex">
         <HubBackLink onClick={onBack} className="mb-2" />
         <span className={`text-[12.5px] font-semibold uppercase tracking-[0.18em] ${MUTED}`}>Infinite</span>
         <h1 className="text-[52px] font-light leading-[1.05] tracking-[-0.03em]">How tiers work</h1>
         <span className={`text-[15px] leading-[1.6] ${SOFT}`}>{intro}</span>
       </div>
 
-      <div className="hidden grid-cols-[minmax(0,1fr)_380px] items-start gap-5 md:grid">
+      {/* The rules card sits under the table until there's room beside it. */}
+      <div className="hidden items-start gap-5 lg:grid xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="overflow-hidden rounded-3xl border border-white/8 bg-white/[0.043]">
           <div
-            className={`grid ${LADDER_COLS} gap-4 border-b border-white/8 px-7 py-4 text-xs font-semibold uppercase tracking-[0.14em] ${MUTED}`}
+            className={`grid ${LADDER_COLS} items-end gap-4 border-b border-white/8 px-7 py-4 text-xs font-semibold uppercase leading-snug tracking-[0.14em] ${MUTED}`}
           >
             <span>Tier</span>
             <span>Time / day</span>
@@ -219,7 +222,9 @@ export default function HowTiersWorkScreen({ onBack }: { onBack: () => void }) {
   );
 }
 
-const LADDER_COLS = "grid-cols-[minmax(0,1fr)_110px_110px_110px_130px_140px]";
+// Flexible, so the table fits beside the rules card on a small desktop; the
+// tier column never shrinks past its badge and name.
+const LADDER_COLS = "grid-cols-[minmax(150px,1.4fr)_repeat(5,minmax(0,1fr))]";
 
 function ordinal(n: number): string {
   const suffix = n % 100 >= 11 && n % 100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10] ?? "th";
