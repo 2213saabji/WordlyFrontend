@@ -28,9 +28,13 @@ export interface User {
   /** Header badge for the Infinite tier leaderboard. Absent before the
    * player's first completed Infinite game (and on older backends). */
   infinite?: { tier: TierNumber; tierName: string };
-  /** Finished the in-app training (components/Training.tsx). Stored on the
-   * account, so it holds across devices. Absent on older backends — only an
-   * explicit `false` starts the training. */
+  /** The in-app training (components/Training.tsx) comes in three parts,
+   * each stored on the account so it holds across devices. Only an explicit
+   * `false` starts a part (absent on older backends). */
+  homeTrainingCompleted?: boolean;
+  dailyTrainingCompleted?: boolean;
+  infiniteTrainingCompleted?: boolean;
+  /** Read-only: true once all three parts above are. */
   trainingCompleted?: boolean;
 }
 

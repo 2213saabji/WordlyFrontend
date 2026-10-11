@@ -69,11 +69,15 @@ export function updateUsername(username: string): Promise<{ user: User }> {
   return apiFetch("/auth/username", { method: "PATCH", body: { username } });
 }
 
-/** `true` once the player finishes the in-app training, `false` to show it
- * again. Returns the updated user — apply that object. 400 if `completed`
- * isn't a boolean. */
-export function setTrainingCompleted(completed: boolean): Promise<{ user: User }> {
-  return apiFetch("/auth/training", { method: "PATCH", body: { completed } });
+export type TrainingFlags = Partial<
+  Pick<User, "homeTrainingCompleted" | "dailyTrainingCompleted" | "infiniteTrainingCompleted">
+>;
+
+/** Marks training parts done (`true`) or shows them again (`false`); parts
+ * left out keep their value. Returns the updated user — apply that object.
+ * 400 if no flag is sent or one isn't a boolean. */
+export function setTrainingFlags(flags: TrainingFlags): Promise<{ user: User }> {
+  return apiFetch("/auth/training", { method: "PATCH", body: flags });
 }
 
 /** idToken is the signed JWT credential from Google Identity Services — the

@@ -316,6 +316,7 @@ export function TierResultCard({
           <button
             type="button"
             onClick={onBoard}
+            data-tour="tier-board"
             className={`whitespace-nowrap border border-white/12 bg-white/7 font-semibold transition-colors hover:border-accent/40 ${
               card ? "rounded-xl px-4 py-2.5 text-[13.5px]" : "rounded-2xl px-5 py-4 text-[14.5px]"
             }`}

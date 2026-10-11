@@ -239,7 +239,7 @@ export default function TierLeaderboard({
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-5 py-6 md:gap-10 md:px-8 md:py-14">
       {/* header — mobile */}
-      <div className="flex flex-col gap-5 md:hidden">
+      <div data-tour="tier-lb-controls" className="flex flex-col gap-5 md:hidden">
         <ScreenHeader title="Leaderboard" onBack={onBack} trailing={scopeSwitcher} />
         {tierSelect}
       </div>
@@ -253,7 +253,7 @@ export default function TierLeaderboard({
           </span>
           <h1 className="text-[52px] font-light leading-[1.05] tracking-[-0.03em]">Leaderboard</h1>
         </div>
-        <div className="flex items-center gap-2.5">
+        <div data-tour="tier-lb-controls" className="flex items-center gap-2.5">
           {tierSelect}
           {scopeSwitcher}
         </div>
@@ -282,7 +282,10 @@ export default function TierLeaderboard({
           )}
           {ctaAboveList && <div className="hidden md:block">{cta}</div>}
 
-          <div className="hidden animate-fade-in-up overflow-hidden rounded-3xl border border-white/8 bg-white/[0.043] md:block">
+          <div
+            data-tour="tier-lb-list"
+            className="hidden animate-fade-in-up overflow-hidden rounded-3xl border border-white/8 bg-white/[0.043] md:block"
+          >
             <div
               className={`grid grid-cols-[56px_minmax(0,1fr)_140px_140px_120px] gap-4 border-b border-white/8 px-7 py-4 text-xs font-semibold uppercase tracking-[0.14em] ${MUTED}`}
             >
@@ -340,7 +343,7 @@ export default function TierLeaderboard({
           {ctaAboveList && <div className="md:hidden">{cta}</div>}
 
           {/* Tucked under the hero card — unless the call to action is between them. */}
-          <div className={`flex flex-col md:hidden ${ctaAboveList ? "" : "-mt-4"}`}>
+          <div data-tour="tier-lb-list" className={`flex flex-col md:hidden ${ctaAboveList ? "" : "-mt-4"}`}>
             {entries.slice(1).map((entry, i) => (
               <ListRow
                 key={entry.userId}

@@ -57,10 +57,10 @@ interface AuthContextValue {
    * separate "is this a new user" branch needed here. */
   loginWithGoogle: (idToken: string) => Promise<void>;
   /** The server has confirmed `user` this session (not just the cached copy
-   * shown while /auth/refresh runs) — e.g. its `trainingCompleted` is current. */
+   * shown while /auth/refresh runs) — e.g. its training flags are current. */
   userConfirmed: boolean;
-  /** PATCH /auth/training { completed: true } and applies the returned user. */
-  completeTraining: () => Promise<void>;
+  /** PATCH /auth/training with the given flags and applies the returned user. */
+  completeTraining: (flags: api.TrainingFlags) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -232,8 +232,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     invalidate("daily", "weekly", "infiniteBoard", "mine");
   }, []);
 
-  const completeTraining = useCallback(async () => {
-    const { user } = await api.setTrainingCompleted(true);
+  const completeTraining = useCallback(async (flags: api.TrainingFlags) => {
+    const { user } = await api.setTrainingFlags(flags);
     setUser(user);
   }, []);
 

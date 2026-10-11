@@ -363,7 +363,7 @@ export default function HomeScreen({
           </div>
 
           {/* play buttons */}
-          <div className="flex animate-fade-in-up flex-col gap-3 sm:flex-row" style={{ animationDelay: "180ms" }}>
+          <div data-tour="home-play" className="flex animate-fade-in-up flex-col gap-3 sm:flex-row" style={{ animationDelay: "180ms" }}>
             {/* A guest can only play Infinite without logging in. */}
             <PlayButton icon={<CalendarIcon />} label="Play Daily" primary={!guest && !dailyDone} onClick={onPlay} tour="home-daily" />
             <PlayButton icon={<InfinityIcon />} label="Play Infinite" primary={guest || dailyDone} onClick={onPlayInfinite} tour="home-infinite" />

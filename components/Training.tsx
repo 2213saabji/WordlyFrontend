@@ -1,19 +1,22 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import type { TrainingFlags } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { readCache, writeCache } from "@/lib/cache";
 import { useScreen, type Screen } from "@/lib/screen-context";
 import { usePlayState, useShareSession, type PlayState } from "@/lib/training";
 
-// First-run training for a signed-in player whose account says
-// `trainingCompleted: false`: a guided tour over the real screens — home,
-// one Infinite round, today's Daily word, the leaderboard — and then
-// PATCH /auth/training. Until it's done, only what the current step points
-// at can be clicked (a capture-phase click filter); the screens themselves
-// are unchanged and just carry `data-tour="…"` markers for the spotlight.
+// First-run training for a signed-in player, in three parts that each have
+// their own flag on the account: the home page, Infinite (hub, one round,
+// the tier board) and Daily (today's word, its leaderboard). A part starts
+// when the player first arrives on its screen and saves only its own flag
+// (PATCH /auth/training) when finished. While a part runs, only what the
+// current step points at can be clicked (a capture-phase click filter); the
+// screens themselves are unchanged and just carry `data-tour="…"` markers
+// for the spotlight.
 
-type Place = "home" | "hub" | "play-infinite" | "play-daily" | "leaderboard";
+type Place = "home" | "hub" | "play-infinite" | "play-daily" | "leaderboard" | "tier-leaderboard";
 
 interface Ctx {
   play: PlayState | null;
@@ -23,6 +26,8 @@ interface Ctx {
   /** The share window is open now / has been opened during the tour. */
   shareOpen: boolean;
   shared: boolean;
+  /** The player already learned to guess in the other game's tour. */
+  basicsKnown: boolean;
 }
 
 interface Step {
@@ -43,6 +48,8 @@ interface Step {
   delayMs?: number;
   /** Markers that respond to clicks, instead of the kind's default. */
   allow?: string[];
+  /** Left out when this holds as the tour reaches it. */
+  skip?: (ctx: Ctx) => boolean;
 }
 
 /** PlayScreen's HINT_UNLOCK_ATTEMPT: the bulb unlocks from this guess. */
@@ -98,15 +105,15 @@ function StarterWords() {
   );
 }
 
-const STEPS: Step[] = [
-  // --- home ---
+// --- part 1: the home page. Ends there; the player then picks a game. ---
+const HOME_STEPS: Step[] = [
   {
     id: "welcome",
     on: "home",
     kind: "info",
     title: ({ name }) => `Welcome to GuessWord, ${name}!`,
-    body: "Here's a quick tour. You'll play one Infinite word and then today's Daily word. It takes about 3 minutes.",
-    button: "Start the tour",
+    body: "Here's a quick look around your home page. It takes less than a minute.",
+    button: "Start",
   },
   {
     id: "home-daily",
@@ -114,7 +121,15 @@ const STEPS: Step[] = [
     target: "home-daily",
     kind: "info",
     title: "Play Daily",
-    body: "One new word every day, and it's the same word for everyone. Solving it keeps your streak going. You'll play it later in this tour.",
+    body: "One new word every day, and it's the same word for everyone. Solving it keeps your streak going.",
+  },
+  {
+    id: "home-infinite",
+    on: "home",
+    target: "home-infinite",
+    kind: "info",
+    title: "Play Infinite",
+    body: "Endless words, so you can play as many as you like. Infinite players are ranked in tiers, from Stone up to Diamond.",
   },
   {
     id: "home-stats",
@@ -133,20 +148,73 @@ const STEPS: Step[] = [
     body: "Start a group to play against friends, see how you rank, and look back at the words you've played.",
   },
   {
-    id: "home-infinite",
+    // Either game button also finishes this part (see the click lock).
+    id: "home-done",
     on: "home",
-    target: "home-infinite",
-    kind: "click",
-    title: "Now try Infinite",
-    body: "Infinite has endless words, so you can play as many as you like. Tap Play Infinite.",
+    target: "home-play",
+    kind: "finish",
+    allow: ["home-daily", "home-infinite"],
+    title: "Pick a game",
+    body: "Tap Play Daily or Play Infinite to start. We'll show you how each one works the first time you open it.",
+    button: "Got it",
   },
-  // --- Infinite hub ---
+];
+
+// Game basics: taught in whichever game the player opens first, and left
+// out of the other game's tour (`basicsKnown`).
+const placeFor = (mode: PlayState["mode"]): Place => (mode === "daily" ? "play-daily" : "play-infinite");
+
+function howToGuess(mode: PlayState["mode"]): Step {
+  return {
+    id: `${mode}-how`,
+    on: placeFor(mode),
+    target: "play-board",
+    kind: "info",
+    title: "How to guess",
+    body: (
+      <>
+        Find the hidden 5-letter word in 6 tries. Type any real 5-letter word and press Enter. Good first words:
+        <StarterWords />
+      </>
+    ),
+    button: "Got it",
+    skip: (ctx) => ctx.basicsKnown || roundOver(ctx, mode),
+  };
+}
+
+function firstGuess(mode: PlayState["mode"]): Step {
+  return {
+    id: `${mode}-first`,
+    on: placeFor(mode),
+    kind: "play",
+    title: "Your turn",
+    body: "Type a word, for example CRANE, and press Enter.",
+    until: (ctx) => (inRound(ctx, mode)?.guesses ?? 0) >= 1 || roundOver(ctx, mode),
+    skip: (ctx) => ctx.basicsKnown,
+  };
+}
+
+function colours(mode: PlayState["mode"]): Step {
+  return {
+    id: `${mode}-colours`,
+    on: placeFor(mode),
+    target: "play-board",
+    kind: "info",
+    title: "What the colours mean",
+    body: <ColourLegend />,
+    button: "Keep playing",
+    skip: (ctx) => ctx.basicsKnown,
+  };
+}
+
+// --- part 2a: Infinite, from its hub through one round to the tier board ---
+const INFINITE_STEPS: Step[] = [
   {
     id: "hub-tier",
     on: "hub",
     target: "hub-tier",
     kind: "info",
-    title: "Your tier",
+    title: "Welcome to Infinite",
     body: "Infinite players are ranked in tiers, from Stone at the bottom up to Diamond. Make enough days count in a row and you move up a tier.",
   },
   {
@@ -165,38 +233,9 @@ const STEPS: Step[] = [
     title: "Start a word",
     body: "Tap the button to start your first round.",
   },
-  // --- one Infinite round ---
-  {
-    id: "play-intro",
-    on: "play-infinite",
-    target: "play-board",
-    kind: "info",
-    title: "How to guess",
-    body: (
-      <>
-        Find the hidden 5-letter word in 6 tries. Type any real 5-letter word and press Enter. Good first words:
-        <StarterWords />
-      </>
-    ),
-    button: "Got it",
-  },
-  {
-    id: "play-first",
-    on: "play-infinite",
-    kind: "play",
-    title: "Your turn",
-    body: "Type a word, for example CRANE, and press Enter.",
-    until: (ctx) => (inRound(ctx, "infinite")?.guesses ?? 0) >= 1 || roundOver(ctx, "infinite"),
-  },
-  {
-    id: "play-colours",
-    on: "play-infinite",
-    target: "play-board",
-    kind: "info",
-    title: "What the colours mean",
-    body: <ColourLegend />,
-    button: "Keep playing",
-  },
+  howToGuess("infinite"),
+  firstGuess("infinite"),
+  colours("infinite"),
   {
     id: "play-to-hint",
     on: "play-infinite",
@@ -248,14 +287,41 @@ const STEPS: Step[] = [
     body: "Points rank you against everyone in your tier. Make enough days count in a row to move up, all the way to Diamond.",
   },
   {
-    id: "go-daily",
+    id: "play-board",
     on: "play-infinite",
-    kind: "info",
-    title: "Now the Daily word",
-    body: "Last stop: today's Daily word. Everyone gets the same word, and you get one go a day.",
-    button: "Play Daily",
+    target: "tier-board",
+    kind: "click",
+    title: "See where you rank",
+    body: "Open the leaderboard to see everyone in your tier.",
   },
-  // --- today's Daily word: the player's own game ---
+  {
+    id: "tier-lb-list",
+    on: "tier-leaderboard",
+    target: "tier-lb-list",
+    kind: "info",
+    title: "Your tier's leaderboard",
+    body: "Everyone in your tier is ranked here by points, and your own row is highlighted.",
+  },
+  {
+    id: "tier-lb-controls",
+    on: "tier-leaderboard",
+    target: "tier-lb-controls",
+    kind: "info",
+    title: "Other tiers & boards",
+    body: "Use these to look at the other tiers, or switch to the Daily leaderboard and your groups.",
+  },
+  {
+    id: "infinite-done",
+    on: "tier-leaderboard",
+    kind: "finish",
+    title: "You're ready for Infinite! 🎉",
+    body: "Play as many words as you like, hit today's target, and keep climbing the tiers.",
+    button: "Finish",
+  },
+];
+
+// --- part 2b: today's Daily word (the player's own game) to its leaderboard ---
+const DAILY_STEPS: Step[] = [
   {
     id: "daily-intro",
     on: "play-daily",
@@ -264,9 +330,12 @@ const STEPS: Step[] = [
     body: (ctx) =>
       roundOver(ctx, "daily")
         ? "Your result for today is already in. Let's look at what it shows."
-        : "You're on your own for this one. Solve it to keep your streak going and to get on today's leaderboard. Good luck!",
+        : "Everyone gets the same word today, and you get one go. Solve it to keep your streak going and to get on today's leaderboard.",
     button: (ctx) => (roundOver(ctx, "daily") ? "Next" : "Start"),
   },
+  howToGuess("daily"),
+  firstGuess("daily"),
+  colours("daily"),
   {
     id: "daily-play",
     on: "play-daily",
@@ -324,7 +393,6 @@ const STEPS: Step[] = [
     title: "See where you rank",
     body: "Tap Leaderboard to see today's results.",
   },
-  // --- leaderboard ---
   {
     id: "lb-list",
     on: "leaderboard",
@@ -342,14 +410,46 @@ const STEPS: Step[] = [
     body: "Use these to switch between today and this week, or between Global, your groups and the Infinite tier boards.",
   },
   {
-    id: "done",
+    id: "daily-done",
     on: "leaderboard",
     kind: "finish",
     title: "You're all set! 🎉",
-    body: "That's the tour. A new Daily word arrives every day, and you can keep climbing the tiers in Infinite.",
+    body: "A new Daily word arrives every day. Come back tomorrow to keep your streak going.",
     button: "Finish",
   },
 ];
+
+type Phase = "home" | "daily" | "infinite";
+
+interface PhaseDef {
+  label: string;
+  steps: Step[];
+  /** The account flag this part saves on Finish. */
+  flag: keyof TrainingFlags;
+  /** Arriving on one of these starts (or resumes) the part. */
+  entry: Place[];
+  /** Once started, the part follows the player across these. */
+  places: Place[];
+}
+
+const PHASES: Record<Phase, PhaseDef> = {
+  home: { label: "Home", steps: HOME_STEPS, flag: "homeTrainingCompleted", entry: ["home"], places: ["home"] },
+  infinite: {
+    label: "Infinite",
+    steps: INFINITE_STEPS,
+    flag: "infiniteTrainingCompleted",
+    entry: ["hub", "play-infinite"],
+    places: ["hub", "play-infinite", "tier-leaderboard"],
+  },
+  daily: {
+    label: "Daily",
+    steps: DAILY_STEPS,
+    flag: "dailyTrainingCompleted",
+    entry: ["play-daily"],
+    places: ["play-daily", "leaderboard"],
+  },
+};
+const PHASE_ORDER: Phase[] = ["home", "infinite", "daily"];
 
 /** The optional share tour: runs over the share window while it's open on
  * the daily-share / daily-board steps, then hands back to them. Everything
@@ -386,6 +486,8 @@ function placeOf(screen: Screen): Place | null {
       return screen.mode === "daily" ? "play-daily" : "play-infinite";
     case "leaderboard":
       return "leaderboard";
+    case "tier-leaderboard":
+      return "tier-leaderboard";
     default:
       return null;
   }
@@ -393,19 +495,15 @@ function placeOf(screen: Screen): Place | null {
 
 // Both live in the per-user cache (lib/cache.ts), which is cleared when the
 // session ends: progress survives a reload, but logging out and back in
-// starts the tour over — and brings it back after a Skip intro, until the
-// backend says the training is complete.
-const stepKey = (userId: string) => `training-step:${userId}`;
-const skippedKey = (userId: string) => `training-skipped:${userId}`;
+// starts a part over — and brings it back after a Skip intro, until the
+// backend says that part is complete.
+const stepKey = (phase: Phase, userId: string) => `training-step:${phase}:${userId}`;
+const skippedKey = (phase: Phase, userId: string) => `training-skipped:${phase}:${userId}`;
 
-function readStep(userId: string): number {
-  const id = readCache<string>(stepKey(userId));
-  const at = STEPS.findIndex((s) => s.id === id);
+function readStep(phase: Phase, userId: string): number {
+  const id = readCache<string>(stepKey(phase, userId));
+  const at = PHASES[phase].steps.findIndex((s) => s.id === id);
   return at >= 0 ? at : 0;
-}
-
-function writeStep(userId: string, index: number) {
-  writeCache(stepKey(userId), STEPS[index].id);
 }
 
 /** The visible element carrying `data-tour~=key` (screens render separate
@@ -517,31 +615,71 @@ function placeCard(target: HTMLElement | null, cardHeight: number, kind: Step["k
   return { spot, card: { bottom: 24, left: vw - width - 24, width } };
 }
 
-/** Mounted by the signed-in app (GameApp's AppShell); renders nothing once
- * the account's training is complete. */
+/** Mounted by the signed-in app (GameApp's AppShell). Runs the part that
+ * belongs to the screen the player is on, if the account hasn't finished it;
+ * renders nothing otherwise. */
 export default function Training() {
   const { user, userConfirmed } = useAuth();
-  const [skippedNow, setSkippedNow] = useState<string | null>(null);
+  const { screen } = useScreen();
+  const [skippedNow, setSkippedNow] = useState<string[]>([]);
+  // The part that's running: it keeps going on its other screens (e.g. the
+  // Daily part on the leaderboard), which don't start it by themselves.
+  const [engaged, setEngaged] = useState<Phase | null>(null);
+  const place = placeOf(screen);
+
   // Only an explicit false from the server (not a stale cached user, and not
-  // an older backend without the field) starts the tour.
-  if (!user || !userConfirmed || user.trainingCompleted !== false) return null;
-  // Skip intro: hidden for the rest of this session only — nothing is saved
-  // to the backend.
-  if (skippedNow === user.id || readCache<boolean>(skippedKey(user.id))) return null;
+  // an older backend without the field) starts a part. Skip intro hides one
+  // for the rest of this session only — nothing is saved to the backend.
+  const pending = (p: Phase) =>
+    !!user &&
+    userConfirmed &&
+    user[PHASES[p].flag] === false &&
+    !skippedNow.includes(`${user.id}:${p}`) &&
+    !readCache<boolean>(skippedKey(p, user.id));
+  const entered = PHASE_ORDER.find((p) => !!place && PHASES[p].entry.includes(place) && pending(p)) ?? null;
+  const phase = engaged && pending(engaged) && !!place && PHASES[engaged].places.includes(place) ? engaged : entered;
+  if (phase !== engaged) setEngaged(phase);
+
+  if (!user || !phase) return null;
   const skip = () => {
-    writeCache(skippedKey(user.id), true);
-    setSkippedNow(user.id);
+    writeCache(skippedKey(phase, user.id), true);
+    setSkippedNow((prev) => [...prev, `${user.id}:${phase}`]);
   };
-  return <Tour key={user.id} userId={user.id} name={user.username?.trim() || "there"} onSkip={skip} />;
+  // The other game's tour already taught how to guess.
+  const basicsKnown =
+    phase === "daily" ? user.infiniteTrainingCompleted === true : phase === "infinite" && user.dailyTrainingCompleted === true;
+  return (
+    <Tour
+      key={`${user.id}:${phase}`}
+      phase={phase}
+      userId={user.id}
+      name={user.username?.trim() || "there"}
+      basicsKnown={basicsKnown}
+      onSkip={skip}
+    />
+  );
 }
 
-function Tour({ userId, name, onSkip }: { userId: string; name: string; onSkip: () => void }) {
+function Tour({
+  phase,
+  userId,
+  name,
+  basicsKnown,
+  onSkip,
+}: {
+  phase: Phase;
+  userId: string;
+  name: string;
+  basicsKnown: boolean;
+  onSkip: () => void;
+}) {
   const { completeTraining, user } = useAuth();
   const { screen, push, reset } = useScreen();
   const play = usePlayState();
+  const { steps: STEPS, flag, label } = PHASES[phase];
   // The last step the player moved past themselves (persisted, so a reload
   // resumes there). The step on screen can be further on — see below.
-  const [stored, setStored] = useState(() => readStep(userId));
+  const [stored, setStored] = useState(() => readStep(phase, userId));
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(false);
   // Per-step UI state, tagged with the step it belongs to so a new step
@@ -557,22 +695,23 @@ function Tour({ userId, name, onSkip }: { userId: string; name: string; onSkip: 
   // Where the share tour is, for the share window open right now.
   const [shareAt, setShareAt] = useState<{ session: number; i: number } | null>(null);
 
-  const ctx: Ctx = { play, name, streak: user?.stats.currentStreak ?? 0, shareOpen: share !== null, shared };
+  const ctx: Ctx = { play, name, streak: user?.stats.currentStreak ?? 0, shareOpen: share !== null, shared, basicsKnown };
   const place = placeOf(screen);
 
   // Steps the game or the player has already moved past: a round that's
-  // over (play steps), or the screen a tapped target led to (click steps).
+  // over (play steps), the screen a tapped target led to (click steps), or
+  // ones this player doesn't need (skip).
   let index = stored;
   while (index < STEPS.length - 1) {
     const s = STEPS[index];
-    if (s.until?.(ctx) || (s.kind === "click" && place !== s.on && place === STEPS[index + 1].on)) index++;
+    if (s.skip?.(ctx) || s.until?.(ctx) || (s.kind === "click" && place !== s.on && place === STEPS[index + 1].on)) index++;
     else break;
   }
   // Keep what the walk passed. A play step only counts as done while its
   // round is on screen, so leaving it (e.g. tapping Leaderboard once the
   // Daily word is over) would otherwise bring the player back to it.
   if (index > stored) setStored(index);
-  useEffect(() => writeStep(userId, stored), [userId, stored]);
+  useEffect(() => writeCache(stepKey(phase, userId), STEPS[stored].id), [phase, userId, stored, STEPS]);
 
   const sharing = share !== null && SHARE_TOUR_STEPS.has(STEPS[index].id);
   const shareI = sharing && shareAt?.session === share ? shareAt.i : 0;
@@ -588,10 +727,11 @@ function Tour({ userId, name, onSkip }: { userId: string; name: string; onSkip: 
   const goTo = useCallback(
     (to: Place) => {
       reset();
-      if (to === "hub" || to === "play-infinite") push({ name: "infinite-hub" });
+      if (to === "hub" || to === "play-infinite" || to === "tier-leaderboard") push({ name: "infinite-hub" });
       if (to === "play-infinite") push({ name: "play", mode: "infinite" });
       if (to === "play-daily") push({ name: "play", mode: "daily" });
       if (to === "leaderboard") push({ name: "leaderboard" });
+      if (to === "tier-leaderboard") push({ name: "tier-leaderboard" });
     },
     [push, reset],
   );
@@ -641,6 +781,8 @@ function Tour({ userId, name, onSkip }: { userId: string; name: string; onSkip: 
 
   // The click lock: only the card, the step's target (or the board, keyboard
   // and hint bulb while playing) and anything marked data-tour-allow respond.
+  // On a finish step, tapping one of its allowed targets (the home page's
+  // game buttons) finishes the part as well.
   useEffect(() => {
     const allowed = step.allow
       ? step.allow
@@ -653,22 +795,25 @@ function Tour({ userId, name, onSkip }: { userId: string; name: string; onSkip: 
       const t = e.target;
       if (!(t instanceof Element)) return;
       if (t.closest("[data-tour-card], [data-tour-allow]")) return;
-      if (ready && allowed.some((key) => t.closest(`[data-tour~="${key}"]`))) return;
+      if (ready && allowed.some((key) => t.closest(`[data-tour~="${key}"]`))) {
+        if (step.kind === "finish") completeTraining({ [flag]: true }).catch(() => {});
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
     };
     document.addEventListener("click", onClick, true);
     return () => document.removeEventListener("click", onClick, true);
-  }, [step, ready]);
+  }, [step, ready, completeTraining, flag]);
 
-  // Only Finish tells the backend; the tour unmounts once the returned user
-  // says it's complete.
+  // Only Finish tells the backend, and only this part's flag; the tour
+  // unmounts once the returned user says it's complete.
   async function finish() {
     if (saving) return;
     setSaving(true);
     setSaveError(false);
     try {
-      await completeTraining();
+      await completeTraining({ [flag]: true });
     } catch {
       setSaveError(true);
       setSaving(false);
@@ -687,10 +832,13 @@ function Tour({ userId, name, onSkip }: { userId: string; name: string; onSkip: 
   const tap = current?.tap ?? null;
   const stepNumber = index + 1;
   // A step that waits for a tap on its target has no button of its own, so
-  // the target gets all the attention: it pulses, a pointer marks it, and
-  // Skip intro stays out of the way (it'd be the only other thing to press).
+  // the target gets all the attention: it pulses and a pointer marks it.
   const mustTap = step.kind === "click" && !missingTarget;
   const tapping = mustTap && !!spot;
+  // Skip intro only sits next to a Next / Continue button. Without one (a
+  // tap on the page, or playing the round) it'd be the only thing on the
+  // card to press, and players took it for the way forward.
+  const canSkip = step.kind === "info" || (step.kind === "click" && missingTarget && !sharing);
 
   let action: ReactNode = null;
   if (step.kind === "info") {
@@ -775,9 +923,9 @@ function Tour({ userId, name, onSkip }: { userId: string; name: string; onSkip: 
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between gap-3">
             <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">
-              {sharing ? `Optional · Share ${shareI + 1} of ${SHARE_STEPS.length}` : `Training · ${stepNumber} of ${STEPS.length}`}
+              {sharing ? `Optional · Share ${shareI + 1} of ${SHARE_STEPS.length}` : `${label} tour · ${stepNumber} of ${STEPS.length}`}
             </span>
-            {step.kind !== "finish" && !mustTap && (
+            {canSkip && (
               <button
                 type="button"
                 onClick={onSkip}
