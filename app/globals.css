@@ -48,6 +48,9 @@
   --animate-float-slow: float 11s ease-in-out infinite;
   --animate-underline: underline-grow 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
   --animate-key-pulse: key-pulse 1.6s ease-in-out infinite;
+  --animate-tour-ripple: tour-ripple 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+  --animate-tour-nudge-down: tour-nudge-down 1s ease-in-out infinite;
+  --animate-tour-nudge-up: tour-nudge-up 1s ease-in-out infinite;
 }
 
 * {
@@ -309,6 +312,39 @@ html[data-cached-session] .auth-pending {
   }
   50% {
     box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-accent) 0%, transparent);
+  }
+}
+
+/* Training tour: the ring that spreads out from a button the player must tap,
+   and the "Tap here" pointer nudging towards it. */
+@keyframes tour-ripple {
+  from {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.18, 1.35);
+  }
+}
+
+@keyframes tour-nudge-down {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(6px);
+  }
+}
+
+@keyframes tour-nudge-up {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
   }
 }
 

@@ -420,13 +420,19 @@ function findTarget(key: string): HTMLElement | null {
 
 type Rect = { top: number; left: number; width: number; height: number };
 type CardPos = { top?: number; bottom?: number; left: number; width: number; centered?: boolean };
-type Layout = { spot: Rect | null; card: CardPos };
+/** The "Tap here" pointer on a click step: just above the target pointing
+ * down, or just below it pointing up. */
+type TapPos = { top: number; left: number; dir: "down" | "up" };
+type Layout = { spot: Rect | null; card: CardPos; tap?: TapPos | null };
 
 const PAD = 8;
 const GAP = 14;
 const EDGE = 12;
 const CARD_WIDTH = 360;
 const MOBILE = 768;
+const TAP_W = 116;
+const TAP_H = 34;
+const TAP_GAP = 6;
 
 function sameLayout(a: Layout | null, b: Layout) {
   if (!a) return false;
@@ -436,10 +442,45 @@ function sameLayout(a: Layout | null, b: Layout) {
     s === t || (!!s && !!t && s.top === t.top && s.left === t.left && s.width === t.width && s.height === t.height);
   const c = a.card,
     d = b.card;
-  return spotSame && c.top === d.top && c.bottom === d.bottom && c.left === d.left && c.width === d.width && c.centered === d.centered;
+  const p = a.tap,
+    q = b.tap;
+  const tapSame = p === q || (!!p && !!q && p.top === q.top && p.left === q.left && p.dir === q.dir);
+  return (
+    spotSame &&
+    tapSame &&
+    c.top === d.top &&
+    c.bottom === d.bottom &&
+    c.left === d.left &&
+    c.width === d.width &&
+    c.centered === d.centered
+  );
+}
+
+/** Where the pointer fits without leaving the screen or covering the card;
+ * null if it fits nowhere (the ring still pulses). */
+function placeTap(spot: Rect, card: CardPos, cardHeight: number): TapPos | null {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const left = Math.round(Math.min(Math.max(spot.left + spot.width / 2 - TAP_W / 2, EDGE), vw - TAP_W - EDGE));
+  const cardTop = card.top ?? vh - (card.bottom ?? 0) - cardHeight;
+  const clear = (top: number) =>
+    top >= EDGE &&
+    top + TAP_H <= vh - EDGE &&
+    !(top < cardTop + cardHeight && top + TAP_H > cardTop && left < card.left + card.width && left + TAP_W > card.left);
+  const above = spot.top - TAP_GAP - TAP_H;
+  if (clear(above)) return { top: above, left, dir: "down" };
+  const below = spot.top + spot.height + TAP_GAP;
+  if (clear(below)) return { top: below, left, dir: "up" };
+  return null;
 }
 
 function computeLayout(target: HTMLElement | null, cardHeight: number, kind: Step["kind"]): Layout {
+  const layout = placeCard(target, cardHeight, kind);
+  if (kind === "click" && layout.spot) layout.tap = placeTap(layout.spot, layout.card, cardHeight);
+  return layout;
+}
+
+function placeCard(target: HTMLElement | null, cardHeight: number, kind: Step["kind"]): Layout {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   const mobile = vw < MOBILE;
@@ -643,7 +684,13 @@ function Tour({ userId, name, onSkip }: { userId: string; name: string; onSkip: 
   const current = layout?.id === step.id ? layout : null;
   const spot = current?.spot ?? null;
   const card = current?.card;
+  const tap = current?.tap ?? null;
   const stepNumber = index + 1;
+  // A step that waits for a tap on its target has no button of its own, so
+  // the target gets all the attention: it pulses, a pointer marks it, and
+  // Skip intro stays out of the way (it'd be the only other thing to press).
+  const mustTap = step.kind === "click" && !missingTarget;
+  const tapping = mustTap && !!spot;
 
   let action: ReactNode = null;
   if (step.kind === "info") {
@@ -664,6 +711,15 @@ function Tour({ userId, name, onSkip }: { userId: string; name: string; onSkip: 
         Continue
       </button>
     );
+  } else if (tapping) {
+    action = (
+      <span className="flex w-full items-center gap-2 rounded-xl bg-accent/12 px-3 py-2 text-[13px] font-semibold text-accent">
+        <span aria-hidden="true" className="inline-block animate-tour-nudge-up">
+          👆
+        </span>
+        Tap the highlighted button to continue
+      </span>
+    );
   }
 
   return (
@@ -674,11 +730,32 @@ function Tour({ userId, name, onSkip }: { userId: string; name: string; onSkip: 
         <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-60">
           {spot ? (
             <div
-              className="absolute rounded-2xl border-2 border-accent transition-all duration-300 ease-out"
+              className={`absolute rounded-2xl border-accent transition-all duration-300 ease-out ${
+                tapping ? "border-[3px]" : "border-2"
+              }`}
               style={{ ...spot, boxShadow: "0 0 0 9999px rgba(9, 6, 11, 0.66)" }}
-            />
+            >
+              {tapping && (
+                <span className="absolute -inset-0.75 animate-tour-ripple rounded-2xl border-[3px] border-accent opacity-0" />
+              )}
+            </div>
           ) : (
             <div className="absolute inset-0 animate-fade-in bg-[#09060b]/66" />
+          )}
+          {tapping && tap && (
+            <div
+              className="absolute flex animate-fade-in justify-center transition-all duration-300 ease-out"
+              style={{ top: tap.top, left: tap.left, width: TAP_W, height: TAP_H }}
+            >
+              <span
+                className={`flex items-center gap-1.5 rounded-full bg-accent px-3.5 text-[13px] font-bold text-background shadow-lg shadow-accent/40 ${
+                  tap.dir === "down" ? "animate-tour-nudge-down" : "animate-tour-nudge-up"
+                }`}
+              >
+                <span>{tap.dir === "down" ? "👇" : "👆"}</span>
+                Tap here
+              </span>
+            </div>
           )}
         </div>
       )}
@@ -700,7 +777,7 @@ function Tour({ userId, name, onSkip }: { userId: string; name: string; onSkip: 
             <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">
               {sharing ? `Optional · Share ${shareI + 1} of ${SHARE_STEPS.length}` : `Training · ${stepNumber} of ${STEPS.length}`}
             </span>
-            {step.kind !== "finish" && (
+            {step.kind !== "finish" && !mustTap && (
               <button
                 type="button"
                 onClick={onSkip}
