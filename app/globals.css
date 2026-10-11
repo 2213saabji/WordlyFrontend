@@ -51,6 +51,8 @@
   --animate-tour-ripple: tour-ripple 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
   --animate-tour-nudge-down: tour-nudge-down 1s ease-in-out infinite;
   --animate-tour-nudge-up: tour-nudge-up 1s ease-in-out infinite;
+  --animate-twinkle: twinkle 3.2s ease-in-out infinite;
+  --animate-crown: crown-bob 4s ease-in-out infinite;
 }
 
 * {
@@ -345,6 +347,30 @@ html[data-cached-session] .auth-pending {
   }
   50% {
     transform: translateY(-6px);
+  }
+}
+
+/* Leaderboard podium: sparkles around the leader's card and the crown on
+   their avatar. */
+@keyframes twinkle {
+  0%,
+  100% {
+    opacity: 0.15;
+    transform: scale(0.6) rotate(0deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1) rotate(20deg);
+  }
+}
+
+@keyframes crown-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(14deg);
+  }
+  50% {
+    transform: translateY(-1.5px) rotate(10deg);
   }
 }
 

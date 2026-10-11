@@ -700,7 +700,7 @@ function DailyRevealScreen({
           </button>
           <button
             type="button"
-            onClick={() => onOpenLeaderboard(groupDaily?.groupId)}
+            onClick={() => onOpenLeaderboard()}
             data-tour="daily-leaderboard"
             aria-label="Leaderboard"
             className="flex flex-none items-center justify-center rounded-2xl border border-border bg-white/7 px-4.5 py-4 text-foreground/80 transition-colors hover:bg-white/12"
@@ -766,7 +766,7 @@ function DailyRevealScreen({
             </button>
             <button
               type="button"
-              onClick={() => onOpenLeaderboard(groupDaily?.groupId)}
+              onClick={() => onOpenLeaderboard()}
               data-tour="daily-leaderboard"
               className="flex items-center gap-2.5 whitespace-nowrap rounded-2xl border border-border bg-white/7 px-6.5 py-4 text-[15.5px] font-semibold transition-colors hover:bg-white/12"
             >

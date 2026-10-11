@@ -347,16 +347,75 @@ function PeriodToggle({
   );
 }
 
+/** Podium copy: a cheer for each medal spot, and a line on the leader's
+ * card that dares everyone else to take the top spot. */
+export interface PodiumText {
+  cheers: [string, string, string];
+  /** On the leader's card, for everyone else. */
+  challenge: string;
+  /** On the leader's card, for the leader. */
+  defend: string;
+}
+
+const DAILY_PODIUM: PodiumText = {
+  cheers: ["Today's champion", "Just one step behind", "On today's podium"],
+  challenge: "Think you can beat them? A new word drops every day.",
+  defend: "You're on top! Come back tomorrow to defend your crown.",
+};
+
+const WEEKLY_PODIUM: PodiumText = {
+  cheers: ["Champion of the week", "Chasing the crown", "On this week's podium"],
+  challenge: "The week isn't over. There's still time to catch them.",
+  defend: "You're leading the week! Keep playing to hold on to it.",
+};
+
+const MEDALS = ["🥇", "🥈", "🥉"];
+
+/** 🥇🥈🥉 for the top three, the plain number (styled by `className`) below. */
+export function RankMark({ rank, className }: { rank: number; className: string }) {
+  if (rank >= 1 && rank <= 3) {
+    return (
+      <span role="img" aria-label={`Rank ${rank}`} className={`${className} text-base leading-none`}>
+        {MEDALS[rank - 1]}
+      </span>
+    );
+  }
+  return <span className={className}>{rank}</span>;
+}
+
+/** Twinkling sparkles around the leader's card (which must be `relative`). */
+export function Sparkles() {
+  return (
+    <span aria-hidden="true" className="pointer-events-none absolute inset-0 opacity-60">
+      <span className="absolute -top-2 right-10 animate-twinkle text-[11px]">✨</span>
+      <span className="absolute -bottom-1.5 left-14 animate-twinkle text-[10px]" style={{ animationDelay: "1.4s" }}>
+        ✨
+      </span>
+    </span>
+  );
+}
+
+/** The crown on the leader's avatar (which must be `relative`). */
+export function Crown() {
+  return (
+    <span aria-hidden="true" className="pointer-events-none absolute -right-2 -top-3 animate-crown text-sm leading-none">
+      👑
+    </span>
+  );
+}
+
 export function PodiumCard({
   entry,
   rank,
   isMe,
+  text,
   delayMs = 0,
   firstLabel = "1st place",
 }: {
   entry: NormalizedEntry;
   rank: number;
   isMe: boolean;
+  text: PodiumText;
   delayMs?: number;
   firstLabel?: string;
 }) {
@@ -366,18 +425,28 @@ export function PodiumCard({
   return (
     <div
       style={{ animationDelay: `${delayMs}ms` }}
-      className={`flex animate-fade-in-up flex-col gap-3.5 rounded-3xl border p-6 ${first ? "" : "mt-6"} ${
-        first ? "border-accent/35 bg-accent/10" : isMe ? "border-accent/25 bg-accent/6" : "border-border bg-surface"
+      className={`relative flex animate-fade-in-up flex-col gap-3.5 rounded-3xl border p-6 ${first ? "" : "mt-6"} ${
+        first ? "border-accent/25 bg-accent/5" : isMe ? "border-accent/25 bg-accent/6" : "border-border bg-surface"
       }`}
     >
-      <span className={`text-xs font-semibold ${first ? "text-accent" : "text-foreground/50"}`}>{label}</span>
+      {first && <Sparkles />}
+      <span className="flex items-start justify-between gap-2">
+        <span className="flex flex-col gap-1">
+          <span className={`text-xs font-semibold ${first ? "text-accent" : "text-foreground/50"}`}>{label}</span>
+          <span className="text-[12.5px] text-foreground/55">{text.cheers[rank - 1]}</span>
+        </span>
+        <span aria-hidden="true" className="text-lg leading-none">
+          {MEDALS[rank - 1]}
+        </span>
+      </span>
       <span className="flex items-center gap-3">
         <span
-          className={`flex shrink-0 items-center justify-center rounded-xl font-bold ${
+          className={`relative flex shrink-0 items-center justify-center rounded-xl font-bold ${
             first ? "size-11 bg-accent text-lg text-background" : "size-9 bg-white/10 text-sm"
           } ${isMe && !first ? "bg-accent/20 text-accent" : ""}`}
         >
           {initial(entry.username)}
+          {first && <Crown />}
         </span>
         <span className={`truncate font-semibold ${first ? "text-xl" : "text-[17px]"} ${isMe ? "text-accent" : ""}`}>
           {entry.username}
@@ -385,6 +454,50 @@ export function PodiumCard({
         </span>
       </span>
       <span className={`text-[13.5px] ${first ? "text-foreground/85" : "text-foreground/60"}`}>{entry.statLine}</span>
+      {first && (
+        <span className="border-t border-accent/15 pt-3 text-[12.5px] leading-snug text-foreground/60">
+          {isMe ? text.defend : text.challenge}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** The leader's hero card on mobile, where the list starts at #2. */
+export function LeaderHero({
+  name,
+  statLine,
+  isMe,
+  text,
+}: {
+  name: string;
+  statLine: string;
+  isMe: boolean;
+  text: PodiumText;
+}) {
+  return (
+    <div className="relative flex flex-col gap-3.5 rounded-[22px] border border-accent/25 bg-accent/5 p-5">
+      <Sparkles />
+      <div className="flex items-center gap-3.5">
+        <span className="relative flex size-11 shrink-0 items-center justify-center rounded-xl bg-accent text-lg font-bold text-background">
+          {initial(name)}
+          <Crown />
+        </span>
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent/80">{text.cheers[0]}</span>
+          <span className="truncate text-lg font-bold tracking-tight">
+            {name}
+            {isMe && <span className="font-normal opacity-70"> · you</span>}
+          </span>
+          <span className="text-xs text-foreground/85">1st · {statLine}</span>
+        </span>
+        <span aria-hidden="true" className="ml-auto text-lg leading-none">
+          🥇
+        </span>
+      </div>
+      <span className="border-t border-accent/15 pt-3 text-[12.5px] leading-snug text-foreground/60">
+        {isMe ? text.defend : text.challenge}
+      </span>
     </div>
   );
 }
@@ -536,6 +649,7 @@ export default function Leaderboard({
   const sentinelIndex = Math.max(0, entries.length - 1 - LOAD_MORE_LOOKAHEAD);
 
   const podium = entries.length >= 3 ? entries.slice(0, 3) : [];
+  const podiumText = period === "daily" ? DAILY_PODIUM : WEEKLY_PODIUM;
   const top = entries[0];
 
   return (
@@ -576,9 +690,9 @@ export default function Leaderboard({
               {/* desktop: podium + full table */}
               {podium.length === 3 && (
                 <div className="hidden md:grid md:grid-cols-3 md:gap-5">
-                  <PodiumCard entry={podium[1]} rank={2} isMe={podium[1].userId === user?.id} delayMs={80} />
-                  <PodiumCard entry={podium[0]} rank={1} isMe={podium[0].userId === user?.id} delayMs={0} />
-                  <PodiumCard entry={podium[2]} rank={3} isMe={podium[2].userId === user?.id} delayMs={160} />
+                  <PodiumCard entry={podium[1]} rank={2} isMe={podium[1].userId === user?.id} text={podiumText} delayMs={80} />
+                  <PodiumCard entry={podium[0]} rank={1} isMe={podium[0].userId === user?.id} text={podiumText} delayMs={0} />
+                  <PodiumCard entry={podium[2]} rank={3} isMe={podium[2].userId === user?.id} text={podiumText} delayMs={160} />
                 </div>
               )}
 
@@ -607,7 +721,7 @@ export default function Leaderboard({
                         isMe ? "bg-accent/8" : ""
                       }`}
                     >
-                      <span className={isMe ? "font-semibold text-accent" : "text-foreground/50"}>{entry.rank}</span>
+                      <RankMark rank={entry.rank} className={isMe ? "font-semibold text-accent" : "text-foreground/50"} />
                       <span className="flex min-w-0 items-center gap-3">
                         <span
                           className={`flex size-8 shrink-0 items-center justify-center rounded-lg text-xs font-semibold ${
@@ -634,19 +748,7 @@ export default function Leaderboard({
               {/* mobile: hero card for #1 + flat list from #2 */}
               {top && (
                 <div data-tour="lb-list" className="animate-fade-in-up md:hidden">
-                  <div className="flex items-center gap-3.5 rounded-[22px] border border-accent/35 bg-accent/10 p-5">
-                    <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-accent text-lg font-bold text-background">
-                      {initial(top.username)}
-                    </span>
-                    <span className="flex flex-col gap-0.5">
-                      <span className="text-lg font-bold tracking-tight">
-                        {top.username}
-                        {top.userId === user?.id && <span className="font-normal opacity-70"> · you</span>}
-                      </span>
-                      <span className="text-xs text-foreground/85">1st · {top.statLine}</span>
-                    </span>
-                    <span className="ml-auto text-xs font-semibold uppercase tracking-widest text-accent">Top</span>
-                  </div>
+                  <LeaderHero name={top.username} statLine={top.statLine} isMe={top.userId === user?.id} text={podiumText} />
                 </div>
               )}
 
@@ -663,9 +765,10 @@ export default function Leaderboard({
                       }`}
                       style={{ animationDelay: `${i * 40}ms` }}
                     >
-                      <span className={`w-5 text-xs ${isMe ? "font-semibold text-accent" : "text-foreground/50"}`}>
-                        {entry.rank}
-                      </span>
+                      <RankMark
+                        rank={entry.rank}
+                        className={`w-5 text-xs ${isMe ? "font-semibold text-accent" : "text-foreground/50"}`}
+                      />
                       <span
                         className={`flex size-8 shrink-0 items-center justify-center rounded-lg text-xs font-semibold ${
                           isMe ? "bg-accent/20 text-accent" : "bg-white/10"

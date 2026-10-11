@@ -8,13 +8,16 @@ import {
   ChevronDownIcon,
   GROUPS_CACHE_KEY,
   LOAD_MORE_LOOKAHEAD,
+  LeaderHero,
   PodiumCard,
+  RankMark,
   ScopeSwitcher,
   displayName,
   initial,
   useNearBottomScroll,
   useSentinelRef,
   type NormalizedEntry,
+  type PodiumText,
 } from "@/components/Leaderboard";
 import {
   ApiRequestError,
@@ -44,6 +47,12 @@ const PAGE_SIZE = 20;
 const ME_CACHE_KEY = "infinite:me";
 const TIERS_CACHE_KEY = "infinite:tiers";
 const MUTED = "text-[#9a8aa2]";
+
+const TIER_PODIUM: PodiumText = {
+  cheers: ["Top of the tier", "Hot on their heels", "On the podium"],
+  challenge: "Think you can take the top spot? Keep playing to climb.",
+  defend: "You're top of the tier! Keep playing to stay there.",
+};
 
 function boardCacheKey(tier: TierNumber | undefined): string {
   return `infinite:board:${tier ?? "mine"}`;
@@ -270,14 +279,15 @@ export default function TierLeaderboard({
           {/* desktop: podium + table */}
           {podium.length === 3 && (
             <div className="hidden md:grid md:grid-cols-3 md:gap-5">
-              <PodiumCard entry={podium[1]} rank={2} isMe={podium[1].userId === user?.id} delayMs={80} />
+              <PodiumCard entry={podium[1]} rank={2} isMe={podium[1].userId === user?.id} text={TIER_PODIUM} delayMs={80} />
               <PodiumCard
                 entry={{ ...podium[0], statLine: `${podium[0].statLine} · ${entries[0].qualifyingDaysInTier} qualified` }}
                 rank={1}
                 isMe={podium[0].userId === user?.id}
+                text={TIER_PODIUM}
                 firstLabel={`1st in ${tierName}`}
               />
-              <PodiumCard entry={podium[2]} rank={3} isMe={podium[2].userId === user?.id} delayMs={160} />
+              <PodiumCard entry={podium[2]} rank={3} isMe={podium[2].userId === user?.id} text={TIER_PODIUM} delayMs={160} />
             </div>
           )}
           {ctaAboveList && <div className="hidden md:block">{cta}</div>}
@@ -324,20 +334,13 @@ export default function TierLeaderboard({
 
           {/* mobile: hero card for #1 + list from #2 */}
           {top && (
-            <div className="flex animate-fade-in-up items-center gap-3.5 rounded-[22px] border border-accent/35 bg-accent/10 p-5 md:hidden">
-              <span className="flex size-11 shrink-0 items-center justify-center rounded-[14px] bg-accent text-[17px] font-bold text-background">
-                {initial(displayName(top.username))}
-              </span>
-              <span className="flex min-w-0 flex-col gap-[3px]">
-                <span className="truncate text-lg font-bold tracking-[-0.01em]">
-                  {displayName(top.username)}
-                  {top.userId === user?.id && <span className="font-normal opacity-70"> · you</span>}
-                </span>
-                <span className="text-[12.5px] opacity-80">
-                  1st · {fmt(top.score)} pts · {dayCount(top)}
-                </span>
-              </span>
-              <span className="ml-auto text-xs font-semibold uppercase tracking-[0.14em] text-accent">Top</span>
+            <div className="animate-fade-in-up md:hidden">
+              <LeaderHero
+                name={displayName(top.username)}
+                statLine={`${fmt(top.score)} pts · ${dayCount(top)}`}
+                isMe={top.userId === user?.id}
+                text={TIER_PODIUM}
+              />
             </div>
           )}
           {ctaAboveList && <div className="md:hidden">{cta}</div>}
@@ -408,7 +411,7 @@ function TableRow({
         isMe ? "bg-accent/8" : ""
       }`}
     >
-      <span className={`text-sm font-semibold ${isMe ? "text-accent" : MUTED}`}>{rank}</span>
+      <RankMark rank={rank} className={`text-sm font-semibold ${isMe ? "text-accent" : MUTED}`} />
       <span className="flex min-w-0 items-center gap-3">
         <span
           className={`flex size-8 shrink-0 items-center justify-center rounded-[10px] text-[13px] font-semibold ${
@@ -453,7 +456,7 @@ function ListRow({
         isMe ? "-mx-2.5 rounded-[14px] bg-accent/8 px-2.5" : "border-b border-white/7"
       }`}
     >
-      <span className={`w-5 text-[13px] ${isMe ? "font-semibold text-accent" : MUTED}`}>{rank}</span>
+      <RankMark rank={rank} className={`w-5 text-[13px] ${isMe ? "font-semibold text-accent" : MUTED}`} />
       <span
         className={`flex size-8 shrink-0 items-center justify-center rounded-[10px] text-[13px] font-semibold ${
           isMe ? "bg-accent/20 text-accent" : "bg-white/9"
