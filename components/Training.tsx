@@ -38,8 +38,9 @@ interface Step {
   target?: string;
   /** info: read, then the card's button. click: tap the spotlighted target
    * (which leads to the next step's screen). play: play on — only the board
-   * and keyboard work — until `until` holds. finish: saves the training. */
-  kind: "info" | "click" | "play" | "finish";
+   * and keyboard work — until `until` holds. finish: saves the training.
+   * paused: the player went back to another screen of this part (PAUSED). */
+  kind: "info" | "click" | "play" | "finish" | "paused";
   title: string | ((ctx: Ctx) => string);
   body: ReactNode | ((ctx: Ctx) => ReactNode);
   button?: string | ((ctx: Ctx) => string);
@@ -451,6 +452,18 @@ const PHASES: Record<Phase, PhaseDef> = {
 };
 const PHASE_ORDER: Phase[] = ["home", "infinite", "daily"];
 
+/** Shown instead of the current step while the player is on another screen
+ * of the same part — they went back (the back arrows and the logo always
+ * work). Nothing is locked; Continue tour, or reaching the step's screen
+ * themselves, picks up where they left off. */
+const PAUSED: Step = {
+  id: "paused",
+  on: "home",
+  kind: "paused",
+  title: "Pick up where you left off",
+  body: "The tour is waiting on another screen. Carry on whenever you're ready.",
+};
+
 /** The optional share tour: runs over the share window while it's open on
  * the daily-share / daily-board steps, then hands back to them. Everything
  * in the window can be tried out. */
@@ -595,7 +608,7 @@ function placeCard(target: HTMLElement | null, cardHeight: number, kind: Step["k
 
   if (!spot) {
     // While playing: out of the board's way. Otherwise: centred.
-    if (kind === "play") return { spot, card: mobile ? { top: EDGE, left: EDGE, width } : { bottom: 24, left: 24, width } };
+    if (kind === "play" || kind === "paused") return { spot, card: mobile ? { top: EDGE, left: EDGE, width } : { bottom: 24, left: 24, width } };
     return { spot, card: { top: Math.round((vh - cardHeight) / 2), left: Math.round((vw - width) / 2), width, centered: true } };
   }
 
@@ -699,12 +712,14 @@ function Tour({
   const place = placeOf(screen);
 
   // Steps the game or the player has already moved past: a round that's
-  // over (play steps), the screen a tapped target led to (click steps), or
-  // ones this player doesn't need (skip).
+  // over (play steps) or ones this player doesn't need (skip), judged only
+  // on the step's own screen; or the screen a tapped target led to (click
+  // steps).
   let index = stored;
   while (index < STEPS.length - 1) {
     const s = STEPS[index];
-    if (s.skip?.(ctx) || s.until?.(ctx) || (s.kind === "click" && place !== s.on && place === STEPS[index + 1].on)) index++;
+    const here = place === s.on;
+    if ((here && (s.skip?.(ctx) || s.until?.(ctx))) || (s.kind === "click" && !here && place === STEPS[index + 1].on)) index++;
     else break;
   }
   // Keep what the walk passed. A play step only counts as done while its
@@ -715,7 +730,9 @@ function Tour({
 
   const sharing = share !== null && SHARE_TOUR_STEPS.has(STEPS[index].id);
   const shareI = sharing && shareAt?.session === share ? shareAt.i : 0;
-  const step = sharing ? SHARE_STEPS[shareI] : STEPS[index];
+  const tourStep = sharing ? SHARE_STEPS[shareI] : STEPS[index];
+  // Back on another screen of this part: wait for them (see PAUSED).
+  const step = place === tourStep.on ? tourStep : PAUSED;
   const ready = !step.delayMs || readyId === step.id;
   const missingTarget = missingId === step.id;
 
@@ -735,12 +752,6 @@ function Tour({
     },
     [push, reset],
   );
-
-  // Keep the player on the step's screen: a reload, a deep link or the
-  // promotion screen's buttons all land back where the step is.
-  useEffect(() => {
-    if (place !== step.on) goTo(step.on);
-  }, [place, step.on, goTo]);
 
   // A step with a delay shows once it's up.
   useEffect(() => {
@@ -780,10 +791,12 @@ function Tour({
   }, [ready, step]);
 
   // The click lock: only the card, the step's target (or the board, keyboard
-  // and hint bulb while playing) and anything marked data-tour-allow respond.
-  // On a finish step, tapping one of its allowed targets (the home page's
-  // game buttons) finishes the part as well.
+  // and hint bulb while playing), the back arrows and logo, and anything
+  // marked data-tour-allow respond; nothing is locked while paused. On a
+  // finish step, tapping one of its allowed targets (the home page's game
+  // buttons) finishes the part as well.
   useEffect(() => {
+    if (step.kind === "paused") return;
     const allowed = step.allow
       ? step.allow
       : step.kind === "click" && step.target
@@ -794,7 +807,7 @@ function Tour({
     const onClick = (e: MouseEvent) => {
       const t = e.target;
       if (!(t instanceof Element)) return;
-      if (t.closest("[data-tour-card], [data-tour-allow]")) return;
+      if (t.closest('[data-tour-card], [data-tour-allow], [data-tour~="tour-back"]')) return;
       if (ready && allowed.some((key) => t.closest(`[data-tour~="${key}"]`))) {
         if (step.kind === "finish") completeTraining({ [flag]: true }).catch(() => {});
         return;
@@ -825,7 +838,7 @@ function Tour({
   const resolve = <T,>(v: T | ((c: Ctx) => T)) => (typeof v === "function" ? (v as (c: Ctx) => T)(ctx) : v);
   const title = resolve(step.title);
   const body = resolve(step.body);
-  const dim = step.kind !== "play";
+  const dim = step.kind !== "play" && step.kind !== "paused";
   const current = layout?.id === step.id ? layout : null;
   const spot = current?.spot ?? null;
   const card = current?.card;
@@ -838,10 +851,17 @@ function Tour({
   // Skip intro only sits next to a Next / Continue button. Without one (a
   // tap on the page, or playing the round) it'd be the only thing on the
   // card to press, and players took it for the way forward.
-  const canSkip = step.kind === "info" || (step.kind === "click" && missingTarget && !sharing);
+  const canSkip =
+    step.kind === "info" || step.kind === "paused" || (step.kind === "click" && missingTarget && !sharing);
 
   let action: ReactNode = null;
-  if (step.kind === "info") {
+  if (step.kind === "paused") {
+    action = (
+      <button type="button" onClick={() => goTo(tourStep.on)} className={PRIMARY}>
+        Continue tour
+      </button>
+    );
+  } else if (step.kind === "info") {
     action = (
       <button type="button" onClick={advance} className={PRIMARY}>
         {step.button ? resolve(step.button) : "Next"}

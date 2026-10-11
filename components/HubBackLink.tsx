@@ -6,6 +6,7 @@ export default function HubBackLink({ onClick, className = "" }: { onClick: () =
     <button
       type="button"
       onClick={onClick}
+      data-tour="tour-back"
       className={`flex items-center gap-2 self-start text-[13.5px] font-semibold text-foreground/60 transition-colors hover:text-accent ${className}`}
     >
       <svg

@@ -16,6 +16,7 @@ export default function ScreenHeader({
         type="button"
         onClick={onBack}
         aria-label="Back"
+        data-tour="tour-back"
         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-foreground/70 transition-all duration-150 hover:-translate-x-0.5 hover:border-accent/40 hover:text-foreground active:scale-90"
       >
         <svg

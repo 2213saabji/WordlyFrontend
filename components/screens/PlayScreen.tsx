@@ -610,6 +610,7 @@ function DailyRevealScreen({
           type="button"
           onClick={onBack}
           aria-label="Back"
+          data-tour="tour-back"
           className="flex h-8.5 w-8.5 flex-none items-center justify-center rounded-xl bg-white/7 text-foreground"
         >
           <BackIcon />
@@ -1332,6 +1333,7 @@ export default function PlayScreen({
           type="button"
           onClick={handleBack}
           aria-label={toHub ? "Back to Infinite hub" : "Back"}
+          data-tour="tour-back"
           className="flex h-8.5 w-8.5 flex-none items-center justify-center rounded-xl bg-white/7 text-foreground transition-colors hover:bg-white/12"
         >
           <BackIcon />

@@ -124,6 +124,7 @@ export default function Nav() {
         <Link
           href="/"
           onClick={() => reset()}
+          data-tour="tour-back"
           className="group flex shrink-0 items-center gap-2"
         >
           <span className="flex gap-0.5">
