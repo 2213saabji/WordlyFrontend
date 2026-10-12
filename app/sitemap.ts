@@ -3,24 +3,35 @@ import { GUIDES, GUIDES_PATH, GUIDES_UPDATED_ISO, guidePath } from "@/lib/guides
 
 const SITE_URL = "https://www.guessword.games";
 
+// When the content of the info pages (how to play, about, FAQ, contact,
+// legal) last changed. Bump it when you edit their copy. Google only trusts
+// <lastmod> when it's accurate, so a value that changes on every deploy gets
+// ignored for the whole sitemap.
+const INFO_PAGES_UPDATED_ISO = "2026-10-07";
+
 // The rest of the app is client-side "screens" behind "/" (the guest home
 // for visitors, the signed-in app once logged in), not separate server
 // pages. /reset-password/[token] is deliberately
 // excluded, since each link is single-use and tied to one person's reset
 // request, not a page worth search engines indexing.
 export default function sitemap(): MetadataRoute.Sitemap {
-  const lastModified = new Date();
+  const info = (path: string, priority: number, changeFrequency: "monthly" | "yearly") => ({
+    url: `${SITE_URL}${path}`,
+    lastModified: INFO_PAGES_UPDATED_ISO,
+    changeFrequency,
+    priority,
+  });
 
   return [
-    { url: SITE_URL, lastModified, changeFrequency: "daily", priority: 1 },
-    { url: `${SITE_URL}/how-to-play`, lastModified, changeFrequency: "monthly", priority: 0.8 },
-    { url: `${SITE_URL}/about`, lastModified, changeFrequency: "monthly", priority: 0.6 },
-    { url: `${SITE_URL}/faq`, lastModified, changeFrequency: "monthly", priority: 0.7 },
-    { url: `${SITE_URL}/contact`, lastModified, changeFrequency: "yearly", priority: 0.3 },
-    { url: `${SITE_URL}/privacy-policy`, lastModified, changeFrequency: "yearly", priority: 0.3 },
-    { url: `${SITE_URL}/terms`, lastModified, changeFrequency: "yearly", priority: 0.3 },
-    // Public Infinite tier board.
-    { url: `${SITE_URL}/leaderboard/infinite`, lastModified, changeFrequency: "daily", priority: 0.6 },
+    { url: SITE_URL, lastModified: INFO_PAGES_UPDATED_ISO, changeFrequency: "daily", priority: 1 },
+    info("/how-to-play", 0.8, "monthly"),
+    info("/about", 0.6, "monthly"),
+    info("/faq", 0.7, "monthly"),
+    info("/contact", 0.3, "yearly"),
+    info("/privacy-policy", 0.3, "yearly"),
+    info("/terms", 0.3, "yearly"),
+    // Public Infinite tier board — its standings really do change daily.
+    { url: `${SITE_URL}/leaderboard/infinite`, lastModified: new Date(), changeFrequency: "daily", priority: 0.6 },
     // Strategy guides (lib/guides.ts).
     { url: `${SITE_URL}${GUIDES_PATH}`, lastModified: GUIDES_UPDATED_ISO, changeFrequency: "monthly", priority: 0.8 },
     ...GUIDES.map((guide) => ({
