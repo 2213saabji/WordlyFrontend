@@ -8,7 +8,8 @@ export interface LegalSection {
   body: ReactNode;
 }
 
-/** Shared layout for the numbered legal pages (privacy policy, terms) —
+/** Shared layout for the numbered legal pages (privacy policy, terms,
+ * refunds & cancellations) —
  * eyebrow/title/meta row, a sticky "on this page" anchor nav, numbered
  * sections, and a closing contact callout. */
 export default function LegalPage({

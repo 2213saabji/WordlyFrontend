@@ -41,7 +41,7 @@ function CloseIcon() {
 }
 
 /** Header for the public info pages (how-to-play, about, faq, contact,
- * privacy-policy, terms) — deliberately separate from the game's own Nav
+ * privacy-policy, terms, refund-policy) — deliberately separate from the game's own Nav
  * (Play/Groups/Leaderboard/History): these links are between info pages,
  * not game screens, and don't need auth state at all. */
 export default function InfoHeader() {

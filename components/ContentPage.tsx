@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 /** Shared shell for the public info pages (how-to-play, about, faq,
- * privacy-policy, terms, contact) — the header/footer come from
+ * privacy-policy, terms, refund-policy, contact) — the header/footer come from
  * app/(info)/layout.tsx; this just lays out the hero + card sections,
  * matching the "GuessWord Info Pages" design. */
 export default function ContentPage({

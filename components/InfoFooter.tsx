@@ -23,6 +23,7 @@ const COLUMNS: { heading: string; links: { href: string; label: string }[] }[] =
     links: [
       { href: "/privacy-policy", label: "Privacy policy" },
       { href: "/terms", label: "Terms" },
+      { href: "/refund-policy", label: "Refunds & cancellations" },
     ],
   },
 ];
