@@ -41,6 +41,7 @@ import HubBackLink from "@/components/HubBackLink";
 import { formatDuration } from "@/components/Leaderboard";
 import { guessPublicRound, newPublicRound, restorePublicGame } from "@/lib/public-round";
 import { wordNumberForDate } from "@/lib/share";
+import { noteGameFinished } from "@/lib/install";
 import type { PlayMode } from "@/lib/screen-context";
 import type { Game, GameDifficulty, Guess, LetterResult, TodayProgress, User } from "@/types";
 
@@ -959,6 +960,15 @@ export default function PlayScreen({
   // Only "won"/"lost" (not the null -> "in-progress" transition on initial
   // load) should trigger a leaderboard refetch below.
   const gameFinished = game?.status === "won" || game?.status === "lost";
+
+  // A round that ends while playing (not one that loads already finished)
+  // lets the "Add to home screen" sheet be offered once the player leaves
+  // the board — see components/InstallPrompt.tsx.
+  const prevStatus = useRef(game?.status);
+  useEffect(() => {
+    if (prevStatus.current === "in-progress" && gameFinished) noteGameFinished();
+    prevStatus.current = game?.status;
+  }, [game?.status, gameFinished]);
 
   useEffect(() => {
     if (!hasGroup || !user) return;

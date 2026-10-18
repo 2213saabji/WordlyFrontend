@@ -171,6 +171,15 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             __html: `(function(){try{if(localStorage.getItem("guessword_device_id")&&localStorage.getItem("guessword_cache:user"))document.documentElement.setAttribute("data-cached-session","")}catch(e){}})()`,
           }}
         />
+        {/* Android/desktop Chrome offer to install the site with this event,
+            often before React has loaded. Keep it (and stop Chrome's own
+            mini-infobar) so lib/install.ts can show our install sheet at a
+            good moment instead. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `window.addEventListener("beforeinstallprompt",function(e){e.preventDefault();window.__guesswordInstallPrompt=e;window.dispatchEvent(new Event("guessword:installable"))})`,
+          }}
+        />
       </head>
       {/* Third-party scripts (AdSense, its consent message) and browser
           extensions add attributes to <body> before React hydrates. This only

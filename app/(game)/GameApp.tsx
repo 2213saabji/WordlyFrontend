@@ -16,8 +16,11 @@ import { NotificationsScreen } from "@/components/Notifications";
 import PlayScreen from "@/components/screens/PlayScreen";
 import HistoryScreen from "@/components/screens/HistoryScreen";
 import GroupsScreen from "@/components/screens/GroupsScreen";
+import SettingsScreen from "@/components/screens/SettingsScreen";
+import { InstallPromptHost } from "@/components/InstallPrompt";
 import { useAuth } from "@/lib/auth-context";
-import { PRE_AUTH_SCREENS, useScreen } from "@/lib/screen-context";
+import { registerServiceWorker } from "@/lib/push";
+import { PRE_AUTH_SCREENS, useScreen, type PlayMode } from "@/lib/screen-context";
 import { parseReplayParam, type ReplayInvite } from "@/lib/share";
 import { runSync } from "@/lib/sync";
 import PublicApp from "./PublicApp";
@@ -30,13 +33,22 @@ function AppShell({ intro }: { intro: ReactNode }) {
   );
 
   useEffect(() => {
-    if (!invite) return;
+    // The daily reminder (push or email) links to /?play=daily|infinite.
+    const play = new URLSearchParams(window.location.search).get("play");
+    const reminderMode: PlayMode | null = play === "daily" || play === "infinite" ? play : null;
+    if (!invite && !reminderMode) return;
     // A replay link is only valid same-day (daily mode's word is already
     // server-date-scoped — see lib/share.ts), so this just deep-links into
     // today's Play Daily rather than fetching anything invite-specific.
-    push({ name: "play", mode: "daily" });
+    push({ name: "play", mode: reminderMode ?? "daily" });
     window.history.replaceState(null, "", window.location.pathname);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // The service worker shows reminder notifications; registering it early
+  // also keeps an existing subscription alive. Not needed before sign-in.
+  useEffect(() => {
+    void registerServiceWorker()?.catch(() => {});
   }, []);
 
   const screenKey =
@@ -75,6 +87,7 @@ function AppShell({ intro }: { intro: ReactNode }) {
         onOpenTierLeaderboard={(tier) => push({ name: "tier-leaderboard", tier })}
         onPlay={() => push({ name: "play", mode: "infinite" })}
       />
+      <InstallPromptHost screen={screen.name} />
       {invite && (
         <div className="mx-auto flex w-full max-w-lg animate-fade-in items-center gap-3 px-4 pt-4">
           <p className="flex-1 rounded-xl border border-accent/25 bg-accent/10 px-4 py-2.5 text-sm text-foreground/80">
@@ -102,6 +115,7 @@ function AppShell({ intro }: { intro: ReactNode }) {
               onHistory={() => push({ name: "history" })}
               onGroups={() => push({ name: "groups" })}
               onOpenLeaderboard={(groupId?: string) => push({ name: "leaderboard", groupId })}
+              onOpenSettings={() => push({ name: "settings" })}
             />
             {intro}
           </>
@@ -123,6 +137,7 @@ function AppShell({ intro }: { intro: ReactNode }) {
           <DiamondStatusScreen onBack={back} onPlay={() => push({ name: "play", mode: "infinite" })} />
         )}
         {screen.name === "coins" && <CoinsScreen onBack={back} />}
+        {screen.name === "settings" && <SettingsScreen onBack={back} />}
         {screen.name === "notifications" && (
           <NotificationsScreen onBack={back} onNavigate={(target) => replace(target)} />
         )}

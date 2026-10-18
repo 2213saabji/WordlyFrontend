@@ -1,4 +1,5 @@
 import type { TierNumber } from "@/types/infinite";
+import type { ReminderSummary } from "@/types/reminders";
 
 export interface UserStats {
   gamesPlayed: number;
@@ -36,6 +37,8 @@ export interface User {
   infiniteTrainingCompleted?: boolean;
   /** Read-only: true once all three parts above are. */
   trainingCompleted?: boolean;
+  /** Daily reminder settings (absent on older backends). */
+  reminders?: ReminderSummary;
 }
 
 export interface AuthResponse {
@@ -253,3 +256,4 @@ export interface ApiErrorBody {
 export * from "@/types/infinite";
 export * from "@/types/coins";
 export * from "@/types/notifications";
+export * from "@/types/reminders";

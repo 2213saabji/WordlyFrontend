@@ -22,7 +22,8 @@ import {
 } from "@/lib/api";
 import { clearCache, readCache, writeCache } from "@/lib/cache";
 import { invalidate, isFresh, markFresh, onStale, runSync, setSyncUser } from "@/lib/sync";
-import type { AuthResponse, SignupPendingResponse, User } from "@/types";
+import { forgetDeviceOnLogout } from "@/lib/push";
+import type { AuthResponse, ReminderSummary, SignupPendingResponse, User } from "@/types";
 
 const USER_CACHE_KEY = "user";
 // Longest the app waits on the startup /auth/refresh before showing the
@@ -61,6 +62,8 @@ interface AuthContextValue {
   userConfirmed: boolean;
   /** PATCH /auth/training with the given flags and applies the returned user. */
   completeTraining: (flags: api.TrainingFlags) => Promise<void>;
+  /** Applies reminder settings returned by a /reminders call to `user`. */
+  applyReminders: (reminders: ReminderSummary) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -219,6 +222,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // succeed regardless of whether this call does (offline, token already
     // expired, etc), so it's fire-and-forget.
     api.logoutDevice().catch(() => {});
+    // Same for this browser's push subscription, so the next player on this
+    // device doesn't get this one's reminders.
+    forgetDeviceOnLogout();
     clearToken();
     clearDeviceId();
     setUser(null);
@@ -235,6 +241,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const completeTraining = useCallback(async (flags: api.TrainingFlags) => {
     const { user } = await api.setTrainingFlags(flags);
     setUser(user);
+  }, []);
+
+  const applyReminders = useCallback((reminders: ReminderSummary) => {
+    setUser((current) => (current ? { ...current, reminders } : current));
   }, []);
 
   const loginWithGoogle = useCallback(async (idToken: string) => {
@@ -276,6 +286,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loginWithGoogle,
         userConfirmed,
         completeTraining,
+        applyReminders,
       }}
     >
       {children}

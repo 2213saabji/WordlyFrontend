@@ -23,6 +23,7 @@ export type Screen =
   | { name: "diamond" } // Tier 1 cycle: Diamond stars and completed cycles
   | { name: "coins" } // wallet: balance, coin pack, activity
   | { name: "notifications" } // mobile: full-screen list (desktop uses the Nav dropdown)
+  | { name: "settings" } // daily reminder and install
   | { name: "play"; mode: PlayMode }
   | { name: "history" }
   | { name: "groups" }
@@ -31,7 +32,7 @@ export type Screen =
 
 export const PRE_AUTH_SCREENS: Screen["name"][] = ["login", "signup", "forgot-password"];
 
-export const POST_AUTH_SCREENS: Screen["name"][] =["home", "infinite-hub", "how-tiers", "tier-history", "diamond", "coins", "notifications", "play", "history", "groups", "leaderboard", "tier-leaderboard"];
+export const POST_AUTH_SCREENS: Screen["name"][] =["home", "infinite-hub", "how-tiers", "tier-history", "diamond", "coins", "notifications", "settings", "play", "history", "groups", "leaderboard", "tier-leaderboard"];
 
 interface ScreenContextValue {
   screen: Screen;

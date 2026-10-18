@@ -3,6 +3,7 @@
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { displayName } from "@/components/Leaderboard";
+import { HomeReminderSlot } from "@/components/ReminderCards";
 import { getMyGroups, getGlobalWeeklyLeaderboard, getPublicInfiniteLeaderboard } from "@/lib/api";
 import { PUBLIC_BOARD_TIER } from "@/lib/tiers";
 import { useSyncedResource } from "@/lib/use-synced";
@@ -231,6 +232,7 @@ export default function HomeScreen({
   onHistory,
   onGroups,
   onOpenLeaderboard,
+  onOpenSettings,
   guest = false,
 }: {
   onPlay: () => void;
@@ -238,6 +240,8 @@ export default function HomeScreen({
   onHistory: () => void;
   onGroups: () => void;
   onOpenLeaderboard: (groupId?: string) => void;
+  /** Signed in only: the reminder card's "Change" link. */
+  onOpenSettings?: () => void;
   /** Signed-out visitor on "/": same screen, but Play Infinite is the
    * highlighted button, nothing personal is fetched (the board card shows
    * the public Stone tier board, fetched without a token), and the parent
@@ -368,6 +372,9 @@ export default function HomeScreen({
             <PlayButton icon={<CalendarIcon />} label="Play Daily" primary={!guest && !dailyDone} onClick={onPlay} tour="home-daily" />
             <PlayButton icon={<InfinityIcon />} label="Play Infinite" primary={guest || dailyDone} onClick={onPlayInfinite} tour="home-infinite" />
           </div>
+
+          {/* Daily reminder card / reminder set / Infinite nudge — at most one. */}
+          {!guest && onOpenSettings && <HomeReminderSlot onPlayInfinite={onPlayInfinite} onOpenSettings={onOpenSettings} />}
 
           {/* stats */}
           {user && (

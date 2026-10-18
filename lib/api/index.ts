@@ -14,6 +14,7 @@
 //   wallet          coin balance and ledger
 //   store           coin packs and Razorpay orders
 //   contact         public contact form
+//   reminders       daily reminder settings and push subscriptions
 //
 // Cron, webhook and admin endpoints in the backend contract are
 // server-to-server only and deliberately have no client here.
@@ -43,3 +44,4 @@ export * from "./wallet";
 export * from "./store";
 export * from "./contact";
 export * from "./sync";
+export * from "./reminders";
