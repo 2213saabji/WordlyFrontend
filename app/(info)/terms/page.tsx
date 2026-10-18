@@ -6,7 +6,7 @@ import { pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "Terms of Service",
   description:
-    "The terms that apply to using GuessWord — your account, fair play on leaderboards, display and group names, coins and purchases, and how the service may change.",
+    "The terms for using GuessWord — your account, fair play on leaderboards, display and group names, coins and purchases, and how the service may change.",
   path: "/terms",
 });
 

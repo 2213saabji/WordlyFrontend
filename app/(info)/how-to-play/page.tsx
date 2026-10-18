@@ -9,7 +9,7 @@ const PATH = "/how-to-play";
 export const metadata: Metadata = pageMetadata({
   title: "How to Play — Rules & Tile Colors",
   description:
-    "Learn how to play GuessWord: guess the five-letter word in six tries, what the green, amber, and gray tiles mean, how Daily and Groups work, and how to climb the Infinite tiers.",
+    "Learn how to play GuessWord: guess the five-letter word in six tries, what green, amber and gray tiles mean, and how Daily, Groups and Infinite tiers work.",
   path: PATH,
 });
 

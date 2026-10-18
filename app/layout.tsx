@@ -23,7 +23,7 @@ const spaceGrotesk = Space_Grotesk({
 
 const TITLE ="GuessWord — Free Daily Word Guessing Game";
 const DESCRIPTION =
-  "Guess the secret five-letter word in six tries. Play a new puzzle every day, climb eight Infinite tiers from Stone to Diamond, and compete with friends on group and global leaderboards — free, no download required.";
+  "Guess the secret five-letter word in six tries. A new puzzle daily, eight Infinite tiers from Stone to Diamond, and friend leaderboards — free, no download.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

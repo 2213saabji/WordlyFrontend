@@ -8,7 +8,7 @@ const PATH = "/faq";
 export const metadata: Metadata = pageMetadata({
   title: "FAQ — Daily Word, Streaks, Infinite Tiers & Hints",
   description:
-    "Answers to common GuessWord questions: when the daily word changes, how streaks work, how Infinite tiers and the Infinite leaderboard work, hints, groups, and playing on mobile.",
+    "Answers to common GuessWord questions: when the daily word changes, how streaks, Infinite tiers and the leaderboard work, hints, groups, and playing on mobile.",
   path: PATH,
 });
 

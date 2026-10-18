@@ -8,7 +8,7 @@ const PATH = "/about";
 export const metadata: Metadata = pageMetadata({
   title: "About Us — A Free Daily Word Game",
   description:
-    "GuessWord is a free daily word-guessing game: one five-letter word a day, six tries, an unlimited Infinite mode with eight tiers to climb, and group leaderboards — no download, no cost.",
+    "GuessWord is a free daily word game: one five-letter word a day, six tries, an Infinite mode with eight tiers to climb, and group leaderboards — no download.",
   path: PATH,
 });
 

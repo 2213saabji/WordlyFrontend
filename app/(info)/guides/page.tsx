@@ -8,7 +8,7 @@ import { JsonLd, SITE_URL, breadcrumbJsonLd, pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "Guides — Strategy, Starting Words & Tiers",
   description:
-    "GuessWord guides built from our own word lists: the best starting words, letter frequency, word patterns, a solving method, the Infinite tiers and playing with friends.",
+    "GuessWord guides built from our word lists: best starting words, letter frequency, word patterns, a solving method, Infinite tiers and playing with friends.",
   path: GUIDES_PATH,
 });
 
