@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import ContentPage, { Eyebrow } from "@/components/ContentPage";
-import { GUIDES, GUIDES_PATH, GUIDES_UPDATED, GUIDES_UPDATED_ISO, guideBySlug, guidePath } from "@/lib/guides";
+import { GUIDES, GUIDES_PATH, formatGuideDate, guideBySlug, guidePath } from "@/lib/guides";
 import { JsonLd, articleJsonLd, breadcrumbTrailJsonLd, pageMetadata } from "@/lib/seo";
 
 // Building blocks for the /guides pages: the page shell (with its Article
@@ -32,7 +32,7 @@ export function GuideLayout({
     <ContentPage title={title} subtitle={intro}>
       <JsonLd
         data={[
-          articleJsonLd({ title: guide.title, description: guide.description, path, dateModified: GUIDES_UPDATED_ISO }),
+          articleJsonLd({ title: guide.title, description: guide.description, path, dateModified: guide.updated }),
           breadcrumbTrailJsonLd([
             { name: "Guides", path: GUIDES_PATH },
             { name: guide.title, path },
@@ -46,7 +46,7 @@ export function GuideLayout({
         <span aria-hidden>·</span>
         <span>{guide.readMinutes} min read</span>
         <span aria-hidden>·</span>
-        <span>Updated {GUIDES_UPDATED}</span>
+        <span>Updated {formatGuideDate(guide.updated)}</span>
       </div>
       {children}
       <MoreGuides current={slug} />
@@ -104,7 +104,43 @@ export function StatTable({ head, rows, caption }: { head: string[]; rows: React
   );
 }
 
-export type TileTone = "correct" | "present" | "absent" | "empty";
+/** A long word list, split into labelled groups (by first letter, by double
+ * letter, ...). Plain text, so the full list is in the page's HTML. */
+export function WordGroups({ groups }: { groups: { label: string; words: string[] }[] }) {
+  return (
+    <div className="flex flex-col gap-4">
+      {groups.map((group) => (
+        <div key={group.label} className="flex flex-col gap-2 sm:flex-row sm:gap-4">
+          <span className="w-12 shrink-0 pt-1 text-[13px] font-semibold uppercase tracking-[0.12em] text-[#9a8aa2]">
+            {group.label}
+          </span>
+          <p className="flex flex-wrap gap-1.5">
+            {group.words.map((word) => (
+              <span
+                key={word}
+                className="rounded-lg border border-white/8 bg-white/4 px-2 py-0.5 font-mono text-[13.5px] uppercase tracking-wider text-foreground"
+              >
+                {word}
+              </span>
+            ))}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Groups words under their first letter, A–Z. */
+export function byFirstLetter(words: string[]): { label: string; words: string[] }[] {
+  const groups = new Map<string, string[]>();
+  for (const word of [...words].sort()) {
+    const letter = word[0].toUpperCase();
+    groups.set(letter, [...(groups.get(letter) ?? []), word]);
+  }
+  return [...groups].map(([label, list]) => ({ label, words: list }));
+}
+
+export type TileTone ="correct" | "present" | "absent" | "empty";
 
 const TILE_STYLE: Record<TileTone, string> = {
   correct: "bg-[#5f8f49] text-foreground",

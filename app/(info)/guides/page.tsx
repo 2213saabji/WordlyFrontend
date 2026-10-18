@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import ContentPage, { Eyebrow } from "@/components/ContentPage";
 import { PlayCta } from "@/components/GuideParts";
-import { GUIDES, GUIDES_PATH, GUIDES_UPDATED, guidePath } from "@/lib/guides";
+import { GUIDES, GUIDES_PATH, GUIDES_UPDATED_ISO, formatGuideDate, guidePath } from "@/lib/guides";
 import { JsonLd, SITE_URL, breadcrumbJsonLd, pageMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = pageMetadata({
@@ -29,12 +29,12 @@ export default function GuidesPage() {
           Play smarter, <strong className="font-bold">not longer.</strong>
         </>
       }
-      subtitle="Every number in these guides comes from GuessWord's own word lists — the 5,028 words our three game modes can pick as answers — not from general English. So the advice fits the game you're actually playing."
+      subtitle="Every number in these guides comes from the word lists GuessWord actually uses — the 5,028 words our three game modes can pick as answers — not from general English. So the advice fits the game you're actually playing."
     >
       <JsonLd data={[collectionJsonLd, breadcrumbJsonLd("Guides", GUIDES_PATH)]} />
 
       <div className="flex flex-col gap-5">
-        <Eyebrow>All guides · updated {GUIDES_UPDATED}</Eyebrow>
+        <Eyebrow>All guides · updated {formatGuideDate(GUIDES_UPDATED_ISO)}</Eyebrow>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {GUIDES.map((guide, i) => (
             <Link

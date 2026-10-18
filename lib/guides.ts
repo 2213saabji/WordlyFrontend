@@ -12,13 +12,12 @@ export interface Guide {
   /** One line for the hub card and the page's meta description. */
   description: string;
   readMinutes: number;
+  /** When the guide's content last changed (YYYY-MM-DD) — shown on the page
+   * and used as its sitemap lastmod, so bump it only for real revisions. */
+  updated: string;
 }
 
 export const GUIDES_PATH = "/guides";
-
-/** Shown on every guide; bump it when a guide's content is revised. */
-export const GUIDES_UPDATED = "7 October 2026";
-export const GUIDES_UPDATED_ISO = "2026-10-07";
 
 export const GUIDES: Guide[] = [
   {
@@ -27,6 +26,7 @@ export const GUIDES: Guide[] = [
     description:
       "We scored every five-letter opener against all 5,028 GuessWord answers. Here's what works for Daily, Infinite and guest play — and why ADIEU doesn't.",
     readMinutes: 6,
+    updated: "2026-10-07",
   },
   {
     slug: "letter-frequency",
@@ -34,6 +34,7 @@ export const GUIDES: Guide[] = [
     description:
       "Which letters show up most, where they sit in the word, and how the Daily, Infinite and guest word lists differ — with the full numbers.",
     readMinutes: 5,
+    updated: "2026-10-07",
   },
   {
     slug: "word-patterns",
@@ -41,6 +42,23 @@ export const GUIDES: Guide[] = [
     description:
       "One answer in three repeats a letter. Most have exactly two vowels. Learn the patterns that turn a stuck board into a solve.",
     readMinutes: 6,
+    updated: "2026-10-18",
+  },
+  {
+    slug: "5-letter-words-with-lots-of-vowels",
+    title: "5-letter words with lots of vowels: the full list",
+    description:
+      "Every five-letter answer with three or four vowels, the words with none, where vowels sit — and whether vowel-heavy openers like ADIEU actually help.",
+    readMinutes: 6,
+    updated: "2026-10-18",
+  },
+  {
+    slug: "5-letter-words-with-double-letters",
+    title: "5-letter words with double letters: the full list",
+    description:
+      "All 313 five-letter answers with a double letter, grouped by pair from OO to ZZ, plus where doubles sit, palindromes, and when to guess a repeat.",
+    readMinutes: 6,
+    updated: "2026-10-18",
   },
   {
     slug: "solving-strategy",
@@ -48,6 +66,7 @@ export const GUIDES: Guide[] = [
     description:
       "A step-by-step method for reading the tiles, choosing your second word, handling repeated letters and knowing when to use a hint.",
     readMinutes: 7,
+    updated: "2026-10-07",
   },
   {
     slug: "infinite-tiers",
@@ -55,6 +74,7 @@ export const GUIDES: Guide[] = [
     description:
       "How points, daily targets, day counts and demotion windows really work — with a worked example of a week from Stone upward.",
     readMinutes: 7,
+    updated: "2026-10-07",
   },
   {
     slug: "playing-with-friends",
@@ -62,8 +82,22 @@ export const GUIDES: Guide[] = [
     description:
       "Set up a group, share the invite code, read the daily and weekly boards, and share results without spoiling the word.",
     readMinutes: 5,
+    updated: "2026-10-07",
   },
 ];
+
+/** The newest guide revision — the hub's "updated" date and sitemap lastmod. */
+export const GUIDES_UPDATED_ISO = GUIDES.map((g) => g.updated).sort().at(-1)!;
+
+/** "2026-10-07" → "7 October 2026". */
+export function formatGuideDate(iso: string): string {
+  return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
 
 export function guidePath(slug: string): string {
   return `${GUIDES_PATH}/${slug}`;

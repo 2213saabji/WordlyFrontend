@@ -162,7 +162,7 @@ export function renderShareImage(canvas: HTMLCanvasElement, data: ShareImageData
     statsY += 36;
     ctx.font = "500 24px Sora, sans-serif";
     ctx.fillStyle = COLORS.muted;
-    ctx.fillText("guessword.app", statsX, statsY);
+    ctx.fillText("guessword.games", statsX, statsY);
   } else {
     const gridX = cardX + (cardW - grid.width) / 2;
     drawGrid(ctx, data.rows, gridX, cursorY, tile, gridGap);
@@ -179,7 +179,7 @@ export function renderShareImage(canvas: HTMLCanvasElement, data: ShareImageData
     statsY += 46;
     ctx.font = "500 28px Sora, sans-serif";
     ctx.fillStyle = COLORS.muted;
-    ctx.fillText("guessword.app", cardX + cardW / 2, statsY);
+    ctx.fillText("guessword.games", cardX + cardW / 2, statsY);
   }
 }
 

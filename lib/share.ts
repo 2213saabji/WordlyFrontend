@@ -21,7 +21,7 @@ function rowToEmoji(row: number[]): string {
   return row.map((r) => (r === 1 ? "🟩" : r === -1 ? "🟨" : "⬛")).join("");
 }
 
-/** Never includes the word itself — only the emoji grid, same as real Wordle's share text.
+/** Never includes the word itself — only the emoji grid, the usual spoiler-free share format for daily word games.
  * Pads with blank rows up to MAX_ATTEMPTS so a quick win still shows the same
  * 6-row shape as the board and the share image, instead of trailing off short. */
 export function buildShareText(game: Game, wordNumber: number): string {

@@ -33,7 +33,7 @@ export default function BestStartingWordsPage() {
           The best first guess, <strong className="font-bold">measured.</strong>
         </>
       }
-      intro="Most “best starting word” lists are built on the whole English dictionary. GuessWord picks its answers from its own lists, so we tested every opening word against those lists instead. The winner depends on which mode you're playing."
+      intro="Most “best starting word” lists are built on the whole English dictionary. GuessWord picks its answers from fixed lists, so we tested every opening word against those lists instead. The winner depends on which mode you're playing."
     >
       <Section heading="How we scored them">
         <P>

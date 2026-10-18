@@ -105,6 +105,11 @@ export default function WordPatternsPage() {
             "Found an L near the end? LL is one of the three most common doubles, so try it before moving on.",
           ]}
         />
+        <P>
+          Every answer with a double, grouped by pair, is in{" "}
+          <GuideLink href="/guides/5-letter-words-with-double-letters">5-letter words with double letters</GuideLink>
+          .
+        </P>
       </Section>
 
       <Section heading="How many vowels to expect">
@@ -113,6 +118,11 @@ export default function WordPatternsPage() {
           Most answers have <Strong>exactly two vowels</Strong>, and almost all the rest have one. Only 19 words
           in all our lists have no A, E, I, O or U — they lean on Y instead. That gives you a useful check: once
           you&apos;ve found two vowels, stop hunting for more and spend your next guess on consonants.
+        </P>
+        <P>
+          For the full list of answers with three or four vowels, see{" "}
+          <GuideLink href="/guides/5-letter-words-with-lots-of-vowels">5-letter words with lots of vowels</GuideLink>
+          .
         </P>
       </Section>
 

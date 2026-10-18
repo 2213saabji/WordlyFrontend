@@ -74,25 +74,39 @@ export default function TierLeaderboard({
   /** Leave for the Daily-mode leaderboard (Global, or a group). */
   onSwitchScope?: (groupId?: string) => void;
   /** The signed-out /leaderboard/infinite page: public endpoints only, no
-   * pinned row or scope switcher, and a "Log in to play" call to action. */
-  publicView?: { signedIn: boolean; onCta: () => void };
+   * pinned row or scope switcher, and a "Log in to play" call to action.
+   * `initialBoard` (the starting tier's first page) and `initialTiers` come
+   * from the server render, so the page's HTML has the board in it. */
+  publicView?: {
+    signedIn: boolean;
+    onCta: () => void;
+    initialBoard?: InfiniteLeaderboardResponse | null;
+    initialTiers?: InfiniteTiersResponse | null;
+  };
 }) {
   const { user } = useAuth();
   const isPublic = !!publicView;
   const startTier = initialTier ?? (isPublic ? PUBLIC_BOARD_TIER : undefined);
   const cacheKeyFor = (t: TierNumber | undefined) => (isPublic ? `infinite:public-board:${t}` : boardCacheKey(t));
   const [tier, setTier] = useState<TierNumber | undefined>(startTier);
-  const [board, setBoard] = useState<InfiniteLeaderboardResponse | null>(() =>
-    readCache<InfiniteLeaderboardResponse>(cacheKeyFor(startTier)),
+  // Server data wins over the localStorage cache: the server can't read the
+  // cache, so starting from it would make the first render differ from the
+  // server HTML. The board is still refetched on mount below.
+  const [board, setBoard] = useState<InfiniteLeaderboardResponse | null>(
+    () => publicView?.initialBoard ?? readCache<InfiniteLeaderboardResponse>(cacheKeyFor(startTier)),
   );
   // Synced when signed in (lib/use-synced.ts): cached, refetched only when
   // /sync reports a change. Signed out (public page) there's no sync, so
-  // they're fetched on every visit, as before.
-  const tiers: InfiniteTiersResponse | null = useSyncedResource({
+  // they're fetched on every visit — unless the server already sent them
+  // (they change rarely, and the page re-renders every few minutes).
+  const serverTiers = publicView?.initialTiers ?? null;
+  const syncedTiers: InfiniteTiersResponse | null = useSyncedResource({
     flag: "tiers",
     key: TIERS_CACHE_KEY,
     fetcher: isPublic ? getPublicInfiniteTiers : getInfiniteTiers,
+    enabled: !serverTiers,
   }).data;
+  const tiers = serverTiers ?? syncedTiers;
   const me: InfiniteMeResponse | null = useSyncedResource({
     flag: "infinite",
     key: ME_CACHE_KEY,

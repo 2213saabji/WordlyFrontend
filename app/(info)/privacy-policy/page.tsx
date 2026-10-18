@@ -70,8 +70,9 @@ const SECTIONS: LegalSection[] = [
         >
           how Google uses data when you use our partners&apos; sites
         </a>
-        . Visitors in the European Economic Area, the UK and Switzerland are asked for consent before any
-        advertising cookies are set, and can change their choice at any time.
+        . Visitors in the European Economic Area, the UK and Switzerland are asked for consent, through
+        Google&apos;s consent message, before any personalised advertising cookies are set, and can change their
+        choice at any time with the &ldquo;Privacy &amp; cookie settings&rdquo; link at the bottom of every page.
       </>
     ),
   },
@@ -100,7 +101,7 @@ export default function PrivacyPolicyPage() {
     <LegalPage
       eyebrow="Legal"
       title="Privacy policy"
-      lastUpdated="7 October 2026"
+      lastUpdated="18 October 2026"
       readTime="4 min read"
       intro="GuessWord is owned and run by Gurpreet Singh, an individual developer in India. This page explains what information GuessWord collects, why we collect it and the choices you have."
       sections={SECTIONS}

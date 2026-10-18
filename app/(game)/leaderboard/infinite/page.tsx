@@ -2,13 +2,20 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import AdSenseScript from "@/components/AdSenseScript";
 import PublicTierBoard from "@/components/PublicTierBoard";
+import { getPublicInfiniteLeaderboard, getPublicInfiniteTiers } from "@/lib/api/infinite-tiers";
 import { JsonLd, breadcrumbJsonLd, pageMetadata } from "@/lib/seo";
+import { PUBLIC_BOARD_TIER } from "@/lib/tiers";
 
 const PATH = "/leaderboard/infinite";
 
-// The one public (no-login) Infinite surface. The board itself is fetched in
-// the browser from the backend's public endpoints (see
-// getPublicInfiniteLeaderboard) — they need to allow unauthenticated reads.
+// The board's first page is fetched here, so the page's HTML has the top
+// players in it rather than a loader — that's what search engines index.
+// Refreshed at most every 5 minutes; the browser then refetches it anyway.
+export const revalidate = 300;
+
+// The one public (no-login) Infinite surface, built on the backend's public
+// endpoints (see getPublicInfiniteLeaderboard) — they need to allow
+// unauthenticated reads.
 export const metadata: Metadata = pageMetadata({
   title: "Infinite Leaderboard — Tier Rankings",
   description:
@@ -16,20 +23,26 @@ export const metadata: Metadata = pageMetadata({
   path: PATH,
 });
 
-export default function InfiniteLeaderboardPage() {
+export default async function InfiniteLeaderboardPage() {
+  // A backend that's down or slow must not fail the build or the page: the
+  // board then starts as a loader and the browser fetches it, as before.
+  const [initialBoard, initialTiers] = await Promise.all([
+    getPublicInfiniteLeaderboard({ tier: PUBLIC_BOARD_TIER, page: 1, limit: 20 }).catch(() => null),
+    getPublicInfiniteTiers().catch(() => null),
+  ]);
+
   return (
     <>
       <AdSenseScript />
       <JsonLd data={breadcrumbJsonLd("Infinite Leaderboard", PATH)} />
-      <PublicTierBoard />
+      <PublicTierBoard initialBoard={initialBoard} initialTiers={initialTiers} />
       <Intro />
     </>
   );
 }
 
-// Server-rendered so crawlers get real text — the board above is fetched in
-// the browser and starts as a loader. Headings start at <h2>: the board has
-// the <h1>.
+// More server-rendered text about the board, for visitors and crawlers alike.
+// Headings start at <h2>: the board has the <h1>.
 function Intro() {
   return (
     <section

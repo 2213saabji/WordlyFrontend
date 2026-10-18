@@ -7,7 +7,7 @@ const SITE_URL = "https://www.guessword.games";
 // legal) last changed. Bump it when you edit their copy. Google only trusts
 // <lastmod> when it's accurate, so a value that changes on every deploy gets
 // ignored for the whole sitemap.
-const INFO_PAGES_UPDATED_ISO = "2026-10-14";
+const INFO_PAGES_UPDATED_ISO = "2026-10-18";
 
 // The rest of the app is client-side "screens" behind "/" (the guest home
 // for visitors, the signed-in app once logged in), not separate server
@@ -37,7 +37,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${SITE_URL}${GUIDES_PATH}`, lastModified: GUIDES_UPDATED_ISO, changeFrequency: "monthly", priority: 0.8 },
     ...GUIDES.map((guide) => ({
       url: `${SITE_URL}${guidePath(guide.slug)}`,
-      lastModified: GUIDES_UPDATED_ISO,
+      lastModified: guide.updated,
       changeFrequency: "monthly" as const,
       priority: 0.7,
     })),

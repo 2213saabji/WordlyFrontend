@@ -197,7 +197,7 @@ export default function ShareModal({
                 </span>
                 <MiniGrid rows={rows} />
                 <span className="text-[13px] text-foreground/50">
-                  guessword.app · {user.stats.currentStreak} day streak
+                  guessword.games · {user.stats.currentStreak} day streak
                 </span>
               </div>
               <div className="ml-auto flex flex-col items-end gap-3">
@@ -305,7 +305,7 @@ export default function ShareModal({
                   <span className="text-[13.5px] leading-snug text-foreground/60">
                     Play today&apos;s word before the link expires at midnight.
                   </span>
-                  <span className="text-[12.5px] text-foreground/50">guessword.app</span>
+                  <span className="text-[12.5px] text-foreground/50">guessword.games</span>
                 </div>
               </div>
             </div>

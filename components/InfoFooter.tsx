@@ -1,5 +1,6 @@
 import Link from "next/link";
 import packageJson from "@/package.json";
+import ConsentSettingsLink from "@/components/ConsentSettingsLink";
 
 const COLUMNS: { heading: string; links: { href: string; label: string }[] }[] = [
   {
@@ -47,6 +48,7 @@ export default function InfoFooter() {
                 {link.label}
               </Link>
             ))}
+            {col.heading === "Legal" && <ConsentSettingsLink className="text-sm text-[#c9bfcc] hover:text-foreground" />}
           </div>
         ))}
 

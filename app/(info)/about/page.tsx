@@ -131,7 +131,7 @@ export default function AboutPage() {
         <p>
           GuessWord is owned, built and run by <strong className="font-semibold text-foreground">Gurpreet Singh</strong>,
           an individual developer in India. It&apos;s an independent project, not affiliated with any other word game
-          or publisher. The answer lists are curated for GuessWord, and the guides are written from our own analysis of them.
+          or publisher. The answers come from fixed lists of everyday five-letter English words, and the guides are written from our own analysis of those lists.
         </p>
         <p>
           Questions, ideas and bug reports go straight to the person who builds the game — write to{" "}
