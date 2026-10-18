@@ -52,6 +52,8 @@ export default function SignupScreen({
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  // Unticked by default: a daily email needs a clear yes.
+  const [dailyReminder, setDailyReminder] = useState(false);
   const [otp, setOtp] = useState("");
   const [error, setError] = useState<ErrorState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -97,7 +99,7 @@ export default function SignupScreen({
     setNotice(null);
     setSubmitting(true);
     try {
-      const res = await signup(username, email, password);
+      const res = await signup(username, email, password, dailyReminder);
       enterCodeStep(toPending(res));
     } catch (err) {
       switch (code(err)) {
@@ -309,6 +311,21 @@ export default function SignupScreen({
             className={INPUT}
           />
           <span className="text-xs text-foreground/50">At least 8 characters</span>
+        </label>
+
+        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-surface px-3.5 py-3 text-sm">
+          <input
+            type="checkbox"
+            checked={dailyReminder}
+            onChange={(e) => setDailyReminder(e.target.checked)}
+            className="mt-0.5 size-4 flex-none accent-accent"
+          />
+          <span className="flex flex-col gap-0.5">
+            <span className="font-semibold">Email me a daily reminder</span>
+            <span className="text-xs text-foreground/55">
+              One email at 8:00 PM when today&apos;s word is waiting. Turn it off any time in Settings.
+            </span>
+          </span>
         </label>
 
         {errorBlock}

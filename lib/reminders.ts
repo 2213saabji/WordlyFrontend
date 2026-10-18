@@ -1,6 +1,7 @@
-// Turning daily reminders on: push where this browser can do it, email
-// where it can't (iPhone outside the home-screen app, notifications blocked,
-// or push not set up on the server). Shared by the home card and Settings.
+// Turning daily reminders on: email always, plus push where this browser can
+// do it (not on iPhone outside the home-screen app, with notifications
+// blocked, or with push not set up on the server). Shared by the home card,
+// the post-sign-in popup and Settings.
 
 import { getReminders, updateReminders } from "@/lib/api";
 import { pushPossibleHere, requestPermission, subscribeThisDevice } from "@/lib/push";
@@ -27,13 +28,14 @@ export function browserTimezone(): string {
   }
 }
 
+/** "push" = a notification on this device as well as the email. */
 export type ReminderChannel = "push" | "email";
 
 /**
- * Turns reminders on at `time`. Call straight from the tap — the permission
- * request has to come before anything is awaited (Safari). `known` is the
- * GET /reminders result if it's already loaded; it tells whether the server
- * can send push at all.
+ * Turns reminders on at `time`: email, and push on this device if it can.
+ * Call straight from the tap — the permission request has to come before
+ * anything is awaited (Safari). `known` is the GET /reminders result if it's
+ * already loaded; it tells whether the server can send push at all.
  */
 export async function enableReminders(
   time: ReminderTime,
@@ -56,12 +58,7 @@ export async function enableReminders(
       }
     }
   }
-  const settings = await updateReminders({
-    time,
-    timezone: browserTimezone(),
-    promptAnswered: true,
-    ...(channel === "email" ? { email: true } : {}),
-  });
+  const settings = await updateReminders({ email: true, time, timezone: browserTimezone(), promptAnswered: true });
   justSet = { time, channel };
   return { settings, channel };
 }

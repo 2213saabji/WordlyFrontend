@@ -14,6 +14,10 @@ export function signup(payload: {
   username: string;
   email: string;
   password: string;
+  /** "Email me a daily reminder": the account starts with email reminders on. */
+  dailyReminder?: boolean;
+  /** Browser IANA timezone, for that reminder's time. */
+  timezone?: string;
 }): Promise<SignupPendingResponse> {
   return apiFetch("/auth/signup", { method: "POST", body: payload, skipAuth: true });
 }

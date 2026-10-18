@@ -18,6 +18,7 @@ import HistoryScreen from "@/components/screens/HistoryScreen";
 import GroupsScreen from "@/components/screens/GroupsScreen";
 import SettingsScreen from "@/components/screens/SettingsScreen";
 import { InstallPromptHost } from "@/components/InstallPrompt";
+import { ReminderPopup } from "@/components/ReminderCards";
 import { useAuth } from "@/lib/auth-context";
 import { registerServiceWorker } from "@/lib/push";
 import { PRE_AUTH_SCREENS, useScreen, type PlayMode } from "@/lib/screen-context";
@@ -28,6 +29,15 @@ import PublicApp from "./PublicApp";
 /** `intro`: the crawlable intro from page.tsx, shown under the home screen. */
 function AppShell({ intro }: { intro: ReactNode }) {
   const { screen, push, back, replace, backTo } = useScreen();
+  const { user, justSignedIn, clearJustSignedIn } = useAuth();
+  // Right after signing up or logging in: ask about daily reminders if
+  // they're off (a signup that ticked "Email me a daily reminder" has them
+  // on already). The first-run tour waits until this is answered.
+  const reminders = user?.reminders;
+  const reminderPopup = !!justSignedIn && !!reminders && !reminders.email && !reminders.push;
+  useEffect(() => {
+    if (justSignedIn && !reminderPopup) clearJustSignedIn();
+  }, [justSignedIn, reminderPopup, clearJustSignedIn]);
   const [invite, setInvite] = useState<ReplayInvite | null>(() =>
     typeof window === "undefined" ? null : parseReplayParam(window.location.search),
   );
@@ -82,7 +92,7 @@ function AppShell({ intro }: { intro: ReactNode }) {
   return (
     <div className="flex flex-1 flex-col">
       {/* First-run tour; nothing once the account has finished it. */}
-      <Training />
+      {reminderPopup ? <ReminderPopup onClose={clearJustSignedIn} /> : <Training />}
       <TierPromotionAnnouncer
         onOpenTierLeaderboard={(tier) => push({ name: "tier-leaderboard", tier })}
         onPlay={() => push({ name: "play", mode: "infinite" })}

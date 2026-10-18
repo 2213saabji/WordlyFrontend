@@ -15,12 +15,11 @@ export default function LoginScreen({
   onSignup: () => void;
   onForgotPassword: () => void;
 }) {
-  const { login, passkeySupported, loginWithPasskey } = useAuth();
+  const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [passkeySubmitting, setPasskeySubmitting] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -33,41 +32,6 @@ export default function LoginScreen({
       setError(err instanceof ApiRequestError ? err.message : "Something went wrong");
     } finally {
       setSubmitting(false);
-    }
-  }
-
-  // Recovery path for a device that lost its stored deviceId (cleared
-  // storage) — see the Passkey API doc's "Recovery" flow. Only offered when
-  // this browser actually supports WebAuthn.
-  async function handlePasskeyLogin() {
-    setError(null);
-    setPasskeySubmitting(true);
-    try {
-      await loginWithPasskey();
-      onSuccess();
-    } catch (err) {
-      // @simplewebauthn/browser wraps the raw browser error in its own
-      // WebAuthnError (a plain Error subclass, not a DOMException) to give a
-      // more specific message — check `.name` on either shape, not just
-      // `instanceof DOMException`, or these get missed entirely.
-      const name = err instanceof DOMException || err instanceof Error ? err.name : undefined;
-      // A cancelled OS prompt (Face ID/Touch ID sheet dismissed) isn't an
-      // error worth surfacing — the user just backed out.
-      if (name !== "NotAllowedError") {
-        // Full detail (SecurityError/rpId mismatch, etc.) is a config/debug
-        // concern, not something a user can act on — log it for us, but
-        // show them a plain, friendly fallback instead. ApiRequestError
-        // messages are the backend's own user-facing copy, so those still
-        // pass straight through.
-        console.error("Passkey sign-in failed:", err);
-        setError(
-          err instanceof ApiRequestError
-            ? err.message
-            : "Passkey sign-in isn't available right now — log in with your email and password instead.",
-        );
-      }
-    } finally {
-      setPasskeySubmitting(false);
     }
   }
 
@@ -118,17 +82,6 @@ export default function LoginScreen({
       <div className="mt-5">
         <GoogleSignInButton onSuccess={onSuccess} onError={setError} />
       </div>
-
-      {passkeySupported && (
-        <button
-          type="button"
-          onClick={handlePasskeyLogin}
-          disabled={passkeySubmitting}
-          className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface py-3 text-sm font-medium transition-all duration-150 hover:border-accent/30 hover:-translate-y-0.5 active:translate-y-0 disabled:pointer-events-none disabled:opacity-50"
-        >
-          🔑 {passkeySubmitting ? "Waiting for passkey…" : "Sign in with a passkey"}
-        </button>
-      )}
 
       <div className="mt-6 flex flex-col gap-1 text-sm text-foreground/70">
         <button type="button" onClick={onForgotPassword} className="text-left transition-colors hover:text-foreground">

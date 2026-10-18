@@ -9,7 +9,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { browserSupportsWebAuthn, startAuthentication, startRegistration } from "@simplewebauthn/browser";
 import * as api from "@/lib/api";
 import {
   clearDeviceId,
@@ -23,6 +22,7 @@ import {
 import { clearCache, readCache, writeCache } from "@/lib/cache";
 import { invalidate, isFresh, markFresh, onStale, runSync, setSyncUser } from "@/lib/sync";
 import { forgetDeviceOnLogout } from "@/lib/push";
+import { browserTimezone } from "@/lib/reminders";
 import type { AuthResponse, ReminderSummary, SignupPendingResponse, User } from "@/types";
 
 const USER_CACHE_KEY = "user";
@@ -35,8 +35,9 @@ interface AuthContextValue {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   /** Step 1 of signup: emails a code + link, creates nothing and logs no
-   * one in. Resolves with the (lowercased) email to verify. */
-  signup: (username: string, email: string, password: string) => Promise<SignupPendingResponse>;
+   * one in. Resolves with the (lowercased) email to verify. `dailyReminder`
+   * is the "Email me a daily reminder" checkbox. */
+  signup: (username: string, email: string, password: string, dailyReminder?: boolean) => Promise<SignupPendingResponse>;
   /** Step 2 of signup (code typed in the app): creates the account and logs
    * this device in, exactly like login. */
   verifySignupCode: (email: string, code: string) => Promise<void>;
@@ -48,11 +49,6 @@ interface AuthContextValue {
    * and re-validates length before saving) rather than the raw typed value —
    * see api.updateUsername. */
   updateUsername: (username: string) => Promise<void>;
-  /** Browser/OS-level WebAuthn support — gate any passkey UI behind this. */
-  passkeySupported: boolean;
-  /** Recovery login: no stored deviceId needed, re-establishes one from the
-   * server on success. See the Passkey API doc's "Recovery" flow. */
-  loginWithPasskey: () => Promise<void>;
   /** Same endpoint handles both sign-up and sign-in for a Google identity
    * (the backend auto-links by email) — one call for both flows, no
    * separate "is this a new user" branch needed here. */
@@ -64,6 +60,10 @@ interface AuthContextValue {
   completeTraining: (flags: api.TrainingFlags) => Promise<void>;
   /** Applies reminder settings returned by a /reminders call to `user`. */
   applyReminders: (reminders: ReminderSummary) => void;
+  /** Set by an explicit sign-in on this page load — never by the silent
+   * session refresh on a reload. Drives the post-sign-in reminder popup. */
+  justSignedIn: "signup" | "login" | null;
+  clearJustSignedIn: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -72,6 +72,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [userConfirmed, setUserConfirmed] = useState(false);
+  const [justSignedIn, setJustSignedIn] = useState<"signup" | "login" | null>(null);
+  const clearJustSignedIn = useCallback(() => setJustSignedIn(null), []);
 
   // Re-fetches the current user without touching the session itself — used
   // after actions that change stats (finishing a game, etc), not for login.
@@ -185,13 +187,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setDeviceId(data.deviceId || getDeviceId());
     setUser(data.user);
     setUserConfirmed(true);
-    // Best-effort, never blocks the login that already succeeded — see
-    // silentlyEnrollPasskey below.
-    void silentlyEnrollPasskey();
+    setJustSignedIn("login");
   }, []);
 
   const signup = useCallback(
-    (username: string, email: string, password: string) => api.signup({ username, email, password }),
+    (username: string, email: string, password: string, dailyReminder = false) =>
+      api.signup({ username, email, password, dailyReminder, timezone: browserTimezone() }),
     [],
   );
 
@@ -203,7 +204,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setDeviceId(data.deviceId);
     setUser(data.user);
     setUserConfirmed(true);
-    void silentlyEnrollPasskey();
+    setJustSignedIn("signup");
   }, []);
 
   const verifySignupCode = useCallback(
@@ -229,6 +230,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearDeviceId();
     setUser(null);
     setUserConfirmed(false);
+    setJustSignedIn(null);
   }, []);
 
   const updateUsername = useCallback(async (username: string) => {
@@ -254,19 +256,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setDeviceId(data.deviceId);
     setUser(data.user);
     setUserConfirmed(true);
-  }, []);
-
-  const loginWithPasskey = useCallback(async () => {
-    const options = await api.webauthnAuthenticateOptions();
-    const response = await startAuthentication({ optionsJSON: options });
-    const data = await api.webauthnAuthenticateVerify(response);
-    // The server hands back the deviceId this passkey was originally
-    // registered under — persist it exactly like a fresh login, then normal
-    // /auth/refresh resumes as usual from here on.
-    setToken(data.token);
-    setDeviceId(data.deviceId);
-    setUser(data.user);
-    setUserConfirmed(true);
+    // Also a new account's first sign-in; the popup shows either way while
+    // reminders are off.
+    setJustSignedIn("login");
   }, []);
 
   return (
@@ -281,12 +273,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
         refreshUser,
         updateUsername,
-        passkeySupported: browserSupportsWebAuthn(),
-        loginWithPasskey,
         loginWithGoogle,
         userConfirmed,
         completeTraining,
         applyReminders,
+        justSignedIn,
+        clearJustSignedIn,
       }}
     >
       {children}
@@ -298,28 +290,4 @@ export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error("useAuth must be used within an AuthProvider");
   return ctx;
-}
-
-/**
- * Folded into login/signup instead of a separate "enable passkey" action —
- * still shows the native OS prompt (that part can't be skipped, by design;
- * see the Passkey API doc), but there's no extra button in our own UI for
- * it. Best-effort: a declined/failed/unsupported prompt never affects the
- * login that already succeeded, and a device that's already enrolled isn't
- * re-prompted (e.g. re-entering a password on an already-logged-in device,
- * which the auth doc notes "just re-activates" the session).
- */
-async function silentlyEnrollPasskey(): Promise<void> {
-  if (!browserSupportsWebAuthn()) return;
-  try {
-    const deviceId = getDeviceId();
-    const { devices } = await api.getWebauthnDevices();
-    if (devices.some((d) => d.deviceId === deviceId)) return;
-    const options = await api.webauthnRegisterOptions(deviceId);
-    const response = await startRegistration({ optionsJSON: options });
-    await api.webauthnRegisterVerify(deviceId, response);
-  } catch {
-    // Cancelled prompt, unsupported authenticator, offline, whatever —
-    // silent by design, the user is already logged in regardless.
-  }
 }

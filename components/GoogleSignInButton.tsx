@@ -73,7 +73,7 @@ function GoogleGIcon() {
 }
 
 /**
- * Styled to match the passkey button (border + bg-surface pill) rather than
+ * Styled to match the app's other buttons (border + bg-surface pill) rather than
  * Google's own rendered widget, which is a cross-origin iframe that can't be
  * restyled. Clicking it calls prompt() directly — same idToken result as the
  * official button, via the callback registered in initialize().

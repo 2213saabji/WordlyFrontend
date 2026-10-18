@@ -3,7 +3,6 @@
 //
 //   client          shared HTTP client, token/deviceId storage, session refresh
 //   auth            email/password, Google, logout, password reset
-//   passkeys        WebAuthn enrollment and recovery login
 //   daily-game      Daily mode (UTC day, stats/streaks)
 //   infinite-game   Infinite mode rounds and the hint endpoint
 //   infinite-tiers  Infinite tier leaderboard: tiers, status, board
@@ -32,7 +31,6 @@ export {
   warmUpBackend,
 } from "./client";
 export * from "./auth";
-export * from "./passkeys";
 export * from "./daily-game";
 export * from "./infinite-game";
 export * from "./infinite-tiers";

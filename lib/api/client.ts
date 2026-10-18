@@ -83,7 +83,7 @@ export function clearDeviceId(): void {
 }
 
 /** Stores the deviceId the server hands back once a sign-in succeeds (login,
- * signup verification, Google, passkey recovery). Unlike getDeviceId(), this
+ * signup verification, Google). Unlike getDeviceId(), this
  * never generates one itself. */
 export function setDeviceId(id: string): void {
   pendingDeviceId = null;

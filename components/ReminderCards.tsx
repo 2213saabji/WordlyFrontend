@@ -228,6 +228,31 @@ function InfiniteNudge({ me, tiers, onPlay }: { me: InfiniteMeResponse; tiers: I
   );
 }
 
+/** Right after signing up or logging in, while reminders are off: the same
+ * card as on the home screen, as a popup (bottom sheet on phones). Tapping
+ * outside closes it for now without answering. */
+export function ReminderPopup({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      role="presentation"
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex animate-fade-in items-end justify-center bg-[rgba(9,6,11,0.6)] px-3 pb-[calc(12px+env(safe-area-inset-bottom))] md:items-center md:p-6"
+    >
+      <div role="dialog" aria-modal="true" aria-label="Daily reminder" onClick={(e) => e.stopPropagation()} className="w-full max-w-md">
+        <ReminderPrompt onDone={onClose} />
+      </div>
+    </div>
+  );
+}
+
 export function HomeReminderSlot({ onPlayInfinite, onOpenSettings }: { onPlayInfinite: () => void; onOpenSettings: () => void }) {
   const { user } = useAuth();
   const [justSet, setJustSet] = useState(() => reminderJustSet());
@@ -247,6 +272,10 @@ export function HomeReminderSlot({ onPlayInfinite, onOpenSettings }: { onPlayInf
     fetcher: getInfiniteTiers,
     enabled: isInfinitePlayer,
   }).data;
+
+  // Set from the post-sign-in popup while this screen was already showing.
+  const latestJustSet = reminderJustSet();
+  if (latestJustSet !== justSet) setJustSet(latestJustSet);
 
   if (!user) return null;
 
