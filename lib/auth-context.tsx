@@ -21,8 +21,8 @@ import {
 } from "@/lib/api";
 import { clearCache, readCache, writeCache } from "@/lib/cache";
 import { invalidate, isFresh, markFresh, onStale, runSync, setSyncUser } from "@/lib/sync";
-import { forgetDeviceOnLogout } from "@/lib/push";
-import { browserTimezone } from "@/lib/reminders";
+import { forgetDeviceOnLogout, hasPendingRestore, restoreDeviceAfterLogin } from "@/lib/push";
+import { browserTimezone, clearReminderJustSet } from "@/lib/reminders";
 import type { AuthResponse, ReminderSummary, SignupPendingResponse, User } from "@/types";
 
 const USER_CACHE_KEY = "user";
@@ -74,6 +74,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [userConfirmed, setUserConfirmed] = useState(false);
   const [justSignedIn, setJustSignedIn] = useState<"signup" | "login" | null>(null);
   const clearJustSignedIn = useCallback(() => setJustSignedIn(null), []);
+
+  // After an explicit sign-in. If this player had push on this browser when
+  // they last logged out, it's turned back on first (lib/push.ts) — only
+  // then is the reminder popup considered, so it doesn't flash up for a
+  // player whose reminders are about to be on again.
+  const afterSignIn = useCallback((signedIn: User, kind: "signup" | "login") => {
+    if (!hasPendingRestore(signedIn.id)) {
+      setJustSignedIn(kind);
+      return;
+    }
+    restoreDeviceAfterLogin(signedIn.id)
+      .then((settings) => {
+        if (settings) setUser((current) => (current ? { ...current, reminders: settings } : current));
+      })
+      .catch(() => {})
+      .finally(() => setJustSignedIn(kind));
+  }, []);
 
   // Re-fetches the current user without touching the session itself — used
   // after actions that change stats (finishing a game, etc), not for login.
@@ -187,8 +204,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setDeviceId(data.deviceId || getDeviceId());
     setUser(data.user);
     setUserConfirmed(true);
-    setJustSignedIn("login");
-  }, []);
+    afterSignIn(data.user, "login");
+  }, [afterSignIn]);
 
   const signup = useCallback(
     (username: string, email: string, password: string, dailyReminder = false) =>
@@ -204,8 +221,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setDeviceId(data.deviceId);
     setUser(data.user);
     setUserConfirmed(true);
-    setJustSignedIn("signup");
-  }, []);
+    afterSignIn(data.user, "signup");
+  }, [afterSignIn]);
 
   const verifySignupCode = useCallback(
     async (email: string, code: string) => startSession(await api.verifySignupCode(email, code)),
@@ -224,14 +241,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // expired, etc), so it's fire-and-forget.
     api.logoutDevice().catch(() => {});
     // Same for this browser's push subscription, so the next player on this
-    // device doesn't get this one's reminders.
-    forgetDeviceOnLogout();
+    // device doesn't get this one's reminders (it comes back if this player
+    // logs in here again — see afterSignIn).
+    forgetDeviceOnLogout(user?.id ?? null);
+    // The "Reminder set" card belonged to this session.
+    clearReminderJustSet();
     clearToken();
     clearDeviceId();
     setUser(null);
     setUserConfirmed(false);
     setJustSignedIn(null);
-  }, []);
+  }, [user]);
 
   const updateUsername = useCallback(async (username: string) => {
     const { user } = await api.updateUsername(username);
@@ -258,8 +278,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUserConfirmed(true);
     // Also a new account's first sign-in; the popup shows either way while
     // reminders are off.
-    setJustSignedIn("login");
-  }, []);
+    afterSignIn(data.user, "login");
+  }, [afterSignIn]);
 
   return (
     <AuthContext.Provider

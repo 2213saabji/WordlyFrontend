@@ -279,8 +279,10 @@ export function HomeReminderSlot({ onPlayInfinite, onOpenSettings }: { onPlayInf
 
   if (!user) return null;
 
-  if (justSet) {
-    return <ReminderSetCard time={justSet.time} byEmail={justSet.channel === "email"} onChange={onOpenSettings} />;
+  // Only while reminders really are on: turning them off in Settings, or
+  // logging out (which removes this browser's notifications), hides it.
+  if (justSet && reminders && (reminders.email || reminders.push)) {
+    return <ReminderSetCard time={reminders.time} byEmail={!reminders.push} onChange={onOpenSettings} />;
   }
 
   // Older backends have no `reminders`; reminders already on means the card
