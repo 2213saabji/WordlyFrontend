@@ -30,11 +30,14 @@ import PublicApp from "./PublicApp";
 function AppShell({ intro }: { intro: ReactNode }) {
   const { screen, push, back, replace, backTo } = useScreen();
   const { user, justSignedIn, clearJustSignedIn } = useAuth();
-  // Right after signing up or logging in: ask about daily reminders if
-  // they're off (a signup that ticked "Email me a daily reminder" has them
-  // on already). The first-run tour waits until this is answered.
+  // Right after signing up (always — even with "Email me a daily reminder"
+  // ticked, it's where notifications and the time get picked) or logging in
+  // with both Settings toggles off: email here, this device's notifications
+  // in afterSignIn (lib/auth-context.tsx). The first-run tour waits until
+  // this is answered.
   const reminders = user?.reminders;
-  const reminderPopup = !!justSignedIn && !!reminders && !reminders.email && !reminders.push;
+  const reminderPopup =
+    justSignedIn === "signup" || (justSignedIn === "login" && !!reminders && !reminders.email);
   useEffect(() => {
     if (justSignedIn && !reminderPopup) clearJustSignedIn();
   }, [justSignedIn, reminderPopup, clearJustSignedIn]);

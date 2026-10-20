@@ -21,7 +21,7 @@ import {
 } from "@/lib/api";
 import { clearCache, readCache, writeCache } from "@/lib/cache";
 import { invalidate, isFresh, markFresh, onStale, runSync, setSyncUser } from "@/lib/sync";
-import { forgetDeviceOnLogout, hasPendingRestore, restoreDeviceAfterLogin } from "@/lib/push";
+import { devicePushState, forgetDeviceOnLogout, hasPendingRestore, restoreDeviceAfterLogin } from "@/lib/push";
 import { browserTimezone, clearReminderJustSet } from "@/lib/reminders";
 import type { AuthResponse, ReminderSummary, SignupPendingResponse, User } from "@/types";
 
@@ -29,6 +29,13 @@ const USER_CACHE_KEY = "user";
 // Longest the app waits on the startup /auth/refresh before showing the
 // sign-in screen (the refresh keeps going in the background).
 const REFRESH_WAIT_MS = 4_000;
+// Longest a login waits on "is this browser subscribed to push?" before
+// deciding on the reminder popup (treated as not subscribed).
+const DEVICE_CHECK_WAIT_MS = 3_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([promise, new Promise<T>((resolve) => window.setTimeout(() => resolve(fallback), ms))]);
+}
 
 interface AuthContextValue {
   user: User | null;
@@ -61,7 +68,9 @@ interface AuthContextValue {
   /** Applies reminder settings returned by a /reminders call to `user`. */
   applyReminders: (reminders: ReminderSummary) => void;
   /** Set by an explicit sign-in on this page load — never by the silent
-   * session refresh on a reload. Drives the post-sign-in reminder popup. */
+   * session refresh on a reload — when the post-sign-in reminder popup
+   * should show: every signup, and a login while this device has no push
+   * subscription (GameApp also checks email reminders are off). */
   justSignedIn: "signup" | "login" | null;
   clearJustSignedIn: () => void;
 }
@@ -78,18 +87,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // After an explicit sign-in. If this player had push on this browser when
   // they last logged out, it's turned back on first (lib/push.ts) — only
   // then is the reminder popup considered, so it doesn't flash up for a
-  // player whose reminders are about to be on again.
+  // player whose reminders are about to be on again. A signup always gets
+  // the popup; a login only while both Settings toggles are off — email,
+  // and notifications on *this* device (the account's `reminders.push` is
+  // on while any device is subscribed, so it can't answer that).
   const afterSignIn = useCallback((signedIn: User, kind: "signup" | "login") => {
-    if (!hasPendingRestore(signedIn.id)) {
-      setJustSignedIn(kind);
+    const restore = hasPendingRestore(signedIn.id)
+      ? restoreDeviceAfterLogin(signedIn.id)
+          .then((settings) => {
+            if (settings) setUser((current) => (current ? { ...current, reminders: settings } : current));
+          })
+          .catch(() => {})
+      : Promise.resolve();
+    if (kind === "signup") {
+      void restore.finally(() => setJustSignedIn("signup"));
       return;
     }
-    restoreDeviceAfterLogin(signedIn.id)
-      .then((settings) => {
-        if (settings) setUser((current) => (current ? { ...current, reminders: settings } : current));
-      })
-      .catch(() => {})
-      .finally(() => setJustSignedIn(kind));
+    void restore
+      .then(() => withTimeout(devicePushState(), DEVICE_CHECK_WAIT_MS, "off"))
+      .catch(() => "off" as const)
+      .then((device) => {
+        if (device !== "on") setJustSignedIn("login");
+      });
   }, []);
 
   // Re-fetches the current user without touching the session itself — used

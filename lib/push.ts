@@ -134,6 +134,8 @@ export async function subscribeThisDevice(vapidPublicKey: string): Promise<Remin
     const current = new Uint8Array(sub.options.applicationServerKey);
     const same = current.length === applicationServerKey.length && current.every((b, i) => b === applicationServerKey[i]);
     if (!same) {
+      // Off the account too, or it would keep `reminders.push` on.
+      await removePushSubscription(sub.endpoint).catch(() => {});
       await sub.unsubscribe();
       sub = null;
     }
