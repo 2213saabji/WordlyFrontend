@@ -15,8 +15,25 @@ export const REMINDER_TIMES: { time: ReminderTime; clock: string; label: string 
 
 export const DEFAULT_REMINDER_TIME: ReminderTime = "20:00";
 
+/** Custom times are on the hour or half hour: the backend sends reminders
+ * from a job that runs every 30 minutes. */
+const CUSTOM_STEP_MINUTES = 30;
+
+/** Every time a player can pick as a custom time: 00:00, 00:30 … 23:30. */
+export const CUSTOM_REMINDER_TIMES: ReminderTime[] = Array.from({ length: (24 * 60) / CUSTOM_STEP_MINUTES }, (_, i) => {
+  const minutes = i * CUSTOM_STEP_MINUTES;
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+});
+
+export function isPresetTime(time: ReminderTime): boolean {
+  return REMINDER_TIMES.some((t) => t.time === time);
+}
+
+/** "07:30" → "7:30 AM". */
 export function clockLabel(time: ReminderTime): string {
-  return REMINDER_TIMES.find((t) => t.time === time)?.clock ?? time;
+  const [h, m] = time.split(":").map(Number);
+  if (!Number.isInteger(h) || !Number.isInteger(m)) return time;
+  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
 }
 
 /** The browser's IANA timezone, e.g. "Asia/Kolkata". */

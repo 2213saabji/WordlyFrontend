@@ -4,10 +4,12 @@ import { useEffect, useState } from "react";
 import { getInfiniteMe, getInfiniteTiers, getReminders, updateReminders } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import {
+  CUSTOM_REMINDER_TIMES,
   DEFAULT_REMINDER_TIME,
   REMINDER_TIMES,
   clockLabel,
   enableReminders,
+  isPresetTime,
   reminderJustSet,
 } from "@/lib/reminders";
 import { plural } from "@/lib/tiers";
@@ -46,7 +48,38 @@ function CheckIcon() {
   );
 }
 
-/** Morning / Evening / Night. Also used on the Settings screen. */
+function TimeChip({
+  clock,
+  label,
+  selected,
+  disabled,
+  onClick,
+}: {
+  clock: string;
+  label: string;
+  selected: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      disabled={disabled}
+      onClick={onClick}
+      className={`flex min-w-0 flex-col items-center gap-0.5 rounded-xl px-1 py-2.5 transition-colors duration-150 disabled:opacity-60 ${
+        selected ? "border-[1.5px] border-accent bg-accent/14" : "border border-white/10 bg-white/5 hover:border-white/20"
+      }`}
+    >
+      <span className={`whitespace-nowrap text-[13px] font-semibold min-[380px]:text-sm ${selected ? "text-accent" : ""}`}>{clock}</span>
+      <span className={`text-[11px] ${selected ? SOFT : MUTED}`}>{label}</span>
+    </button>
+  );
+}
+
+/** Morning / Evening / Night / Custom. Also used on the Settings screen.
+ * "Custom" opens a list of every half hour; a custom time stays on the chip. */
 export function ReminderTimePicker({
   value,
   onChange,
@@ -56,27 +89,53 @@ export function ReminderTimePicker({
   onChange: (time: ReminderTime) => void;
   disabled?: boolean;
 }) {
+  const isCustom = !isPresetTime(value);
+  const [customOpen, setCustomOpen] = useState(isCustom);
+  const showCustom = customOpen || isCustom;
+
+  const pickPreset = (time: ReminderTime) => {
+    setCustomOpen(false);
+    onChange(time);
+  };
+
   return (
-    <div role="radiogroup" aria-label="Reminder time" className="grid grid-cols-3 gap-2">
-      {REMINDER_TIMES.map((option) => {
-        const selected = option.time === value;
-        return (
-          <button
+    <div className="flex flex-col gap-2">
+      <div role="radiogroup" aria-label="Reminder time" className="grid grid-cols-4 gap-2">
+        {REMINDER_TIMES.map((option) => (
+          <TimeChip
             key={option.time}
-            type="button"
-            role="radio"
-            aria-checked={selected}
+            clock={option.clock}
+            label={option.label}
+            selected={!showCustom && option.time === value}
             disabled={disabled}
-            onClick={() => onChange(option.time)}
-            className={`flex flex-col items-center gap-0.5 rounded-xl py-2.5 transition-colors duration-150 disabled:opacity-60 ${
-              selected ? "border-[1.5px] border-accent bg-accent/14" : "border border-white/10 bg-white/5 hover:border-white/20"
-            }`}
+            onClick={() => pickPreset(option.time)}
+          />
+        ))}
+        <TimeChip
+          clock={isCustom ? clockLabel(value) : "Other"}
+          label="Custom"
+          selected={showCustom}
+          disabled={disabled}
+          onClick={() => setCustomOpen(true)}
+        />
+      </div>
+      {showCustom && (
+        <label className="flex animate-fade-in items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 py-2 pl-3.5 pr-2">
+          <span className={`text-[13px] ${SOFT}`}>Remind me at</span>
+          <select
+            value={CUSTOM_REMINDER_TIMES.includes(value) ? value : DEFAULT_REMINDER_TIME}
+            disabled={disabled}
+            onChange={(e) => onChange(e.target.value)}
+            className="rounded-lg border border-white/15 bg-[#1f1725] px-2.5 py-1.5 text-sm font-semibold text-accent [color-scheme:dark] disabled:opacity-60"
           >
-            <span className={`text-sm font-semibold ${selected ? "text-accent" : ""}`}>{option.clock}</span>
-            <span className={`text-[11px] ${selected ? SOFT : MUTED}`}>{option.label}</span>
-          </button>
-        );
-      })}
+            {CUSTOM_REMINDER_TIMES.map((time) => (
+              <option key={time} value={time}>
+                {clockLabel(time)}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
     </div>
   );
 }

@@ -1,7 +1,8 @@
 // Daily reminders by email and browser push (backend API_DOCUMENTATION.md §11).
 
-/** The local times a player can pick: morning, evening, night. */
-export type ReminderTime = "09:00" | "20:00" | "22:00";
+/** Local "HH:MM" (24-hour) on the hour or half hour: a preset (09:00, 20:00,
+ * 22:00) or a custom time such as "07:30". */
+export type ReminderTime = string;
 
 /** `user.reminders` on every user object (GET /auth/me). */
 export interface ReminderSummary {
@@ -20,7 +21,10 @@ export interface ReminderSettings extends ReminderSummary {
   pushDevices: number;
   /** ISO instant of the next reminder; null while both channels are off. */
   nextSendAt: string | null;
+  /** The preset times. */
   timeOptions: ReminderTime[];
+  /** A custom time must be on this step (30 → HH:00 or HH:30). Missing on older backends. */
+  timeStepMinutes?: number;
   /** The server has VAPID keys; false means email only. */
   pushAvailable: boolean;
   /** applicationServerKey for pushManager.subscribe(); null when push isn't available. */
