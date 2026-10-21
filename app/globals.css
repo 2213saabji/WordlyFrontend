@@ -53,6 +53,9 @@
   --animate-tour-nudge-up: tour-nudge-up 1s ease-in-out infinite;
   --animate-twinkle: twinkle 3.2s ease-in-out infinite;
   --animate-crown: crown-bob 4s ease-in-out infinite;
+  --animate-coin-burst: coin-burst 0.7s cubic-bezier(0.2, 0.8, 0.3, 1.3) both;
+  --animate-coin-spark: coin-spark 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-coin-glow: coin-glow 2.4s ease-in-out infinite;
 }
 
 * {
@@ -371,6 +374,49 @@ html[data-cached-session] .auth-pending {
   }
   50% {
     transform: translateY(-1.5px) rotate(10deg);
+  }
+}
+
+/* Purchase done: the coin drops in with a spin and settles. */
+@keyframes coin-burst {
+  0% {
+    opacity: 0;
+    transform: translateY(-18px) scale(0.4) rotateY(0deg);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(2px) scale(1.12) rotateY(320deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotateY(360deg);
+  }
+}
+
+/* A spark flying out from the coin; --spark-x / --spark-y set its end point. */
+@keyframes coin-spark {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.3);
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--spark-x), var(--spark-y)) scale(1);
+  }
+}
+
+@keyframes coin-glow {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.06);
   }
 }
 

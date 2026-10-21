@@ -1,41 +1,46 @@
 "use client";
 
-// Buying a coin pack through Razorpay Checkout (contract v0.4 §5.4):
-// create the order → open Checkout → confirm with Razorpay's payment id and
-// signature. The server credits on confirm *or* the gateway webhook,
-// whichever lands first, so 409 ALREADY_CREDITED is a success and a confirm
-// lost on the network is recovered by polling the order.
+// Buying a coin pack through PayU's hosted checkout (contract §3.2):
+// create the order → post its signed form to PayU (the page navigates
+// away). PayU sends the browser back through the server, which credits the
+// order, to /?purchase=<orderId>&result=…; GameApp then opens the Coins
+// screen and finishReturnedPurchase polls the order for the outcome. The
+// server credits on the return *or* PayU's webhook, whichever lands first,
+// and checks with PayU itself while the order is polled.
 
-import { ApiRequestError, confirmCoinOrder, createCoinOrder, getCoinOrder } from "@/lib/api";
+import { ApiRequestError, createCoinOrder, getCoinOrder } from "@/lib/api";
 import { setCoinBalance } from "@/lib/coins";
 import { invalidate } from "@/lib/sync";
-import { formatCoins } from "@/lib/tiers";
-import type { CoinPack } from "@/types";
+import type { CoinOrderStatusResponse, CoinPack, CoinPurchase, CreateCoinOrderResponse } from "@/types";
 
-const CHECKOUT_SCRIPT = "https://checkout.razorpay.com/v1/checkout.js";
-const POLL_ATTEMPTS = 5;
+const POLL_ATTEMPTS = 8;
 const POLL_INTERVAL_MS = 2_000;
+/** Where to go back to after a purchase (this tab only). */
+const RETURN_KEY = "guessword_purchase_return";
 
 /** Coin purchases aren't open yet: every Buy button shows "coming soon"
- * without calling the backend or opening Razorpay. Set to true to launch. */
-const PURCHASES_OPEN = false;
+ * without calling the backend or opening checkout. Opened by
+ * NEXT_PUBLIC_PURCHASES_OPEN=true (e.g. in .env.local to test checkout). */
+const PURCHASES_OPEN = process.env.NEXT_PUBLIC_PURCHASES_OPEN === "true";
 
 /** unavailable: store not open (503 PAYMENTS_NOT_CONFIGURED) · cancelled:
- * Checkout closed without a payment attempt · failed: a payment attempt
- * failed or didn't verify (nothing charged) · pending: paid, but the credit
- * isn't confirmed yet (the webhook will add it) · error: anything else
- * (network, gateway down). */
+ * left PayU without paying · failed: the payment failed (nothing charged) ·
+ * pending: paid, but the credit isn't confirmed yet (the webhook will add
+ * it) · error: anything else (network, PayU unreachable). */
 export type PurchaseErrorKind = "unavailable" | "cancelled" | "failed" | "pending" | "error";
 
 export class PurchaseError extends Error {
   kind: PurchaseErrorKind;
-  /** failed: Razorpay's own reason for the last failed attempt, if any. */
+  /** What the failed purchase was, for a "Try again" (when known). */
+  retry?: CoinPurchase;
+  /** failed: PayU's reason, e.g. "Bank declined" (when given). */
   reason?: string;
-  constructor(kind: PurchaseErrorKind, reason?: string) {
-    super(reason ? `${PURCHASE_ERROR_COPY[kind]} ${reason}` : PURCHASE_ERROR_COPY[kind]);
+  constructor(kind: PurchaseErrorKind, details: { retry?: CoinPurchase; reason?: string } = {}) {
+    super(PURCHASE_ERROR_COPY[kind]);
     this.name = "PurchaseError";
     this.kind = kind;
-    this.reason = reason;
+    this.retry = details.retry;
+    this.reason = details.reason;
   }
 }
 
@@ -47,145 +52,160 @@ export const PURCHASE_ERROR_COPY: Record<PurchaseErrorKind, string> = {
   error: "Something went wrong. Please try again.",
 };
 
-interface RazorpaySuccess {
-  razorpay_payment_id: string;
-  razorpay_order_id: string;
-  razorpay_signature: string;
-}
-
-/** The `payment.failed` event payload (only the part we read). */
-interface RazorpayFailure {
-  error?: { description?: string; reason?: string };
-}
-
-interface RazorpayInstance {
-  open(): void;
-  on(event: "payment.failed", handler: (response: RazorpayFailure) => void): void;
-}
-
-declare global {
-  interface Window {
-    Razorpay?: new (options: Record<string, unknown>) => RazorpayInstance;
-  }
-}
-
 export interface PurchaseResult {
   coinsCredited: number;
   balance: number;
   orderId: string;
 }
 
-let scriptPromise: Promise<void> | null = null;
+/** The screen a purchase started from, to land back on after it. */
+export type PurchaseOrigin = "coins" | "infinite";
 
-function loadCheckout(): Promise<void> {
-  if (window.Razorpay) return Promise.resolve();
-  if (!scriptPromise) {
-    scriptPromise = new Promise<void>((resolve, reject) => {
-      const script = document.createElement("script");
-      script.src = CHECKOUT_SCRIPT;
-      script.async = true;
-      script.onload = () => resolve();
-      script.onerror = () => {
-        scriptPromise = null;
-        reject(new PurchaseError("error"));
-      };
-      document.body.appendChild(script);
-    });
-  }
-  return scriptPromise;
-}
+/** `result` from the return URL: a hint for what to show while the order is
+ * polled (it isn't trusted for the outcome itself). */
+export type ReturnedPurchaseHint = "success" | "failed" | "cancelled" | "check";
+
+type PayuCheckout = CreateCoinOrderResponse["gateway"]["checkout"];
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-/** Runs the whole purchase. Resolves once the coins are credited (and
- * every coin chip shows the new balance); rejects with a PurchaseError. */
-export async function buyCoinPack(
-  pack: CoinPack,
-  { email }: { email?: string } = {},
-): Promise<PurchaseResult> {
+/** Rupees in a valid custom amount, or why not ("min" | "max" | "step"). */
+export function checkCustomRupees(
+  rupees: number,
+  rules: { minPaise: number; stepPaise: number; maxPaise: number },
+): "ok" | "min" | "max" | "step" {
+  const paise = Math.round(rupees * 100);
+  if (!Number.isFinite(rupees) || paise < rules.minPaise) return "min";
+  if (paise > rules.maxPaise) return "max";
+  return paise % rules.stepPaise === 0 ? "ok" : "step";
+}
+
+/** What an order was, for buying it again. */
+function retryOf(order: Pick<CoinOrderStatusResponse, "packId" | "amountPaise">): CoinPurchase {
+  return order.packId === "custom" ? { amountPaise: order.amountPaise } : { packId: order.packId };
+}
+
+/**
+ * Starts the purchase of a pack or a custom amount: creates the order and
+ * goes to PayU. Never resolves — the page navigates away, and the result is
+ * picked up on the way back (finishReturnedPurchase). Rejects with a
+ * PurchaseError if it can't start, or with "cancelled" when the player comes
+ * back with the Back button.
+ */
+export async function buyCoins(item: CoinPurchase, { from = "coins" }: { from?: PurchaseOrigin } = {}): Promise<never> {
   if (!PURCHASES_OPEN) throw new PurchaseError("unavailable");
   let order;
   try {
     // A fresh key per tap: apiFetch's one retry can't create a second order.
-    order = await createCoinOrder(pack.packId, crypto.randomUUID());
+    order = await createCoinOrder(item, crypto.randomUUID());
   } catch (err) {
     if (err instanceof ApiRequestError && err.data?.code === "PAYMENTS_NOT_CONFIGURED") {
       throw new PurchaseError("unavailable");
     }
-    throw new PurchaseError("error");
+    throw new PurchaseError("error", { retry: item });
   }
-
-  await loadCheckout();
-  const payment = await new Promise<RazorpaySuccess>((resolve, reject) => {
-    const Razorpay = window.Razorpay;
-    if (!Razorpay) {
-      reject(new PurchaseError("error"));
-      return;
-    }
-    // null = no failed attempt yet; "" = failed without a description.
-    let lastFailure: string | null = null;
-    const rzp = new Razorpay({
-      key: order.gateway.key,
-      order_id: order.gateway.orderId,
-      amount: order.gateway.amountPaise,
-      currency: order.gateway.currency,
-      name: "GuessWord",
-      description: formatCoins(order.coins),
-      prefill: email ? { email } : undefined,
-      theme: { color: "#f2a05c" },
-      handler: resolve,
-      // A failed attempt keeps Checkout open for a retry (Razorpay shows its
-      // own error there); closing it means nothing was charged — reported
-      // as a failure if an attempt failed, else as a cancel.
-      modal: {
-        ondismiss: () =>
-          reject(lastFailure !== null ? new PurchaseError("failed", lastFailure || undefined) : new PurchaseError("cancelled")),
-      },
-    });
-    rzp.on("payment.failed", (response) => {
-      const description = response.error?.description?.trim() ?? "";
-      lastFailure = description && !/^undefined$/i.test(description) ? description : "";
-    });
-    rzp.open();
+  return goToPayu(order.orderId, order.gateway.checkout, from).catch((err: unknown) => {
+    throw err instanceof PurchaseError ? new PurchaseError(err.kind, { retry: item }) : err;
   });
-
-  const credited = await confirm(order.orderId, payment).catch(async (err: unknown) => {
-    if (err instanceof PurchaseError) throw err;
-    // Lost on the network (or a 5xx): the webhook credits it — poll.
-    for (let i = 0; i < POLL_ATTEMPTS; i++) {
-      await sleep(POLL_INTERVAL_MS);
-      const status = await getCoinOrder(order.orderId).catch(() => null);
-      if (status?.status === "credited") return { coinsCredited: status.coins, balance: status.balance, orderId: order.orderId };
-      if (status?.status === "failed") throw new PurchaseError("failed");
-    }
-    throw new PurchaseError("pending");
-  });
-
-  setCoinBalance(credited.balance);
-  invalidate("wallet", "me", "notifications");
-  return credited;
 }
 
-async function confirm(orderId: string, payment: RazorpaySuccess): Promise<PurchaseResult> {
+/** Posts the order's signed form to PayU's hosted checkout. Rejects with
+ * "cancelled" if the player comes back with the browser's Back button (the
+ * page is restored from the back/forward cache). */
+function goToPayu(orderId: string, checkout: PayuCheckout, from: PurchaseOrigin): Promise<never> {
+  let action: URL;
   try {
-    const res = await confirmCoinOrder(orderId, {
-      gatewayPaymentId: payment.razorpay_payment_id,
-      signature: payment.razorpay_signature,
-    });
-    return { coinsCredited: res.coinsCredited, balance: res.balance, orderId };
-  } catch (err) {
-    if (err instanceof ApiRequestError) {
-      const code = err.data?.code;
-      // The webhook got there first — same outcome.
-      if (code === "ALREADY_CREDITED" && err.data?.balance !== undefined) {
-        return { coinsCredited: err.data.coinsCredited ?? 0, balance: err.data.balance, orderId };
-      }
-      if (code === "PAYMENT_FAILED") throw new PurchaseError("failed");
-      if (code === "PAYMENTS_NOT_CONFIGURED") throw new PurchaseError("unavailable");
-      if (err.status < 500) throw new PurchaseError("error");
-    }
-    throw err;
+    action = new URL(checkout.action);
+  } catch {
+    return Promise.reject(new PurchaseError("error"));
   }
+  // Only ever post to PayU.
+  if (action.protocol !== "https:" || !/(^|\.)payu\.in$/.test(action.hostname)) {
+    return Promise.reject(new PurchaseError("error"));
+  }
+  try {
+    sessionStorage.setItem(RETURN_KEY, JSON.stringify({ orderId, from }));
+  } catch {
+    // Storage disabled: the return lands on the Coins screen.
+  }
+
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = action.toString();
+  form.style.display = "none";
+  for (const [name, value] of Object.entries(checkout.fields)) {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = value;
+    form.appendChild(input);
+  }
+  document.body.appendChild(form);
+
+  return new Promise<never>((_, reject) => {
+    const onShow = (e: PageTransitionEvent) => {
+      if (!e.persisted) return;
+      window.removeEventListener("pageshow", onShow);
+      form.remove();
+      reject(new PurchaseError("cancelled"));
+    };
+    window.addEventListener("pageshow", onShow);
+    form.submit();
+  });
+}
+
+/** Where the purchase for `orderId` started, if this tab started it. */
+export function purchaseOrigin(orderId: string): PurchaseOrigin {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(RETURN_KEY) ?? "null") as { orderId?: string; from?: PurchaseOrigin } | null;
+    return saved?.orderId === orderId && saved.from === "infinite" ? "infinite" : "coins";
+  } catch {
+    return "coins";
+  }
+}
+
+/**
+ * Back from PayU (/?purchase=<orderId>&result=<hint>): polls the order until
+ * it's credited or failed, and updates every coin chip. Resolves with the
+ * result and the pack bought (for the purchase-done sheet); rejects with a
+ * PurchaseError carrying what to retry — "pending" if the payment isn't
+ * confirmed yet (the webhook or the next poll credits it).
+ */
+export async function finishReturnedPurchase(
+  orderId: string,
+  hint: ReturnedPurchaseHint,
+): Promise<{ result: PurchaseResult; pack: CoinPack }> {
+  try {
+    sessionStorage.removeItem(RETURN_KEY);
+  } catch {
+    // Nothing to clean up.
+  }
+  // A cancel or a failure needs one look (what it was, in case it was paid
+  // after all); the rest wait for the credit.
+  const attempts = hint === "failed" || hint === "cancelled" ? 1 : POLL_ATTEMPTS;
+  let last: CoinOrderStatusResponse | null = null;
+  for (let i = 0; i < attempts; i++) {
+    if (i > 0) await sleep(POLL_INTERVAL_MS);
+    const order = await getCoinOrder(orderId).catch((err: unknown) => {
+      if (err instanceof ApiRequestError && err.status === 404) throw new PurchaseError("error");
+      return null;
+    });
+    if (order) last = order;
+    if (order?.status === "credited") {
+      setCoinBalance(order.balance);
+      invalidate("wallet", "me", "notifications");
+      return {
+        result: { coinsCredited: order.coins, balance: order.balance, orderId },
+        pack: { packId: order.packId, coins: order.coins, pricePaise: order.amountPaise, currency: order.currency },
+      };
+    }
+    if (order?.status === "failed") {
+      throw new PurchaseError("failed", { retry: retryOf(order), reason: order.failureReason ?? undefined });
+    }
+  }
+  const retry = last ? retryOf(last) : undefined;
+  if (hint === "cancelled") throw new PurchaseError("cancelled", { retry });
+  throw new PurchaseError(hint === "failed" ? "failed" : "pending", { retry });
 }

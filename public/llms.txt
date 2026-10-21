@@ -9,7 +9,7 @@
 - Amber tile: the letter is in the word but in a different spot.
 - Gray tile: the letter is not in the word.
 - After four guesses without solving, a hint with a short clue becomes available. It never reveals the word. In Infinite mode hints are free in the Stone and Iron tiers and cost 1,000 coins from Copper up.
-- Players earn 10 coins for every solved word (Daily or Infinite) and can buy more (3,000 coins for ₹10). Coins have no cash value.
+- Players earn 10 coins for every solved word (Daily or Infinite) and can buy more (3,000 coins for ₹10, or any amount from ₹10 to ₹1,000 in steps of ₹10 at the same rate). Coins have no cash value.
 
 ## Modes
 

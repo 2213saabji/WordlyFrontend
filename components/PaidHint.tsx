@@ -1,15 +1,16 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useState } from "react";
 import { CoinIcon } from "@/components/CoinChip";
+import { CustomAmountCard } from "@/components/CoinPurchase";
+import { SheetFrame } from "@/components/SheetFrame";
 import { ApiRequestError, getCoinPacks, revealInfiniteHint } from "@/lib/api";
-import { useAuth } from "@/lib/auth-context";
 import { setCoinBalance, useCoinBalance } from "@/lib/coins";
-import { PurchaseError, buyCoinPack, type PurchaseResult } from "@/lib/purchase";
+import { PurchaseError, buyCoins } from "@/lib/purchase";
 import { invalidate } from "@/lib/sync";
 import { formatCoins, formatPaise } from "@/lib/tiers";
 import { useSyncedResource } from "@/lib/use-synced";
-import type { CoinPack } from "@/types";
+import type { CoinPurchase } from "@/types";
 
 // Paid hints (Tiers 1–6, contract v0.4 §3.3 / §5.4): the "Need a hint?" row
 // (mobile) / card (desktop), the confirm sheet and the not-enough-coins
@@ -112,12 +113,7 @@ export function usePaidHint({
     }
   }
 
-  /** After a purchase from the hint flow, go back to the confirm sheet. */
-  function purchased() {
-    setSheet((s) => (s?.kind === "coins" && s.reason === "short" ? { kind: "confirm", cost: s.cost } : null));
-  }
-
-  return { balance, cost, noClue, sheet, busy, message, open, openGetCoins, confirm, purchased, close: () => setSheet(null) };
+  return { balance, cost, noClue, sheet, busy, message, open, openGetCoins, confirm, close: () => setSheet(null) };
 }
 
 export type PaidHintState = ReturnType<typeof usePaidHint>;
@@ -218,31 +214,8 @@ export function PaidHintCard({
   );
 }
 
-/** Bottom sheet on mobile, centred dialog on desktop. */
-export function SheetFrame({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-      className="fixed inset-0 z-40 flex flex-col justify-end md:items-center md:justify-center"
-    >
-      <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 animate-fade-in bg-[#09060b]/60" />
-      <div className="relative flex animate-fade-in-up flex-col gap-[18px] rounded-t-[30px] border-t border-white/10 bg-[#1f1725] px-[22px] pb-[26px] pt-3.5 md:w-110 md:rounded-[24px] md:border md:p-7 md:shadow-[0_40px_80px_-20px_rgba(0,0,0,0.7)]">
-        <span aria-hidden className="h-1 w-11 self-center rounded-[3px] bg-white/18 md:hidden" />
-        {children}
-      </div>
-    </div>
-  );
-}
+// Also used by the Coins screen.
+export { SheetFrame };
 
 const SECONDARY =
   "rounded-2xl border border-white/12 bg-white/7 p-[15px] text-[14.5px] font-semibold transition-colors hover:border-accent/40 md:rounded-[14px] md:p-3";
@@ -262,8 +235,8 @@ export function PaidHintSheets({ state, tierName }: { state: PaidHintState; tier
             ? `You have ${formatCoins(state.balance)}.`
             : undefined
       }
+      hintCost={sheet.cost}
       onClose={state.close}
-      onPurchased={state.purchased}
     />
   );
 }
@@ -315,33 +288,35 @@ function ConfirmHintSheet({ state, cost, tierName }: { state: PaidHintState; cos
   );
 }
 
-/** The coin packs (one at launch: 3,000 coins for ₹10) with Buy buttons. */
+/** The coin packs (one at launch: 3,000 coins for ₹10) with Buy buttons,
+ * and a custom amount. */
 export function CoinPackSheet({
   title,
   intro,
+  hintCost,
   onClose,
-  onPurchased,
 }: {
   title: string;
   intro?: string;
+  /** This board's hint price, for "enough for N hints". */
+  hintCost: number | null;
   onClose: () => void;
-  onPurchased: (result: PurchaseResult) => void;
 }) {
-  const { user } = useAuth();
   // Packs are TierConfig values, so they change with the `tiers` flag.
   const packs = useSyncedResource({ flag: "tiers", key: "store:packs", fetcher: getCoinPacks });
   const [buying, setBuying] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  async function buy(pack: CoinPack) {
-    setBuying(pack.packId);
+  // Goes to PayU; the player comes back to the Coins screen, opened over
+  // this board (see GameApp). Only returns here if it couldn't start or
+  // the player pressed Back on PayU's page.
+  async function buy(item: CoinPurchase) {
+    setBuying("packId" in item ? item.packId : "custom");
     setMessage(null);
     try {
-      const result = await buyCoinPack(pack, { email: user?.email });
-      onPurchased(result);
+      await buyCoins(item, { from: "infinite" });
     } catch (err) {
       setMessage(err instanceof PurchaseError ? err.message : "Something went wrong. Please try again.");
-    } finally {
       setBuying(null);
     }
   }
@@ -366,7 +341,7 @@ export function CoinPackSheet({
             </span>
             <button
               type="button"
-              onClick={() => buy(pack)}
+              onClick={() => buy({ packId: pack.packId })}
               disabled={buying !== null}
               className="ml-auto rounded-xl bg-accent px-4 py-2.5 text-[14px] font-bold text-background transition-all hover:shadow-lg hover:shadow-accent/25 disabled:opacity-60"
             >
@@ -374,6 +349,16 @@ export function CoinPackSheet({
             </button>
           </div>
         ))
+      )}
+      {packs.data?.custom && (
+        <CustomAmountCard
+          rules={packs.data.custom}
+          hintCost={hintCost}
+          buying={buying === "custom"}
+          disabled={buying !== null}
+          onBuy={(amountPaise) => buy({ amountPaise })}
+          variant="sheet"
+        />
       )}
       {message && <span className="text-[13px] text-danger">{message}</span>}
       <span className={`text-[11.5px] leading-normal ${MUTED}`}>

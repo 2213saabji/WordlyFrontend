@@ -44,9 +44,24 @@ export interface CoinPack {
   currency: string;
 }
 
+/** The rules for a player-chosen amount: minPaise up to maxPaise, in steps
+ * of stepPaise, at coinsPerRupee (300 = the ₹10 pack's rate). */
+export interface CustomCoinAmount {
+  minPaise: number;
+  stepPaise: number;
+  maxPaise: number;
+  coinsPerRupee: number;
+  currency: string;
+}
+
 export interface CoinPacksResponse {
   packs: CoinPack[];
+  /** null (or missing, on older backends) = no custom amounts. */
+  custom?: CustomCoinAmount | null;
 }
+
+/** What to buy: a pack, or a custom amount (POST /store/orders). */
+export type CoinPurchase = { packId: string } | { amountPaise: number };
 
 export type CoinOrderStatus = "created" | "paid" | "credited" | "failed" | "expired";
 
@@ -61,30 +76,26 @@ export interface CoinOrder {
   expiresAt: string;
   paidAt: string | null;
   creditedAt: string | null;
+  /** PayU's reason for the last failed attempt, if any. */
+  failureReason?: string | null;
 }
 
-/** POST /store/orders — `gateway` is what Razorpay Checkout opens with. */
+/** POST /store/orders — `gateway.checkout` is the signed form to post to
+ * PayU's hosted checkout (`action` is the PayU URL). */
 export interface CreateCoinOrderResponse extends CoinOrder {
   gateway: {
-    provider: "razorpay";
+    provider: "payu";
+    /** = orderId (PayU's txnid). */
     orderId: string;
     key: string;
     amountPaise: number;
     currency: string;
+    checkout: { action: string; fields: Record<string, string> };
   };
 }
 
-/** GET /store/orders/{orderId} — for polling when confirm didn't get through. */
+/** GET /store/orders/{orderId} — polled after PayU sends the player back. */
 export interface CoinOrderStatusResponse extends CoinOrder {
-  balance: number;
-}
-
-/** POST /store/orders/{orderId}/confirm. A 409 ALREADY_CREDITED carries the
- * same coinsCredited/balance and means success too. */
-export interface ConfirmCoinOrderResponse {
-  status: "credited";
-  orderId: string;
-  coinsCredited: number;
   balance: number;
 }
 

@@ -17,7 +17,7 @@ export const metadata: Metadata = pageMetadata({
 // Platinum, 21 Gold, 14 Silver, 7 Bronze–Iron; scoring 10 + 2 per unused
 // guess + 20 per qualifying day; carry-in 20%, demotion penalty 50 points;
 // decay 5% (min 10) per idle day; +10 coins per solve; hints 1,000 coins in
-// Copper–Diamond; one pack, 3,000 coins for ₹10). Update this copy if those
+// Copper–Diamond; one pack, 3,000 coins for ₹10, or a custom amount from ₹10 to ₹1,000 at the same rate). Update this copy if those
 // change.
 const TIER_FAQS: FaqItem[] = [
   {
@@ -63,7 +63,7 @@ const TIER_FAQS: FaqItem[] = [
   {
     question: "What are coins?",
     answer:
-      "Coins are GuessWord's in-game currency. You earn 10 coins for every word you solve, Daily or Infinite, and you can buy more: 3,000 coins for ₹10. Spend them on hints in the Copper to Diamond tiers. Coins have no cash value, can't be withdrawn or transferred, and don't expire.",
+      "Coins are GuessWord's in-game currency. You earn 10 coins for every word you solve, Daily or Infinite, and you can buy more: 3,000 coins for ₹10, or any amount from ₹10 to ₹1,000 in steps of ₹10 at the same rate (300 coins per ₹1). Spend them on hints in the Copper to Diamond tiers. Coins have no cash value, can't be withdrawn or transferred, and don't expire.",
   },
 ];
 

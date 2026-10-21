@@ -20,6 +20,7 @@ import SettingsScreen from "@/components/screens/SettingsScreen";
 import { InstallPromptHost } from "@/components/InstallPrompt";
 import { ReminderPopup } from "@/components/ReminderCards";
 import { useAuth } from "@/lib/auth-context";
+import { purchaseOrigin, type ReturnedPurchaseHint } from "@/lib/purchase";
 import { registerServiceWorker } from "@/lib/push";
 import { PRE_AUTH_SCREENS, useScreen, type PlayMode } from "@/lib/screen-context";
 import { parseReplayParam, type ReplayInvite } from "@/lib/share";
@@ -46,8 +47,22 @@ function AppShell({ intro }: { intro: ReactNode }) {
   );
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    // Back from PayU's checkout: /?purchase=<orderId>&result=<hint>. Opens the
+    // Coins screen with the outcome, over the Infinite board if that's where
+    // the purchase started (its "Done" leads back there).
+    const purchase = params.get("purchase");
+    if (purchase && /^GW-\d{8}$/.test(purchase)) {
+      const result = params.get("result");
+      const hint: ReturnedPurchaseHint =
+        result === "success" || result === "failed" || result === "cancelled" ? result : "check";
+      if (purchaseOrigin(purchase) === "infinite") push({ name: "play", mode: "infinite" });
+      push({ name: "coins", returned: { orderId: purchase, hint } });
+      window.history.replaceState(null, "", window.location.pathname);
+      return;
+    }
     // The daily reminder (push or email) links to /?play=daily|infinite.
-    const play = new URLSearchParams(window.location.search).get("play");
+    const play = params.get("play");
     const reminderMode: PlayMode | null = play === "daily" || play === "infinite" ? play : null;
     if (!invite && !reminderMode) return;
     // A replay link is only valid same-day (daily mode's word is already
@@ -149,7 +164,7 @@ function AppShell({ intro }: { intro: ReactNode }) {
         {screen.name === "diamond" && (
           <DiamondStatusScreen onBack={back} onPlay={() => push({ name: "play", mode: "infinite" })} />
         )}
-        {screen.name === "coins" && <CoinsScreen onBack={back} />}
+        {screen.name === "coins" && <CoinsScreen onBack={back} returned={screen.returned} />}
         {screen.name === "settings" && <SettingsScreen onBack={back} />}
         {screen.name === "notifications" && (
           <NotificationsScreen onBack={back} onNavigate={(target) => replace(target)} />
