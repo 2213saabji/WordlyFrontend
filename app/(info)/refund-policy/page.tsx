@@ -21,8 +21,8 @@ const SECTIONS: LegalSection[] = [
   {
     id: "what-you-pay-for",
     number: "01",
-    heading: "What you pay for",
-    body: "GuessWord sells coin packs, an in-game currency you can spend on hints. Coins are a digital item: nothing is shipped, and they're added to your account as soon as your payment is confirmed. Every purchase is a one-time payment, with the price shown in rupees, inclusive of GST, before you pay. There are no subscriptions, memberships or auto-renewals.",
+    heading: "What you pay for and delivery",
+    body: "GuessWord sells coins, an in-game currency you can spend on hints — as a pack or a custom amount you choose. Coins are a digital item delivered instantly: nothing is shipped, and they're added to your GuessWord account as soon as your payment is confirmed, usually within seconds. Every purchase is a one-time payment, with the price shown in rupees, inclusive of GST, before you pay. There are no subscriptions, memberships or auto-renewals.",
   },
   {
     id: "cancellations",
@@ -71,7 +71,7 @@ export default function RefundPolicyPage() {
     <LegalPage
       eyebrow="Legal"
       title="Refunds & cancellations"
-      lastUpdated="14 October 2026"
+      lastUpdated="21 October 2026"
       readTime="3 min read"
       intro="This policy covers coin purchases on GuessWord, operated by Gurpreet Singh, an individual developer in India. In short: purchases can't be cancelled, and we refund only when a payment gets stuck — money is taken but your coins are never added."
       sections={SECTIONS}

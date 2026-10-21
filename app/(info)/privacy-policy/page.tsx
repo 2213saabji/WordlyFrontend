@@ -33,7 +33,7 @@ const SECTIONS: LegalSection[] = [
     id: "coins-and-payments",
     number: "03",
     heading: "Coins and payments",
-    body: "Coin purchases are processed by Razorpay. We store the order, the coins bought, the amount and Razorpay's order and payment IDs, and your coin balance and coin history — never your card, UPI or bank details, which go straight to Razorpay. There's no cash reward any more, so we no longer verify mobile numbers or collect bank account details. Any we stored for the earlier Diamond reward are being deleted: mobile numbers within 30 days of this change, and bank details as soon as any payout still owed has been paid.",
+    body: "Coin purchases are processed by PayU. To start a payment we share your username and email with PayU. We store the order, the coins bought, the amount and PayU's payment ID, and your coin balance and coin history — never your card, UPI or bank details, which you enter on PayU's own page. There's no cash reward any more, so we no longer verify mobile numbers or collect bank account details. Any we stored for the earlier Diamond reward are being deleted: mobile numbers within 30 days of this change, and bank details as soon as any payout still owed has been paid.",
   },
   {
     id: "what-others-can-see",
@@ -101,7 +101,7 @@ export default function PrivacyPolicyPage() {
     <LegalPage
       eyebrow="Legal"
       title="Privacy policy"
-      lastUpdated="18 October 2026"
+      lastUpdated="20 October 2026"
       readTime="4 min read"
       intro="GuessWord is owned and run by Gurpreet Singh, an individual developer in India. This page explains what information GuessWord collects, why we collect it and the choices you have."
       sections={SECTIONS}

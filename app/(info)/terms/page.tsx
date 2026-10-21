@@ -41,8 +41,10 @@ const SECTIONS: LegalSection[] = [
     heading: "Coins and purchases",
     body: (
       <>
-        Coins are an in-game currency. You earn them by solving words and can buy more: 3,000 coins for ₹10,
-        inclusive of GST, paid through Razorpay. Coins can only be spent in GuessWord, for example on hints. They have
+        Coins are an in-game currency. You earn them by solving words and can buy more: 3,000 coins for ₹10, or any
+        amount from ₹10 to ₹1,000 in steps of ₹10 at the same rate (300 coins per ₹1), inclusive of GST, paid through
+        PayU. Coins are delivered digitally: nothing is shipped, and bought coins are added to your account as soon as
+        the payment is confirmed. Coins can only be spent in GuessWord, for example on hints. They have
         no cash value, can&apos;t be withdrawn, exchanged or transferred to another account, and don&apos;t expire.
         Purchases are non-refundable, except where the law requires a refund, you were charged twice for the same
         order, or you were charged but the coins were never added. If a payment fails, no coins are added and you
@@ -87,7 +89,7 @@ export default function TermsPage() {
     <LegalPage
       eyebrow="Legal"
       title="Terms of use"
-      lastUpdated="14 October 2026"
+      lastUpdated="21 October 2026"
       readTime="5 min read"
       intro="These terms apply when you use GuessWord, operated by Gurpreet Singh, an individual developer, and governed by the laws of India. By creating an account or playing, you agree to them."
       sections={SECTIONS}

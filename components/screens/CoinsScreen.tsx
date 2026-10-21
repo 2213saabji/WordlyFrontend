@@ -1,16 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CoinIcon } from "@/components/CoinChip";
-import { SheetFrame } from "@/components/PaidHint";
+import { CustomAmountCard, PurchaseProblemSheet, PurchaseSuccessSheet } from "@/components/CoinPurchase";
 import ScreenHeader from "@/components/ScreenHeader";
 import { getCoinPacks, getInfiniteTiers, getWalletTransactions } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useCoinBalance } from "@/lib/coins";
-import { PurchaseError, buyCoinPack, type PurchaseResult } from "@/lib/purchase";
+import {
+  PurchaseError,
+  buyCoins,
+  finishReturnedPurchase,
+  type PurchaseResult,
+  type ReturnedPurchaseHint,
+} from "@/lib/purchase";
 import { formatCoins, formatPaise, hintCostOf } from "@/lib/tiers";
 import { useSyncedResource } from "@/lib/use-synced";
-import type { CoinPack, CoinTransaction, InfiniteTiersResponse, WalletTransactionsResponse } from "@/types";
+import type { CoinPack, CoinPurchase, CoinTransaction, InfiniteTiersResponse, WalletTransactionsResponse } from "@/types";
 
 const TIERS_CACHE_KEY = "infinite:tiers";
 const ACTIVITY_CACHE_KEY = "wallet:transactions";
@@ -32,16 +38,18 @@ function activityDate(iso: string, now = Date.now()): string {
   return t.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
-/** "gu••@gmail.com" */
-function maskEmail(email: string): string {
-  const [name, domain] = email.split("@");
-  return domain ? `${name.slice(0, 2)}••@${domain}` : email;
-}
-
-/** The wallet: balance, the coin pack(s), purchase terms and the ledger.
- * Buying opens Razorpay Checkout (lib/purchase.ts); a credited purchase
- * shows the purchase-done sheet (mobile) / dialog (desktop). */
-export default function CoinsScreen({ onBack }: { onBack: () => void }) {
+/** The wallet: balance, the coin pack(s), a custom amount, purchase terms
+ * and the ledger. Buying goes to PayU's checkout (lib/purchase.ts).
+ * `returned`: just back from PayU with this order — a credited purchase
+ * shows the purchase-done celebration, anything else the problem sheet
+ * (bottom sheets on mobile, dialogs on desktop). */
+export default function CoinsScreen({
+  onBack,
+  returned,
+}: {
+  onBack: () => void;
+  returned?: { orderId: string; hint: ReturnedPurchaseHint };
+}) {
   const { user } = useAuth();
   const balance = useCoinBalance();
   const tiers: InfiniteTiersResponse | null = useSyncedResource({
@@ -62,9 +70,38 @@ export default function CoinsScreen({ onBack }: { onBack: () => void }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const activity = firstPage && more?.base === firstPage ? more.next : firstPage;
 
+  // The pack id (or "custom") whose purchase is starting.
   const [buying, setBuying] = useState<string | null>(null);
   const [buyError, setBuyError] = useState<string | null>(null);
   const [done, setDone] = useState<{ pack: CoinPack; result: PurchaseResult } | null>(null);
+  const [problem, setProblem] = useState<PurchaseError | null>(null);
+  const [checking, setChecking] = useState(!!returned);
+
+  // Back from PayU: wait for the order's outcome (`checking` is already on).
+  // "Check again" on a payment still being confirmed runs it once more.
+  function settle(orderId: string, hint: ReturnedPurchaseHint, isCancelled: () => boolean = () => false) {
+    return finishReturnedPurchase(orderId, hint)
+      .then(({ result, pack }) => {
+        if (isCancelled()) return;
+        setProblem(null);
+        setDone({ pack, result });
+      })
+      .catch((err: unknown) => {
+        if (!isCancelled()) setProblem(err instanceof PurchaseError ? err : new PurchaseError("error"));
+      })
+      .finally(() => {
+        if (!isCancelled()) setChecking(false);
+      });
+  }
+
+  useEffect(() => {
+    if (!returned) return;
+    let cancelled = false;
+    void settle(returned.orderId, returned.hint, () => cancelled);
+    return () => {
+      cancelled = true;
+    };
+  }, [returned]);
 
   // "From Copper (Tier 6) up, a hint costs 1,000 coins."
   const ladder = tiers ? [...tiers.tiers].sort((a, b) => a.tier - b.tier) : [];
@@ -87,18 +124,34 @@ export default function CoinsScreen({ onBack }: { onBack: () => void }) {
     }
   }
 
-  async function buy(pack: CoinPack) {
-    setBuying(pack.packId);
+  // Goes to PayU; only comes back here if it couldn't start or the player
+  // pressed Back on PayU's page. The outcome arrives as `returned`.
+  async function buy(item: CoinPurchase) {
+    setBuying("packId" in item ? item.packId : "custom");
     setBuyError(null);
     try {
-      const result = await buyCoinPack(pack, { email: user?.email });
-      setDone({ pack, result });
+      await buyCoins(item);
     } catch (err) {
-      setBuyError(err instanceof PurchaseError ? err.message : "Something went wrong. Please try again.");
-    } finally {
+      const e = err instanceof PurchaseError ? err : new PurchaseError("error", { retry: item });
+      // Not open yet / couldn't start: a line under the packs. Back from
+      // PayU's page without paying: the cancelled sheet, with Try again.
+      if (e.kind === "cancelled") {
+        setDone(null);
+        setProblem(e);
+      } else {
+        setBuyError(e.message);
+      }
       setBuying(null);
     }
   }
+
+  const retry = problem?.retry;
+  const retryPurchase = retry
+    ? () => {
+        setProblem(null);
+        void buy(retry);
+      }
+    : undefined;
 
   const earnLine = (desktop: boolean) =>
     [
@@ -137,7 +190,8 @@ export default function CoinsScreen({ onBack }: { onBack: () => void }) {
         <span className={`text-[13px] ${MUTED}`}>{packs.failed ? "Coin packs couldn't load right now." : "Loading…"}</span>
       );
     }
-    return list.map((pack) => {
+    const custom = packs.data?.custom;
+    const cards = list.map((pack) => {
       const hints = hintCost ? Math.floor(pack.coins / hintCost) : 0;
       return (
         <div
@@ -157,8 +211,8 @@ export default function CoinsScreen({ onBack }: { onBack: () => void }) {
           </span>
           <button
             type="button"
-            onClick={() => buy(pack)}
-            disabled={buying !== null}
+            onClick={() => buy({ packId: pack.packId })}
+            disabled={buying !== null || checking}
             className={`ml-auto whitespace-nowrap bg-accent font-bold text-background transition-all duration-150 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-accent/25 active:translate-y-0 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-60 ${
               desktop ? "rounded-[14px] px-[26px] py-3.5 text-[15px]" : "rounded-xl px-4 py-[11px] text-sm"
             }`}
@@ -168,6 +222,19 @@ export default function CoinsScreen({ onBack }: { onBack: () => void }) {
         </div>
       );
     });
+    if (!custom) return cards;
+    return [
+      ...cards,
+      <CustomAmountCard
+        key="custom"
+        rules={custom}
+        hintCost={hintCost}
+        buying={buying === "custom"}
+        disabled={buying !== null || checking}
+        onBuy={(amountPaise) => buy({ amountPaise })}
+        variant={desktop ? "desktop" : "mobile"}
+      />,
+    ];
   };
 
   const terms = (desktop: boolean) => (
@@ -176,7 +243,11 @@ export default function CoinsScreen({ onBack }: { onBack: () => void }) {
     </span>
   );
 
-  const errorLine = buyError && <span className="text-[13px] text-danger">{buyError}</span>;
+  const errorLine = checking ? (
+    <span className={`text-[13px] ${SOFT}`}>Checking your payment…</span>
+  ) : (
+    buyError && <span className="text-[13px] text-danger">{buyError}</span>
+  );
 
   function describe(tx: CoinTransaction): { title: string; color: string } {
     const amountColor = tx.amount < 0 ? "text-[#e07a62]" : "text-[#8fc274]";
@@ -282,10 +353,13 @@ export default function CoinsScreen({ onBack }: { onBack: () => void }) {
       </div>
 
       {done && (
-        <PurchaseDone
-          pack={done.pack}
-          result={done.result}
+        <PurchaseSuccessSheet
+          coins={done.result.coinsCredited || done.pack.coins}
+          pricePaise={done.pack.pricePaise}
+          balance={done.result.balance}
+          orderId={done.result.orderId}
           email={user?.email}
+          hintCost={hintCost}
           onDone={() => {
             setDone(null);
             onBack();
@@ -293,47 +367,22 @@ export default function CoinsScreen({ onBack }: { onBack: () => void }) {
           onClose={() => setDone(null)}
         />
       )}
+      {problem && !done && (
+        <PurchaseProblemSheet
+          error={problem}
+          busy={checking || buying !== null}
+          onRetry={retryPurchase}
+          onCheckAgain={
+            returned
+              ? () => {
+                  setChecking(true);
+                  void settle(returned.orderId, "check");
+                }
+              : undefined
+          }
+          onClose={() => setProblem(null)}
+        />
+      )}
     </div>
-  );
-}
-
-/** Purchase done: bottom sheet on mobile, dialog on desktop. */
-function PurchaseDone({
-  pack,
-  result,
-  email,
-  onDone,
-  onClose,
-}: {
-  pack: CoinPack;
-  result: PurchaseResult;
-  email?: string;
-  onDone: () => void;
-  onClose: () => void;
-}) {
-  const coins = result.coinsCredited || pack.coins;
-  return (
-    <SheetFrame title={`${formatCoins(coins)} added`} onClose={onClose}>
-      <div className="flex flex-col items-center gap-4 text-center md:gap-[18px]">
-        <CoinIcon className="mt-2 size-[60px] border-4 md:mt-0 md:size-16 md:border-2" />
-        <span className="font-display text-[26px] font-bold md:font-sans md:text-[36px] md:font-light md:leading-[1.1] md:tracking-[-0.03em]">
-          {formatCoins(coins)} added
-        </span>
-        <span className={`text-[13.5px] leading-normal md:text-[14.5px] md:leading-[1.55] ${SOFT}`}>
-          {formatPaise(pack.pricePaise)} paid. Your balance is now <strong className={COIN}>{formatCoins(result.balance)}</strong>.
-        </span>
-        <span className={`text-[11.5px] md:text-[12.5px] ${MUTED}`}>
-          Order {result.orderId}
-          {email ? ` · receipt sent to ${maskEmail(email)}` : ""}
-        </span>
-        <button
-          type="button"
-          onClick={onDone}
-          className="self-stretch rounded-2xl bg-accent p-4 text-[15.5px] font-bold text-background transition-all duration-150 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-accent/25 active:translate-y-0 active:scale-[0.98] md:rounded-[15px] md:p-[15px] md:text-[15px]"
-        >
-          Back to the game
-        </button>
-      </div>
-    </SheetFrame>
   );
 }

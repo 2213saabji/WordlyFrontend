@@ -11,7 +11,7 @@
 //   leaderboards    Daily-mode global and group leaderboards
 //   notifications   tier, coin and decay notifications
 //   wallet          coin balance and ledger
-//   store           coin packs and Razorpay orders
+//   store           coin packs and PayU orders
 //   contact         public contact form
 //   reminders       daily reminder settings and push subscriptions
 //

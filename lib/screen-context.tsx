@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import type { ReturnedPurchaseHint } from "@/lib/purchase";
 import type { TierNumber } from "@/types";
 
 export type PlayMode = "daily" | "infinite";
@@ -21,7 +22,9 @@ export type Screen =
   | { name: "how-tiers" } // the tier ladder and rules
   | { name: "tier-history" } // every tier move + completed Diamond cycles
   | { name: "diamond" } // Tier 1 cycle: Diamond stars and completed cycles
-  | { name: "coins" } // wallet: balance, coin pack, activity
+  // wallet: balance, coin pack, activity. `returned`: back from PayU's
+  // checkout with this order (see finishReturnedPurchase in lib/purchase.ts).
+  | { name: "coins"; returned?: { orderId: string; hint: ReturnedPurchaseHint } }
   | { name: "notifications" } // mobile: full-screen list (desktop uses the Nav dropdown)
   | { name: "settings" } // daily reminder and install
   | { name: "play"; mode: PlayMode }
