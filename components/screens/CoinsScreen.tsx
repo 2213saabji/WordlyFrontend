@@ -8,6 +8,8 @@ import { getCoinPacks, getInfiniteTiers, getWalletTransactions } from "@/lib/api
 import { useAuth } from "@/lib/auth-context";
 import { useCoinBalance } from "@/lib/coins";
 import {
+  PURCHASES_CLOSED_COPY,
+  PURCHASES_OPEN,
   PurchaseError,
   buyCoins,
   finishReturnedPurchase,
@@ -39,7 +41,8 @@ function activityDate(iso: string, now = Date.now()): string {
 }
 
 /** The wallet: balance, the coin pack(s), a custom amount, purchase terms
- * and the ledger. Buying goes to PayU's checkout (lib/purchase.ts).
+ * and the ledger. Buying goes to PayU's checkout (lib/purchase.ts); while
+ * purchases are closed, a "coming soon" line replaces the packs and terms.
  * `returned`: just back from PayU with this order — a credited purchase
  * shows the purchase-done celebration, anything else the problem sheet
  * (bottom sheets on mobile, dialogs on desktop). */
@@ -184,6 +187,9 @@ export default function CoinsScreen({
   );
 
   const packList = (desktop: boolean) => {
+    if (!PURCHASES_OPEN) {
+      return <span className={`${desktop ? "text-sm" : "text-[13px]"} ${SOFT}`}>{PURCHASES_CLOSED_COPY}</span>;
+    }
     const list = packs.data?.packs ?? [];
     if (list.length === 0) {
       return (
@@ -237,11 +243,12 @@ export default function CoinsScreen({
     ];
   };
 
-  const terms = (desktop: boolean) => (
-    <span className={`leading-normal ${desktop ? "text-[12.5px]" : "text-[11.5px]"} ${MUTED}`}>
-      Paid by UPI, card or net banking. Coins have no cash value, can&apos;t be transferred and don&apos;t expire.
-    </span>
-  );
+  const terms = (desktop: boolean) =>
+    PURCHASES_OPEN && (
+      <span className={`leading-normal ${desktop ? "text-[12.5px]" : "text-[11.5px]"} ${MUTED}`}>
+        Paid by UPI, card or net banking. Coins have no cash value, can&apos;t be transferred and don&apos;t expire.
+      </span>
+    );
 
   const errorLine = checking ? (
     <span className={`text-[13px] ${SOFT}`}>Checking your payment…</span>

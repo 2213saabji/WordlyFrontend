@@ -6,7 +6,7 @@ import { CustomAmountCard } from "@/components/CoinPurchase";
 import { SheetFrame } from "@/components/SheetFrame";
 import { ApiRequestError, getCoinPacks, revealInfiniteHint } from "@/lib/api";
 import { setCoinBalance, useCoinBalance } from "@/lib/coins";
-import { PurchaseError, buyCoins } from "@/lib/purchase";
+import { PURCHASES_CLOSED_COPY, PURCHASES_OPEN, PurchaseError, buyCoins } from "@/lib/purchase";
 import { invalidate } from "@/lib/sync";
 import { formatCoins, formatPaise } from "@/lib/tiers";
 import { useSyncedResource } from "@/lib/use-synced";
@@ -202,10 +202,15 @@ export function PaidHintCard({
           </button>
           {state.balance !== null && (
             <span className={`text-[12.5px] ${MUTED}`}>
-              You have {fmt(state.balance)} coins.{" "}
-              <button type="button" onClick={state.openGetCoins} className="text-accent hover:underline">
-                Get coins
-              </button>
+              You have {fmt(state.balance)} coins.
+              {PURCHASES_OPEN && (
+                <>
+                  {" "}
+                  <button type="button" onClick={state.openGetCoins} className="text-accent hover:underline">
+                    Get coins
+                  </button>
+                </>
+              )}
             </span>
           )}
         </>
@@ -289,7 +294,8 @@ function ConfirmHintSheet({ state, cost, tierName }: { state: PaidHintState; cos
 }
 
 /** The coin packs (one at launch: 3,000 coins for ₹10) with Buy buttons,
- * and a custom amount. */
+ * and a custom amount. While purchases are closed, just the "coming soon"
+ * line (the not-enough-coins case still needs saying). */
 export function CoinPackSheet({
   title,
   intro,
@@ -319,6 +325,19 @@ export function CoinPackSheet({
       setMessage(err instanceof PurchaseError ? err.message : "Something went wrong. Please try again.");
       setBuying(null);
     }
+  }
+
+  if (!PURCHASES_OPEN) {
+    return (
+      <SheetFrame title={title} onClose={onClose}>
+        <span className="font-display text-[22px] font-bold leading-tight md:font-sans md:text-[24px] md:font-semibold">{title}</span>
+        {intro && <span className={`text-[13.5px] leading-normal ${SOFT}`}>{intro}</span>}
+        <span className={`text-[13.5px] leading-normal ${SOFT}`}>{PURCHASES_CLOSED_COPY}</span>
+        <button type="button" onClick={onClose} className={SECONDARY}>
+          OK
+        </button>
+      </SheetFrame>
+    );
   }
 
   const list = packs.data?.packs ?? [];

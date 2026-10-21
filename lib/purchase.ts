@@ -18,10 +18,15 @@ const POLL_INTERVAL_MS = 2_000;
 /** Where to go back to after a purchase (this tab only). */
 const RETURN_KEY = "guessword_purchase_return";
 
-/** Coin purchases aren't open yet: every Buy button shows "coming soon"
- * without calling the backend or opening checkout. Opened by
- * NEXT_PUBLIC_PURCHASES_OPEN=true (e.g. in .env.local to test checkout). */
-const PURCHASES_OPEN = process.env.NEXT_PUBLIC_PURCHASES_OPEN === "true";
+/** Coin purchases are open only with NEXT_PUBLIC_PURCHASES_OPEN=true (e.g.
+ * in .env.local to test checkout). Closed, the buy options (coin packs,
+ * custom amount, "Get coins") are hidden and a "coming soon" line shows
+ * instead; buyCoins refuses without calling the backend. Earning and
+ * spending coins work either way. */
+export const PURCHASES_OPEN = process.env.NEXT_PUBLIC_PURCHASES_OPEN === "true";
+
+/** Shown where the buy options would be while purchases are closed. */
+export const PURCHASES_CLOSED_COPY = "Buying coins is coming soon. Solve words to earn more.";
 
 /** unavailable: store not open (503 PAYMENTS_NOT_CONFIGURED) · cancelled:
  * left PayU without paying · failed: the payment failed (nothing charged) ·
