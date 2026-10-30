@@ -935,7 +935,9 @@ function Tour({
         role="dialog"
         aria-live="polite"
         aria-label={title}
-        className={`fixed z-61 flex flex-col gap-3 rounded-[22px] border border-accent/30 bg-[#1f1725] shadow-[0_30px_60px_-15px_rgba(0,0,0,0.75)] ${
+        // Play steps ("Your turn", "Keep going"…) only say to play on; on a
+        // phone the card would cover the board, so it's left out there.
+        className={`fixed z-61 flex-col gap-3 rounded-[22px] ${step.kind === "play" ? "hidden md:flex" : "flex"} border border-accent/30 bg-[#1f1725] shadow-[0_30px_60px_-15px_rgba(0,0,0,0.75)] ${
           step.kind === "play" ? "p-4" : "p-5"
         } ${card ? "animate-fade-in" : "opacity-0"}`}
         style={card ? { top: card.top, bottom: card.bottom, left: card.left, width: card.width } : { top: 0, left: 0, width: CARD_WIDTH }}

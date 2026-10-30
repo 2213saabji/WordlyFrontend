@@ -68,6 +68,13 @@ type BoardPhase = "idle" | "clearing" | "leaving" | "entering";
 const HELD_ROW_MS = 2_000;
 const ROW_FADE_MS = 450;
 
+// Below the md breakpoint, where the keyboard is pinned to the screen.
+const MOBILE_MAX_PX = 767;
+// Empty rows kept in view above the pinned keyboard after each guess.
+const EMPTY_ROWS_SHOWN = 2;
+// Space kept between the lowest of those rows and the pinned keyboard.
+const ROW_SCROLL_MARGIN = 12;
+
 /** The difficulty/hint row as it looked when Next word was pressed. */
 interface HeldRow {
   key: number;
@@ -914,6 +921,40 @@ export default function PlayScreen({
     preloadWordLists();
   }, []);
 
+  // Screens swap in place, so the page would keep the previous screen's
+  // scroll (e.g. a scrolled-down home page). Open the game at the top, with
+  // the header in view.
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, [mode]);
+
+  // Mobile: the pinned keyboard leaves room for only a few rows, so after
+  // each guess scroll just enough to bring the next two empty rows (or the
+  // last one left) out from behind it. A fresh round (no guesses) goes back
+  // to the top.
+  const boardRef = useRef<HTMLDivElement>(null);
+  const keyboardRef = useRef<HTMLDivElement>(null);
+  const guessCount = game?.guesses.length;
+  const inProgress = game?.status === "in-progress";
+  useEffect(() => {
+    if (guessCount === undefined || !inProgress) return;
+    if (!window.matchMedia(`(max-width: ${MOBILE_MAX_PX}px)`).matches) return;
+    const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth";
+    const raf = requestAnimationFrame(() => {
+      if (guessCount === 0) {
+        window.scrollTo({ top: 0, behavior });
+        return;
+      }
+      const lastShown = Math.min(guessCount + EMPTY_ROWS_SHOWN - 1, MAX_ATTEMPTS - 1);
+      const row = boardRef.current?.querySelector(`[data-board-row="${lastShown}"]`);
+      const keyboard = keyboardRef.current;
+      if (!row || !keyboard) return;
+      const overlap = row.getBoundingClientRect().bottom + ROW_SCROLL_MARGIN - keyboard.getBoundingClientRect().top;
+      if (overlap > 0) window.scrollBy({ top: overlap, behavior });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [guessCount, inProgress]);
+
   // Today's daily game is synced (`today`): shown from cache and refetched
   // only when /sync reports a change (a guess on another device, or a new
   // daily word). The current Infinite round isn't covered by /sync, so it's
@@ -1325,7 +1366,8 @@ export default function PlayScreen({
   );
 
   return (
-    <div className="relative mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-4 md:px-10 md:py-10">
+    // No bottom padding on mobile: the pinned keyboard below brings its own.
+    <div className="relative mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 pt-4 md:px-10 md:py-10">
       {/* The training follows the signed-in player's round (lib/training.ts). */}
       {!guest && (
         <PlayStateReporter
@@ -1520,8 +1562,9 @@ export default function PlayScreen({
           </Reveal>
         </aside>
 
-        {/* center column */}
-        <div className="relative flex w-full flex-1 flex-col items-center gap-6">
+        {/* center column — fills the screen's height on mobile, so the
+            keyboard can sit at the bottom even when the board is short */}
+        <div className="relative flex w-full flex-1 flex-col items-center gap-6 self-stretch md:self-start">
           {/* With a tier result, that replaces this card: desktop shows it in
               the sidebar, mobile as a sheet — this reappears on mobile only
               once the sheet is dismissed, so there's always a Next word. */}
@@ -1588,6 +1631,7 @@ export default function PlayScreen({
           )}
 
           <div
+            ref={boardRef}
             data-tour="play-board"
             className="relative"
             style={
@@ -1648,12 +1692,20 @@ export default function PlayScreen({
             <PaidHintRow hint={hintText} unlocked={hintUnlocked} unlockAfter={HINT_UNLOCK_ATTEMPT} state={paidHint} />
           </Reveal>
 
-          {/* Keys lose their colours as the board clears. */}
-          <Keyboard
-            guesses={boardPhase === "clearing" || boardPhase === "leaving" ? [] : game.guesses}
-            onKey={handleKey}
-            disabled={finished || submitting || boardPhase !== "idle"}
-          />
+          {/* Mobile: pinned to the bottom of the screen while the page
+              scrolls behind it. Sticky, not fixed — the screen wrapper keeps
+              a transform from its entrance animation, which would anchor a
+              fixed element to the wrapper instead of the viewport. */}
+          <div
+            ref={keyboardRef}
+            className="sticky bottom-0 z-20 -mx-4 mt-auto w-[calc(100%+2rem)] bg-background px-4 pt-2.5 pb-[max(1rem,env(safe-area-inset-bottom))] md:static md:z-auto md:mx-0 md:mt-0 md:w-full md:bg-transparent md:p-0">
+            {/* Keys lose their colours as the board clears. */}
+            <Keyboard
+              guesses={boardPhase === "clearing" || boardPhase === "leaving" ? [] : game.guesses}
+              onKey={handleKey}
+              disabled={finished || submitting || boardPhase !== "idle"}
+            />
+          </div>
         </div>
 
         {/* right sidebar */}

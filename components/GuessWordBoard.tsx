@@ -110,7 +110,7 @@ export default function GuessWordBoard({
     const cursorIndex = isCurrentRow ? currentGuess.length : -1;
 
     return (
-      <div key={rowIndex} className="flex gap-1.5">
+      <div key={rowIndex} data-board-row={rowIndex} className="flex gap-1.5">
         {letters.map((letter, colIndex) => {
           const result = submitted?.result[colIndex];
           const hasLetter = letter.trim() !== "";
