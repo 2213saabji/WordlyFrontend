@@ -96,7 +96,9 @@ export function articleJsonLd({
     description,
     url: `${SITE_URL}${path}`,
     image: `${SITE_URL}${OG_IMAGE.url}`,
-    dateModified,
+    // Google flags a bare date as invalid for Article — it wants a full
+    // datetime with a time zone (start of that day, IST).
+    dateModified: `${dateModified}T00:00:00+05:30`,
     author: { "@id": `${SITE_URL}/#organization` },
     publisher: { "@id": `${SITE_URL}/#organization` },
     isPartOf: { "@id": `${SITE_URL}/#website` },
