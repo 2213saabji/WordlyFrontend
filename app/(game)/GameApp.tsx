@@ -25,6 +25,7 @@ import { registerServiceWorker } from "@/lib/push";
 import { PRE_AUTH_SCREENS, useScreen, type PlayMode } from "@/lib/screen-context";
 import { parseReplayParam, type ReplayInvite } from "@/lib/share";
 import { runSync } from "@/lib/sync";
+import type { InfiniteLeaderboardResponse } from "@/types";
 import PublicApp from "./PublicApp";
 
 /** `intro`: the crawlable intro from page.tsx, shown under the home screen. */
@@ -210,8 +211,16 @@ function AppShell({ intro }: { intro: ReactNode }) {
  * between the two in place; there's no redirect.
  *
  * `intro` is the server-rendered crawlable intro from page.tsx, shown under
- * the home screen whether or not the player is logged in. */
-export default function GameApp({ intro }: { intro: ReactNode }) {
+ * the home screen whether or not the player is logged in.
+ * `initialPublicBoard` is the guest home's board card data from the server
+ * render (null if that fetch failed). */
+export default function GameApp({
+  intro,
+  initialPublicBoard,
+}: {
+  intro: ReactNode;
+  initialPublicBoard: InfiniteLeaderboardResponse | null;
+}) {
   const { user } = useAuth();
   const { screen, reset } = useScreen();
 
@@ -222,7 +231,7 @@ export default function GameApp({ intro }: { intro: ReactNode }) {
     if (user && preAuth) reset();
   }, [user, preAuth, reset]);
 
-  if (!user) return <PublicApp intro={intro} />;
+  if (!user) return <PublicApp intro={intro} initialPublicBoard={initialPublicBoard} />;
   if (preAuth) return <Loader label="Loading…" />;
   return <AppShell intro={intro} />;
 }

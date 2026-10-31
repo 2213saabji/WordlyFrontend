@@ -1,3 +1,4 @@
+import { SITE_URL } from "@/lib/seo";
 import type { Game } from "@/types";
 
 // Same fixed epoch the backend's daily cycle is anchored to (utils/dailyWord.js
@@ -21,13 +22,20 @@ function rowToEmoji(row: number[]): string {
   return row.map((r) => (r === 1 ? "🟩" : r === -1 ? "🟨" : "⬛")).join("");
 }
 
+/** "4/6" for a win, "X/6" for a loss — the usual way to share a miss without
+ * it reading as a win on the last try. */
+export function shareScore(game: Game): string {
+  return `${game.status === "lost" ? "X" : game.guesses.length}/${MAX_ATTEMPTS}`;
+}
+
 /** Never includes the word itself — only the emoji grid, the usual spoiler-free share format for daily word games.
  * Pads with blank rows up to MAX_ATTEMPTS so a quick win still shows the same
- * 6-row shape as the board and the share image, instead of trailing off short. */
+ * 6-row shape as the board and the share image, instead of trailing off short.
+ * Ends with the site link so a share brings people back. */
 export function buildShareText(game: Game, wordNumber: number): string {
   const rows = resultRows(game).map(rowToEmoji);
   while (rows.length < MAX_ATTEMPTS) rows.push(PENDING_ROW);
-  return [`GuessWord Daily #${wordNumber} ${game.guesses.length}/6`, "", ...rows].join("\n");
+  return [`GuessWord Daily #${wordNumber} ${shareScore(game)}`, "", ...rows, "", SITE_URL].join("\n");
 }
 
 /**

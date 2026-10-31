@@ -4,13 +4,17 @@ import AdSenseScript from "@/components/AdSenseScript";
 import PublicTierBoard from "@/components/PublicTierBoard";
 import { getPublicInfiniteLeaderboard, getPublicInfiniteTiers } from "@/lib/api/infinite-tiers";
 import { JsonLd, breadcrumbJsonLd, pageMetadata } from "@/lib/seo";
-import { PUBLIC_BOARD_TIER } from "@/lib/tiers";
+import { TIER_NUMBERS, type InfiniteLeaderboardResponse, type TierNumber } from "@/types";
 
 const PATH = "/leaderboard/infinite";
+// The board's page size — a first page of any other size would make its
+// "load more" (page 2 at this size) skip or repeat players.
+const PAGE_SIZE = 20;
 
-// The board's first page is fetched here, so the page's HTML has the top
-// players in it rather than a loader — that's what search engines index.
-// Refreshed at most every 5 minutes; the browser then refetches it anyway.
+// Every tier's first page is fetched here: the starting tier's is in the
+// page's HTML rather than a loader — that's what search engines index — and
+// the rest make switching tier instant. Refreshed at most every 5 minutes;
+// the browser then refetches the tier it shows anyway.
 export const revalidate = 300;
 
 // The one public (no-login) Infinite surface, built on the backend's public
@@ -24,18 +28,24 @@ export const metadata: Metadata = pageMetadata({
 });
 
 export default async function InfiniteLeaderboardPage() {
-  // A backend that's down or slow must not fail the build or the page: the
-  // board then starts as a loader and the browser fetches it, as before.
-  const [initialBoard, initialTiers] = await Promise.all([
-    getPublicInfiniteLeaderboard({ tier: PUBLIC_BOARD_TIER, page: 1, limit: 20 }).catch(() => null),
+  // A backend that's down or slow must not fail the build or the page: a
+  // tier whose fetch failed starts as a loader and the browser fetches it.
+  const [boards, initialTiers] = await Promise.all([
+    Promise.all(
+      TIER_NUMBERS.map((tier) => getPublicInfiniteLeaderboard({ tier, page: 1, limit: PAGE_SIZE }).catch(() => null)),
+    ),
     getPublicInfiniteTiers().catch(() => null),
   ]);
+  const initialBoards: Partial<Record<TierNumber, InfiniteLeaderboardResponse>> = {};
+  boards.forEach((board, i) => {
+    if (board) initialBoards[TIER_NUMBERS[i]] = board;
+  });
 
   return (
     <>
       <AdSenseScript />
       <JsonLd data={breadcrumbJsonLd("Infinite Leaderboard", PATH)} />
-      <PublicTierBoard initialBoard={initialBoard} initialTiers={initialTiers} />
+      <PublicTierBoard initialBoards={initialBoards} initialTiers={initialTiers} />
       <Intro />
     </>
   );

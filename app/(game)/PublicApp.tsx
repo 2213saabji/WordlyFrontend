@@ -10,6 +10,7 @@ import ForgotPasswordScreen from "@/components/screens/ForgotPasswordScreen";
 import { useAuth } from "@/lib/auth-context";
 import { readPendingSignup } from "@/lib/pending-signup";
 import { useScreen, type Screen } from "@/lib/screen-context";
+import type { InfiniteLeaderboardResponse } from "@/types";
 
 const PUBLIC_BOARD = "/leaderboard/infinite";
 
@@ -19,8 +20,15 @@ const PUBLIC_BOARD = "/leaderboard/infinite";
  * groups, history), which then lands there once signed in.
  *
  * `intro` is the server-rendered crawlable intro from page.tsx, shown under
- * the guest home (crawlers never sign in). */
-export default function PublicApp({ intro }: { intro: ReactNode }) {
+ * the guest home (crawlers never sign in). `initialPublicBoard` is the guest
+ * home's board card data from the server render (null if that fetch failed). */
+export default function PublicApp({
+  intro,
+  initialPublicBoard,
+}: {
+  intro: ReactNode;
+  initialPublicBoard: InfiniteLeaderboardResponse | null;
+}) {
   const { user, loading } = useAuth();
   const { screen, push, back, reset } = useScreen();
   const router = useRouter();
@@ -88,6 +96,7 @@ export default function PublicApp({ intro }: { intro: ReactNode }) {
     <div className={loading ? "auth-pending contents" : "contents"}>
       <HomeScreen
         guest
+        initialPublicBoard={initialPublicBoard}
         onPlay={toLogin({ name: "play", mode: "daily" })}
         onPlayInfinite={() => push({ name: "play", mode: "infinite" })}
         onHistory={toLogin({ name: "history" })}

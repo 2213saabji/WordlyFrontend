@@ -7,7 +7,7 @@ import { HomeReminderSlot } from "@/components/ReminderCards";
 import { getMyGroups, getGlobalWeeklyLeaderboard, getPublicInfiniteLeaderboard } from "@/lib/api";
 import { PUBLIC_BOARD_TIER } from "@/lib/tiers";
 import { useSyncedResource } from "@/lib/use-synced";
-import type { Group, WeeklyLeaderboardEntry } from "@/types";
+import type { Group, InfiniteLeaderboardResponse, WeeklyLeaderboardEntry } from "@/types";
 
 const GROUPS_CACHE_KEY = "home:groups";
 const WEEKLY_CACHE_KEY = "home:weekly";
@@ -123,24 +123,31 @@ interface BoardRow {
   meta: string;
 }
 
+function toPublicRows(res: InfiniteLeaderboardResponse): { rows: BoardRow[] } {
+  return {
+    rows: res.leaderboard.map((e) => ({ userId: e.userId, rank: e.rank, username: displayName(e.username), meta: `${e.score} pts` })),
+  };
+}
+
 /** Guest: the top 4 of the public Infinite board's starting tier (Stone —
  * the same tier /leaderboard/infinite opens on), sent without a token. Not
- * synced or cached — both are per signed-in player. undefined while
- * loading, null if it failed. */
-function usePublicTierBoard(enabled: boolean) {
-  const [board, setBoard] = useState<{ rows: BoardRow[] } | null | undefined>(undefined);
+ * synced or cached — both are per signed-in player. Starts from `initial`
+ * (the server render's copy) and is refetched on mount. undefined while
+ * loading, null if it failed with nothing to show. */
+function usePublicTierBoard(enabled: boolean, initial: InfiniteLeaderboardResponse | null) {
+  const [board, setBoard] = useState<{ rows: BoardRow[] } | null | undefined>(() =>
+    enabled && initial ? toPublicRows(initial) : undefined,
+  );
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
     getPublicInfiniteLeaderboard({ tier: PUBLIC_BOARD_TIER, limit: 4 })
       .then((res) => {
-        if (cancelled) return;
-        setBoard({
-          rows: res.leaderboard.map((e) => ({ userId: e.userId, rank: e.rank, username: displayName(e.username), meta: `${e.score} pts` })),
-        });
+        if (!cancelled) setBoard(toPublicRows(res));
       })
       .catch(() => {
-        if (!cancelled) setBoard(null);
+        // Keep the server's rows if there are any.
+        if (!cancelled) setBoard((current) => current ?? null);
       });
     return () => {
       cancelled = true;
@@ -234,6 +241,7 @@ export default function HomeScreen({
   onOpenLeaderboard,
   onOpenSettings,
   guest = false,
+  initialPublicBoard = null,
 }: {
   onPlay: () => void;
   onPlayInfinite: () => void;
@@ -247,6 +255,9 @@ export default function HomeScreen({
    * the public Stone tier board, fetched without a token), and the parent
    * routes every login-only action to the login screen. */
   guest?: boolean;
+  /** Guest only: the board card's rows from the server render, so the
+   * page's HTML has them instead of a loading skeleton. */
+  initialPublicBoard?: InfiniteLeaderboardResponse | null;
 }) {
   const { user } = useAuth();
   const today = useTodayLabel();
@@ -276,7 +287,7 @@ export default function HomeScreen({
   }).data;
   // The desktop board card: the global weekly board when signed in, the
   // Stone tier board for a guest. Rows are null while loading.
-  const publicBoard = usePublicTierBoard(guest);
+  const publicBoard = usePublicTierBoard(guest, initialPublicBoard);
   const boardRows: BoardRow[] | null = guest
     ? (publicBoard?.rows ?? null)
     : (weekly?.map((e) => ({

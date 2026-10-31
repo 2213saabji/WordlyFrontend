@@ -1,6 +1,14 @@
 import Link from "next/link";
 import AdSenseScript from "@/components/AdSenseScript";
+import { getPublicInfiniteLeaderboard } from "@/lib/api/infinite-tiers";
+import { PUBLIC_BOARD_TIER } from "@/lib/tiers";
 import GameApp from "./GameApp";
+
+// The guest home's Global card (the public Stone board's top 4) is fetched
+// here, so the page's HTML has those players in it rather than a loading
+// skeleton. Refreshed at most every 5 minutes, like /leaderboard/infinite;
+// the browser then refetches it anyway.
+export const revalidate = 300;
 
 const HIGHLIGHTS = [
   {
@@ -21,11 +29,15 @@ const HIGHLIGHTS = [
   },
 ];
 
-export default function HomePage() {
+export default async function HomePage() {
+  // A backend that's down or slow must not fail the build or the page: the
+  // card then starts as a skeleton and the browser fetches it, as before.
+  const publicBoard = await getPublicInfiniteLeaderboard({ tier: PUBLIC_BOARD_TIER, limit: 4 }).catch(() => null);
+
   return (
     <>
       <AdSenseScript />
-      <GameApp intro={<Intro />} />
+      <GameApp intro={<Intro />} initialPublicBoard={publicBoard} />
     </>
   );
 }

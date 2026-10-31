@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { buildReplayLink, buildShareText, resultRows } from "@/lib/share";
+import { buildReplayLink, buildShareText, resultRows, shareScore } from "@/lib/share";
 import { canvasToPngBlob, IMAGE_DIMENSIONS, renderShareImage, type ImageFormat } from "@/lib/share-image";
 import { useReportShareOpen } from "@/lib/training";
 import type { Game, User } from "@/types";
@@ -193,7 +193,7 @@ export default function ShareModal({
             <div className="flex items-start gap-6 rounded-[22px] border border-white/9 bg-white/5 p-6">
               <div className="flex flex-col gap-3.5">
                 <span className="text-[15.5px] font-semibold">
-                  GuessWord {wordNumber} &nbsp;{game.guesses.length}/6
+                  GuessWord {wordNumber} &nbsp;{shareScore(game)}
                 </span>
                 <MiniGrid rows={rows} />
                 <span className="text-[13px] text-foreground/50">

@@ -75,12 +75,13 @@ export default function TierLeaderboard({
   onSwitchScope?: (groupId?: string) => void;
   /** The signed-out /leaderboard/infinite page: public endpoints only, no
    * pinned row or scope switcher, and a "Log in to play" call to action.
-   * `initialBoard` (the starting tier's first page) and `initialTiers` come
-   * from the server render, so the page's HTML has the board in it. */
+   * `initialBoards` (each tier's first page) and `initialTiers` come from
+   * the server render, so the page's HTML has the board in it and switching
+   * tier shows a board straight away. */
   publicView?: {
     signedIn: boolean;
     onCta: () => void;
-    initialBoard?: InfiniteLeaderboardResponse | null;
+    initialBoards?: Partial<Record<TierNumber, InfiniteLeaderboardResponse>>;
     initialTiers?: InfiniteTiersResponse | null;
   };
 }) {
@@ -89,24 +90,30 @@ export default function TierLeaderboard({
   const startTier = initialTier ?? (isPublic ? PUBLIC_BOARD_TIER : undefined);
   const cacheKeyFor = (t: TierNumber | undefined) => (isPublic ? `infinite:public-board:${t}` : boardCacheKey(t));
   const [tier, setTier] = useState<TierNumber | undefined>(startTier);
-  // Server data wins over the localStorage cache: the server can't read the
-  // cache, so starting from it would make the first render differ from the
-  // server HTML. The board is still refetched on mount below.
-  const [board, setBoard] = useState<InfiniteLeaderboardResponse | null>(
-    () => publicView?.initialBoard ?? readCache<InfiniteLeaderboardResponse>(cacheKeyFor(startTier)),
+  const serverBoard = (t: TierNumber | undefined) => (t === undefined ? undefined : publicView?.initialBoards?.[t]);
+  // The public page is server-rendered, so its first render must start from
+  // the server's data only — never the localStorage cache, which the server
+  // can't read: a returning visitor's cached board, shown where the server
+  // HTML has a loader (its fetch failed), is a hydration mismatch (React
+  // #418). The board is still refetched on mount below.
+  const [board, setBoard] = useState<InfiniteLeaderboardResponse | null>(() =>
+    isPublic ? (serverBoard(startTier) ?? null) : readCache<InfiniteLeaderboardResponse>(cacheKeyFor(startTier)),
   );
   // Synced when signed in (lib/use-synced.ts): cached, refetched only when
-  // /sync reports a change. Signed out (public page) there's no sync, so
-  // they're fetched on every visit — unless the server already sent them
-  // (they change rarely, and the page re-renders every few minutes).
-  const serverTiers = publicView?.initialTiers ?? null;
+  // /sync reports a change. Signed out (public page) there's no sync or
+  // cache: the server sends them (they change rarely, and the page
+  // re-renders every few minutes), else they're fetched after mount.
   const syncedTiers: InfiniteTiersResponse | null = useSyncedResource({
     flag: "tiers",
     key: TIERS_CACHE_KEY,
-    fetcher: isPublic ? getPublicInfiniteTiers : getInfiniteTiers,
-    enabled: !serverTiers,
+    fetcher: getInfiniteTiers,
+    enabled: !isPublic,
   }).data;
-  const tiers = serverTiers ?? syncedTiers;
+  const [publicTiers, setPublicTiers] = useState<InfiniteTiersResponse | null>(publicView?.initialTiers ?? null);
+  useEffect(() => {
+    if (isPublic && !publicTiers) getPublicInfiniteTiers().then(setPublicTiers, () => {});
+  }, [isPublic, publicTiers]);
+  const tiers = isPublic ? publicTiers : syncedTiers;
   const me: InfiniteMeResponse | null = useSyncedResource({
     flag: "infinite",
     key: ME_CACHE_KEY,
@@ -162,7 +169,7 @@ export default function TierLeaderboard({
   function selectTier(next: TierNumber) {
     if (next === (tier ?? board?.tier)) return;
     setTier(next);
-    setBoard(readCache<InfiniteLeaderboardResponse>(cacheKeyFor(next)));
+    setBoard(serverBoard(next) ?? readCache<InfiniteLeaderboardResponse>(cacheKeyFor(next)));
     setError(null);
     setLoadingMore(false);
   }

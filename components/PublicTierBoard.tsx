@@ -4,17 +4,18 @@ import { useRouter } from "next/navigation";
 import TierLeaderboard from "@/components/TierLeaderboard";
 import { useAuth } from "@/lib/auth-context";
 import { useScreen } from "@/lib/screen-context";
-import type { InfiniteLeaderboardResponse, InfiniteTiersResponse } from "@/types";
+import type { InfiniteLeaderboardResponse, InfiniteTiersResponse, TierNumber } from "@/types";
 
 /** /leaderboard/infinite — the tier board for anyone, signed in or not.
  * Its call to action hands off to the app on "/": the login screen for
- * visitors, the Infinite hub for signed-in players. `initialBoard` and
- * `initialTiers` come from the server render (null if that fetch failed). */
+ * visitors, the Infinite hub for signed-in players. `initialBoards` (each
+ * tier's first page) and `initialTiers` come from the server render — a tier
+ * is missing, or the tiers null, if that fetch failed. */
 export default function PublicTierBoard({
-  initialBoard,
+  initialBoards,
   initialTiers,
 }: {
-  initialBoard: InfiniteLeaderboardResponse | null;
+  initialBoards: Partial<Record<TierNumber, InfiniteLeaderboardResponse>>;
   initialTiers: InfiniteTiersResponse | null;
 }) {
   const router = useRouter();
@@ -26,7 +27,7 @@ export default function PublicTierBoard({
       onBack={() => router.push("/")}
       publicView={{
         signedIn: !!user,
-        initialBoard,
+        initialBoards,
         initialTiers,
         onCta: () => {
           if (user) {
