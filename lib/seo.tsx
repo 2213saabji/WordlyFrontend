@@ -95,6 +95,7 @@ export function articleJsonLd({
     headline: title,
     description,
     url: `${SITE_URL}${path}`,
+    image: `${SITE_URL}${OG_IMAGE.url}`,
     dateModified,
     author: { "@id": `${SITE_URL}/#organization` },
     publisher: { "@id": `${SITE_URL}/#organization` },
