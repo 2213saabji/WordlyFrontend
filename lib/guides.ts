@@ -84,6 +84,14 @@ export const GUIDES: Guide[] = [
     readMinutes: 5,
     updated: "2026-10-07",
   },
+  {
+    slug: "guess-word-games",
+    title: "Guess word games: best free word guessing games",
+    description:
+      "Guess word games compared: GuessWord, Wordle, Quordle, Octordle, Absurdle, Contexto, Semantle and Dordle — what each does well and which to play.",
+    readMinutes: 5,
+    updated: "2026-11-01",
+  },
 ];
 
 /** The newest guide revision — the hub's "updated" date and sitemap lastmod. */

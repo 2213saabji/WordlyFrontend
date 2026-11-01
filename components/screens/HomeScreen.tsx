@@ -312,12 +312,20 @@ export default function HomeScreen({
   // Once today's daily word is finished, the headline and the highlighted
   // button point at Infinite instead.
   const dailyDone = playedDailyToday(user?.stats.lastPlayedDate);
-  // A guest's one thing to do without an account is Infinite.
+  // A guest's one thing to do without an account is Infinite — said in the
+  // tagline above the headline, which carries the search phrase instead. Its
+  // three lines are longer than the signed-in ones, so it's set a size down
+  // to fit the column without wrapping (360px phones up).
+  const tagline = "Play Infinite. No login.";
   const headline = guest ? (
     <>
-      Play Infinite.
+      Guess Word Game:{" "}
       <br />
-      <span className="font-bold">No login.</span>
+      <span className="font-bold">
+        play free,{" "}
+        <br />
+        no download.
+      </span>
     </>
   ) : dailyDone ? (
     <>
@@ -347,9 +355,13 @@ export default function HomeScreen({
           <div className="hidden animate-fade-in-up flex-col gap-4 md:flex">
             <span className="text-xs font-semibold uppercase tracking-[0.18em] text-foreground/50">
               {today && `${today} · `}
-              {guest ? "Free to play" : dailyDone ? "Daily complete" : "Daily word"}
+              {guest ? tagline : dailyDone ? "Daily complete" : "Daily word"}
             </span>
-            <h1 className="max-w-lg text-[56px] font-light leading-[1.05] tracking-tight lg:text-[64px]">{headline}</h1>
+            <h1
+              className={`max-w-lg font-light leading-[1.05] tracking-tight ${guest ? "text-[38px] lg:text-[54px]" : "text-[56px] lg:text-[64px]"}`}
+            >
+              {headline}
+            </h1>
             <p className="max-w-md text-base leading-relaxed text-foreground/65">
               {guest
                 ? "Five letters, six tries, as many words as you like. Log in for the Daily word, streaks, groups and the tier leaderboard."
@@ -372,7 +384,13 @@ export default function HomeScreen({
                 </span>
               ))}
             </div>
-            <h1 className="animate-fade-in-up text-4xl font-light leading-tight tracking-tight" style={{ animationDelay: "120ms" }}>
+            {guest && (
+              <span className="-mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-foreground/50">{tagline}</span>
+            )}
+            <h1
+              className={`animate-fade-in-up font-light leading-tight tracking-tight ${guest ? "text-[34px]" : "text-4xl"}`}
+              style={{ animationDelay: "120ms" }}
+            >
               {headline}
             </h1>
           </div>

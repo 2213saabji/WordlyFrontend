@@ -59,10 +59,14 @@ function Intro() {
           GuessWord — a free <strong className="font-bold">daily word guessing game.</strong>
         </h2>
         <p className="text-[15px] leading-relaxed text-[#c9bfcc] md:text-[16.5px]">
-          GuessWord is a free online word game where you guess the word — a secret five-letter word — in six
-          tries. After each guess, green tiles mark letters in the right spot, amber tiles mark letters in the word
+          GuessWord is a free online guess word game: you get six tries to find a secret five-letter word. After
+          each guess, green tiles mark letters in the right spot, amber tiles mark letters in the word
           but in the wrong spot, and gray tiles mark letters that aren&apos;t in the word. It&apos;s a quick daily
           word puzzle that stretches your vocabulary, and it runs in any browser with no download.
+        </p>
+        <p className="text-[15px] leading-relaxed text-[#c9bfcc] md:text-[16.5px]">
+          Play GuessWord games your way: the shared Daily word, Infinite mode with its eight tiers, and groups with
+          friends.
         </p>
       </div>
 

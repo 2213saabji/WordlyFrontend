@@ -8,7 +8,7 @@ import { JsonLd, SITE_URL, breadcrumbJsonLd, pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "Guides — Strategy, Starting Words & Tiers",
   description:
-    "GuessWord guides built from our word lists: best starting words, letter frequency, word patterns, a solving method, Infinite tiers and playing with friends.",
+    "GuessWord guides: best starting words, letter frequency, word patterns, a solving method, Infinite tiers, playing with friends and other guess word games.",
   path: GUIDES_PATH,
 });
 
@@ -29,7 +29,7 @@ export default function GuidesPage() {
           Play smarter, <strong className="font-bold">not longer.</strong>
         </>
       }
-      subtitle="Every number in these guides comes from the word lists GuessWord actually uses — the 5,028 words our three game modes can pick as answers — not from general English. So the advice fits the game you're actually playing."
+      subtitle="Our strategy guides are built on the word lists GuessWord actually uses — the 5,028 words our three game modes can pick as answers — not on general English, so their advice fits the game you're actually playing. There's also a guide to other guess word games, if you want to see how ours compares."
     >
       <JsonLd data={[collectionJsonLd, breadcrumbJsonLd("Guides", GUIDES_PATH)]} />
 
@@ -55,7 +55,7 @@ export default function GuidesPage() {
       <div className="flex flex-col gap-4 text-[15px] leading-relaxed text-[#c9bfcc]">
         <Eyebrow>How we made these</Eyebrow>
         <p>
-          GuessWord has three answer lists: one for the Daily word (728 words), one for Infinite mode (1,456
+          For the strategy guides, we started from GuessWord&apos;s three answer lists: one for the Daily word (728 words), one for Infinite mode (1,456
           words) and one for rounds played without an account (2,844 words). We analysed each list on its own —
           letter counts, positions, endings, repeated letters — and scored every five-letter word the game accepts as
           an opening guess against them. Where the lists behave differently, the guides say so, because a strategy
