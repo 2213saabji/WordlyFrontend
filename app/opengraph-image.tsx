@@ -1,8 +1,9 @@
 import { ImageResponse } from "next/og";
+import { HOME_TITLE } from "@/lib/seo";
 
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
-export const alt = "GuessWord — Free Daily Word Guessing Game";
+export const alt = HOME_TITLE;
 
 // Same palette as app/globals.css / lib/share-image.ts — kept as plain hex
 // here too since satori (which renders this) doesn't support CSS variables

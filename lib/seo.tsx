@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 
 export const SITE_URL = "https://www.guessword.games";
 export const SITE_NAME = "GuessWord";
+/** The home page's <title> — also the share image's alt text. */
+export const HOME_TITLE = "GuessWord: Free Guess Word Game | Daily & Unlimited";
 
 // app/opengraph-image.tsx only attaches itself to the root segment — a page
 // that sets its own `openGraph`/`twitter` replaces the whole object
@@ -11,7 +13,7 @@ const OG_IMAGE = {
   url: "/opengraph-image",
   width: 1200,
   height: 630,
-  alt: "GuessWord — Free Daily Word Guessing Game",
+  alt: HOME_TITLE,
 };
 
 /** Per-page metadata for a public, indexable route. Sets a self-referencing

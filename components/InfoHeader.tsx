@@ -43,7 +43,8 @@ function CloseIcon() {
 /** Header for the public info pages (how-to-play, about, faq, contact,
  * privacy-policy, terms, refund-policy) — deliberately separate from the game's own Nav
  * (Play/Groups/Leaderboard/History): these links are between info pages,
- * not game screens, and don't need auth state at all. */
+ * not game screens, and don't need auth state at all. Like the game's Nav,
+ * the links only fit in one row from lg up; below that they're in the menu. */
 export default function InfoHeader() {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -62,7 +63,7 @@ export default function InfoHeader() {
           ))}
         </Link>
 
-        <nav className="ml-4.5 hidden items-center gap-6.5 md:flex">
+        <nav className="ml-4.5 hidden items-center gap-6.5 lg:flex">
           {NAV_LINKS.map((link) => {
             const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
             return (
@@ -84,7 +85,7 @@ export default function InfoHeader() {
         <div className="ml-auto flex items-center gap-2.5">
           <Link
             href="/"
-            className="hidden whitespace-nowrap rounded-xl bg-accent px-4 py-2.5 text-[13.5px] font-bold text-background transition-transform duration-150 hover:-translate-y-0.5 md:inline-flex"
+            className="hidden whitespace-nowrap rounded-xl bg-accent px-4 py-2.5 text-[13.5px] font-bold text-background transition-transform duration-150 hover:-translate-y-0.5 lg:inline-flex"
           >
             Play now
           </Link>
@@ -92,7 +93,7 @@ export default function InfoHeader() {
             type="button"
             aria-label="Menu"
             onClick={() => setMenuOpen((o) => !o)}
-            className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/7 text-foreground md:hidden"
+            className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/7 text-foreground lg:hidden"
           >
             {menuOpen ? <CloseIcon /> : <MenuIcon />}
           </button>
@@ -100,7 +101,7 @@ export default function InfoHeader() {
       </div>
 
       {menuOpen && (
-        <nav className="flex flex-col gap-1 border-t border-white/8 px-5 py-3 md:hidden">
+        <nav className="flex flex-col gap-1 border-t border-white/8 px-5 py-3 md:px-14 lg:hidden">
           {NAV_LINKS.map((link) => {
             const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
             return (

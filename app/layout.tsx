@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Sora, Geist_Mono, Space_Grotesk } from "next/font/google";
 import { ADSENSE_CLIENT } from "@/components/AdSenseScript";
 import "./globals.css";
-import { JsonLd, SITE_NAME, SITE_URL } from "@/lib/seo";
+import { HOME_TITLE, JsonLd, SITE_NAME, SITE_URL } from "@/lib/seo";
 
 const sora = Sora({
   variable: "--font-sora",
@@ -21,9 +21,9 @@ const spaceGrotesk = Space_Grotesk({
   weight: "700",
 });
 
-const TITLE ="GuessWord — Free Daily Word Guessing Game";
+const TITLE = HOME_TITLE;
 const DESCRIPTION =
-  "Guess the secret five-letter word in six tries. A new puzzle daily, eight Infinite tiers from Stone to Diamond, and friend leaderboards — free, no download.";
+  "Play GuessWord, the free guess word game: find the secret five-letter word in six tries. A new Daily word, unlimited Infinite rounds and friend groups.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
